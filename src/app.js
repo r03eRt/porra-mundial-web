@@ -72,6 +72,8 @@ const state = {
   apiResults: {},
   apiFixtures: [],
   adminUser: null,
+  rankingSort: { key: 'position', direction: 'asc' },
+  miniRankingSort: { key: 'position', direction: 'asc' },
   activeTab: 'ranking'
 };
 let apiRefreshInProgress = false;
@@ -333,6 +335,26 @@ function escapeHtml(value) {
     .replace(/'/g, '&#039;');
 }
 
+function sortRows(rows, sort) {
+  const direction = sort.direction === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const first = a[sort.key];
+    const second = b[sort.key];
+    const comparison = typeof first === 'string'
+      ? first.localeCompare(second, 'es', { sensitivity: 'base' })
+      : Number(first) - Number(second);
+    return comparison * direction || a.position - b.position;
+  });
+}
+
+function sortableHeader(table, key, label, sort) {
+  const active = sort.key === key;
+  const indicator = active ? (sort.direction === 'asc' ? '▲' : '▼') : '';
+  const ariaSort = active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none';
+  const directionClass = active ? sort.direction : '';
+  return `<th aria-sort="${ariaSort}"><button type="button" class="sort-button ${active ? 'active' : ''} ${directionClass}" data-sort-table="${table}" data-sort-key="${key}"><span>${indicator}</span>${label}</button></th>`;
+}
+
 function applyAdminMode() {
   const admin = isAdmin();
   document.querySelectorAll('[data-admin-only]').forEach(element => {
@@ -388,11 +410,19 @@ function renderRanking() {
   const q = normalize(document.getElementById('rankingSearch').value);
   const medals = ['🥇', '🥈', '🥉'];
   const ranking = calculateRanking();
-  const rows = ranking
+  const rows = sortRows(ranking
     .map((player, index) => ({ ...player, position: index + 1 }))
-    .filter(player => normalize(player.name).includes(q));
+    .filter(player => normalize(player.name).includes(q)), state.rankingSort);
   document.getElementById('rankingTable').innerHTML = html`
-    <thead><tr><th>#</th><th>Participante</th><th>Total</th><th>1ª fase</th><th>Exactos</th><th>Quiniela</th><th>Cruces</th></tr></thead>
+    <thead><tr>
+      ${sortableHeader('ranking', 'position', '#', state.rankingSort)}
+      <th>Participante</th>
+      ${sortableHeader('ranking', 'total', 'Total', state.rankingSort)}
+      ${sortableHeader('ranking', 'groupPoints', '1ª fase', state.rankingSort)}
+      ${sortableHeader('ranking', 'exacts', 'Exactos', state.rankingSort)}
+      ${sortableHeader('ranking', 'signs', 'Quiniela', state.rankingSort)}
+      ${sortableHeader('ranking', 'knockoutPoints', 'Cruces', state.rankingSort)}
+    </tr></thead>
     <tbody>${rows.map(player => html`
       <tr class="${player.position <= 3 ? `rank-${player.position}` : ''}">
         <td class="ranking-position">${medals[player.position - 1] || (player.position === ranking.length ? '💩' : player.position)}</td>
@@ -778,7 +808,9 @@ function questionFieldLabel(question) {
 function renderMini() {
   const q = normalize(document.getElementById('miniRankingSearch').value);
   const ranking = calculateMiniRanking();
-  const rows = ranking.filter(player => normalize(player.name).includes(q));
+  const rows = sortRows(ranking
+    .map((player, index) => ({ ...player, position: index + 1 }))
+    .filter(player => normalize(player.name).includes(q)), state.miniRankingSort);
   const resolved = DATA.miniQuestions.filter(getMiniResult).length;
   const maxPoints = DATA.miniQuestions.reduce((total, question) => total + question.points, 0);
 
@@ -799,10 +831,16 @@ function renderMini() {
   `;
 
   document.getElementById('miniRankingTable').innerHTML = html`
-    <thead><tr><th>#</th><th>Participante</th><th>Puntos</th><th>Aciertos</th><th>Corregidas</th></tr></thead>
-    <tbody>${rows.map((player, index) => html`
-      <tr class="${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : ''}">
-        <td>${index + 1}</td>
+    <thead><tr>
+      ${sortableHeader('mini', 'position', '#', state.miniRankingSort)}
+      <th>Participante</th>
+      ${sortableHeader('mini', 'miniPoints', 'Puntos', state.miniRankingSort)}
+      ${sortableHeader('mini', 'miniCorrect', 'Aciertos', state.miniRankingSort)}
+      ${sortableHeader('mini', 'miniResolved', 'Corregidas', state.miniRankingSort)}
+    </tr></thead>
+    <tbody>${rows.map(player => html`
+      <tr class="${player.position === 1 ? 'rank-1' : player.position === 2 ? 'rank-2' : ''}">
+        <td>${player.position}</td>
         <td>${player.name}</td>
         <td class="points">${player.miniPoints}</td>
         <td>${player.miniCorrect}</td>
@@ -942,6 +980,20 @@ async function clearMiniResult(id) {
 }
 
 document.addEventListener('click', e => {
+  const sortButton = e.target.closest('[data-sort-table]');
+  if (sortButton) {
+    const sortState = sortButton.dataset.sortTable === 'ranking' ? state.rankingSort : state.miniRankingSort;
+    const key = sortButton.dataset.sortKey;
+    if (sortState.key === key) {
+      sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortState.key = key;
+      sortState.direction = 'asc';
+    }
+    sortButton.dataset.sortTable === 'ranking' ? renderRanking() : renderMini();
+    return;
+  }
+
   const tab = e.target.closest('.tab');
   if (tab) {
     document.querySelectorAll('.tab,.panel').forEach(el => el.classList.remove('active'));
