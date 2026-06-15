@@ -175,6 +175,17 @@
     <div id="matchPredictionsContent"></div>
   </dialog>
 
+  <aside id="updateToast" class="update-toast" hidden role="status" aria-live="polite">
+    <div>
+      <strong>Nueva versión disponible</strong>
+      <p id="updateToastMessage"></p>
+    </div>
+    <div class="update-toast-actions">
+      <button id="reloadAppBtn" class="primary" type="button">Actualizar</button>
+      <button id="dismissUpdateBtn" type="button" aria-label="Cerrar aviso">×</button>
+    </div>
+  </aside>
+
   <script type="module" src="./data/porra-data.js"></script>
   <script type="module" src="./src/app.js"></script>
 </body>

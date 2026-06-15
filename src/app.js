@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 const DATA = window.PORRA_DATA;
 const DEFAULT_API_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
 const API_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw';
 const adminParam = new URLSearchParams(window.location.search).get('admin');
@@ -78,6 +79,7 @@ const state = {
   activeTab: 'ranking'
 };
 let apiRefreshInProgress = false;
+let dismissedVersion = null;
 
 function normalize(s) {
   return String(s || '')
@@ -175,6 +177,22 @@ function toggleTheme() {
   const nextTheme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   localStorage.setItem(LS_KEYS.theme, nextTheme);
   applyTheme(nextTheme);
+}
+
+async function checkForAppUpdate() {
+  try {
+    const response = await fetch(`${import.meta.env.BASE_URL}version.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!response.ok) return;
+    const latest = await response.json();
+    if (!latest.version || latest.version === __APP_VERSION__ || latest.version === dismissedVersion) return;
+
+    document.getElementById('updateToastMessage').textContent = latest.message || 'Hay cambios nuevos en la aplicación.';
+    const toast = document.getElementById('updateToast');
+    toast.dataset.version = latest.version;
+    toast.hidden = false;
+  } catch (error) {
+    console.debug('No se pudo comprobar si hay una nueva versión:', error);
+  }
 }
 
 function getResult(match) {
@@ -1111,6 +1129,17 @@ document.addEventListener('submit', async e => {
 
 document.getElementById('refreshApiBtn').addEventListener('click', refreshFromApi);
 document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+document.getElementById('reloadAppBtn').addEventListener('click', () => {
+  const toast = document.getElementById('updateToast');
+  const url = new URL(window.location.href);
+  url.searchParams.set('version', toast.dataset.version?.slice(0, 8) || Date.now());
+  window.location.replace(url);
+});
+document.getElementById('dismissUpdateBtn').addEventListener('click', () => {
+  const toast = document.getElementById('updateToast');
+  dismissedVersion = toast.dataset.version;
+  toast.hidden = true;
+});
 document.getElementById('rankingSearch').addEventListener('input', renderRanking);
 document.getElementById('miniRankingSearch').addEventListener('input', renderMini);
 document.getElementById('groupFilter').addEventListener('change', renderMatches);
@@ -1157,4 +1186,10 @@ renderAll();
 refreshFromApi();
 loadMiniResultsFromSupabase();
 initializeAuth();
+checkForAppUpdate();
 setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);
+setInterval(checkForAppUpdate, VERSION_CHECK_INTERVAL_MS);
+window.addEventListener('focus', checkForAppUpdate);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') checkForAppUpdate();
+});
