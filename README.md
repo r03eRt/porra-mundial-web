@@ -70,8 +70,11 @@ Los resultados se obtienen automáticamente desde la API configurada. No se pued
 
 ### GitHub Pages
 
-1. Sube los archivos a un repo.
-2. Activa Pages desde la rama principal.
+Cada cambio enviado a `main` despliega automáticamente la web en:
+
+```text
+https://r03ert.github.io/porra-mundial-web/
+```
 
 ## Reglas implementadas
 
