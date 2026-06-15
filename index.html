@@ -30,6 +30,7 @@
       <button class="tab active" data-tab="ranking">Porra principal</button>
       <button class="tab" data-tab="matches">Partidos</button>
       <button class="tab" data-tab="groupStandings">Clasificación grupos</button>
+      <button class="tab" data-tab="bestThirds">Mejores terceros</button>
       <button class="tab" data-tab="player">Detalle jugador</button>
       <button class="tab" data-tab="knockout">Cruces</button>
       <button class="tab" data-tab="mini">Mini-porra</button>
@@ -63,6 +64,16 @@
         </div>
       </div>
       <div id="groupStandingsList" class="group-standings-grid"></div>
+    </section>
+
+    <section id="bestThirds" class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Mejores terceros</h2>
+          <p class="hint">Los 8 mejores se ordenan por puntos, diferencia de goles y goles a favor.</p>
+        </div>
+      </div>
+      <div class="table-wrap best-thirds-table"><table id="bestThirdsTable"></table></div>
     </section>
 
     <section id="player" class="panel">

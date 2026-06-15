@@ -547,6 +547,45 @@ function renderGroupStandings() {
   }).join('');
 }
 
+function calculateBestThirds() {
+  const groups = [...new Set(DATA.matches.map(match => match.group))].sort();
+  return groups
+    .map((group, groupIndex) => ({
+      ...calculateGroupStandings(group)[2],
+      group,
+      groupIndex
+    }))
+    .sort((a, b) =>
+      b.points - a.points
+      || b.goalDifference - a.goalDifference
+      || b.goalsFor - a.goalsFor
+      || a.groupIndex - b.groupIndex
+    )
+    .slice(0, 8);
+}
+
+function renderBestThirds() {
+  const bestThirds = calculateBestThirds();
+  document.getElementById('bestThirdsTable').innerHTML = html`
+    <thead>
+      <tr><th>Pos.</th><th>Selección</th><th>Grupo</th><th>GF</th><th>GC</th><th>DG</th><th>Pts.</th></tr>
+    </thead>
+    <tbody>${bestThirds.map((team, index) => html`
+      <tr class="qualified-third">
+        <td class="group-position">${index + 1}</td>
+        <td class="standing-team">${teamLabel(team.team)}</td>
+        <td>${team.group}</td>
+        <td>${team.goalsFor}</td>
+        <td>${team.goalsAgainst}</td>
+        <td class="${team.goalDifference > 0 ? 'ok' : (team.goalDifference < 0 ? 'bad' : '')}">
+          ${team.goalDifference > 0 ? '+' : ''}${team.goalDifference}
+        </td>
+        <td class="points">${team.points}</td>
+      </tr>
+    `).join('')}</tbody>
+  `;
+}
+
 function renderPlayerDetail() {
   const playerId = document.getElementById('playerSelect').value || DATA.players[0].id;
   const groups = [...new Set(DATA.matches.map(match => match.group))].sort();
@@ -762,7 +801,7 @@ function renderSettings() {
   document.getElementById('apiUrlInput').value = state.apiUrl;
 }
 
-function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderGroupStandings(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
+function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderGroupStandings(); renderBestThirds(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
 
 async function loadMiniResultsFromSupabase() {
   const { data, error } = await supabase
