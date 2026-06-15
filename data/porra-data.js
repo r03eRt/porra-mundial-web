@@ -9901,3 +9901,8 @@ window.PORRA_DATA = {
     "COSTA DE MARFIL": "Ivory Coast"
   }
 };
+
+window.PORRA_DATA.miniQuestions = window.PORRA_DATA.plusQuestions.map(question => ({
+  ...question,
+  answers: { ...question.answers }
+}));

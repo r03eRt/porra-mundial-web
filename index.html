@@ -29,6 +29,7 @@
       <button class="tab" data-tab="player">Detalle jugador</button>
       <button class="tab" data-tab="knockout">Cruces</button>
       <button class="tab" data-tab="pluses">Pluses</button>
+      <button class="tab" data-tab="mini">Mini-porra</button>
       <button class="tab" data-tab="settings">Datos/API</button>
     </nav>
 
@@ -87,6 +88,29 @@
         <h3>Pronósticos de los participantes</h3>
       </div>
       <div class="table-wrap"><table id="plusTable"></table></div>
+    </section>
+
+    <section id="mini" class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Clasificación mini-porra</h2>
+          <p class="hint">Competición independiente. Sus puntos no se suman a la porra principal.</p>
+        </div>
+        <input id="miniRankingSearch" placeholder="Buscar participante..." />
+      </div>
+      <section class="cards mini-summary" id="miniSummaryCards"></section>
+      <div class="table-wrap"><table id="miniRankingTable"></table></div>
+
+      <div class="section-head">
+        <h3>Resultados de la mini-porra</h3>
+        <p class="hint">Estos resultados son independientes de los Pluses. Puedes indicar variantes o empates con <strong>|</strong>.</p>
+      </div>
+      <div id="miniResultsList" class="mini-results"></div>
+
+      <div class="section-head">
+        <h3>Pronósticos de la mini-porra</h3>
+      </div>
+      <div class="table-wrap"><table id="miniTable"></table></div>
     </section>
 
     <section id="settings" class="panel">

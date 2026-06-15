@@ -81,6 +81,7 @@ Los resultados se obtienen automáticamente desde la API configurada. No se pued
 - Los pluses se suman a la clasificación general.
 - Los pluses Q1-Q13 valen 5 puntos; Q14 y Q15 valen 10.
 - Los resultados de los pluses se corrigen manualmente y se guardan en el navegador.
+- La mini-porra mantiene clasificación y resultados propios, separados de la porra principal y de los pluses.
 
 Pendiente de ampliar si quieres:
 
