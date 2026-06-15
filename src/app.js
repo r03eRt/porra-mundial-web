@@ -375,7 +375,7 @@ function renderSummary() {
   document.getElementById('summaryCards').innerHTML = html`
     <article class="card"><b>${DATA.players.length}</b><span>participantes</span></article>
     <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
-    <article class="card"><b>${ranking[0]?.name || '-'}</b><span>líder actual</span></article>
+    <article class="card"><b>${ranking[0] ? `⭐ ${ranking[0].name}` : '-'}</b><span>líder actual</span></article>
     <article class="card"><b>${ranking[0]?.total || 0}</b><span>puntos del líder</span></article>
   `;
   document.getElementById('lastUpdate').textContent = localStorage.getItem(LS_KEYS.lastUpdate) || 'sin actualizar';
@@ -469,6 +469,82 @@ function renderMatches() {
       </section>
     `).join('')
     : '<p class="empty-state">No hay partidos que coincidan con los filtros.</p>';
+}
+
+function calculateGroupStandings(group) {
+  const matches = DATA.matches.filter(match => match.group === group);
+  const teams = [...new Set(matches.flatMap(match => [match.team1, match.team2]))];
+  const standings = teams.map((team, originalIndex) => ({
+    team,
+    originalIndex,
+    goalsFor: 0,
+    goalsAgainst: 0,
+    goalDifference: 0,
+    points: 0
+  }));
+  const byTeam = Object.fromEntries(standings.map(team => [team.team, team]));
+
+  for (const match of matches) {
+    const result = getResult(match);
+    if (!result) continue;
+
+    const home = byTeam[match.team1];
+    const away = byTeam[match.team2];
+    home.goalsFor += result.home;
+    home.goalsAgainst += result.away;
+    away.goalsFor += result.away;
+    away.goalsAgainst += result.home;
+
+    if (result.home > result.away) {
+      home.points += 3;
+    } else if (result.home < result.away) {
+      away.points += 3;
+    } else {
+      home.points += 1;
+      away.points += 1;
+    }
+  }
+
+  standings.forEach(team => {
+    team.goalDifference = team.goalsFor - team.goalsAgainst;
+  });
+
+  return standings.sort((a, b) =>
+    b.points - a.points
+    || b.goalDifference - a.goalDifference
+    || b.goalsFor - a.goalsFor
+    || a.originalIndex - b.originalIndex
+  );
+}
+
+function renderGroupStandings() {
+  const groups = [...new Set(DATA.matches.map(match => match.group))].sort();
+  document.getElementById('groupStandingsList').innerHTML = groups.map(group => {
+    const standings = calculateGroupStandings(group);
+    return html`
+      <section class="group-standing">
+        <h3>Grupo ${group}</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Pos.</th><th>Selección</th><th>GF</th><th>GC</th><th>DG</th><th>Pts.</th></tr>
+            </thead>
+            <tbody>${standings.map((team, index) => html`
+              <tr>
+                <td class="group-position">${index + 1}</td>
+                <td class="standing-team">${teamLabel(team.team)}</td>
+                <td>${team.goalsFor}</td>
+                <td>${team.goalsAgainst}</td>
+                <td class="${team.goalDifference > 0 ? 'ok' : (team.goalDifference < 0 ? 'bad' : '')}">
+                  ${team.goalDifference > 0 ? '+' : ''}${team.goalDifference}
+                </td>
+                <td class="points">${team.points}</td>
+              </tr>
+            `).join('')}</tbody>
+          </table>
+        </div>
+      </section>`;
+  }).join('');
 }
 
 function renderPlayerDetail() {
@@ -686,7 +762,7 @@ function renderSettings() {
   document.getElementById('apiUrlInput').value = state.apiUrl;
 }
 
-function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
+function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderGroupStandings(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
 
 async function loadMiniResultsFromSupabase() {
   const { data, error } = await supabase

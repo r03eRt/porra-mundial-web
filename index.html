@@ -29,6 +29,7 @@
     <nav class="tabs" aria-label="Secciones">
       <button class="tab active" data-tab="ranking">Porra principal</button>
       <button class="tab" data-tab="matches">Partidos</button>
+      <button class="tab" data-tab="groupStandings">Clasificación grupos</button>
       <button class="tab" data-tab="player">Detalle jugador</button>
       <button class="tab" data-tab="knockout">Cruces</button>
       <button class="tab" data-tab="mini">Mini-porra</button>
@@ -52,6 +53,16 @@
         </div>
       </div>
       <div id="matchesList" class="matchdays"></div>
+    </section>
+
+    <section id="groupStandings" class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Clasificación por grupos</h2>
+          <p class="hint">Actualizada automáticamente con los resultados disponibles.</p>
+        </div>
+      </div>
+      <div id="groupStandingsList" class="group-standings-grid"></div>
     </section>
 
     <section id="player" class="panel">
