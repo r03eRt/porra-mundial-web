@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Porra Mundial 2026 Villaverde</title>
+  <link rel="stylesheet" href="./src/styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Porra Mundial 2026</p>
+      <h1>Clasificación Villaverde</h1>
+      <p class="subtitle">Ranking automático desde las predicciones del Excel, con resultados importados desde API o editados a mano.</p>
+    </div>
+    <div class="hero-actions">
+      <button id="refreshApiBtn" class="primary">Actualizar desde API</button>
+      <button id="exportBtn">Exportar estado</button>
+      <label class="import-btn">Importar JSON<input id="importInput" type="file" accept="application/json" hidden /></label>
+    </div>
+  </header>
+
+  <main>
+    <section class="cards" id="summaryCards"></section>
+
+    <nav class="tabs" aria-label="Secciones">
+      <button class="tab active" data-tab="ranking">Porra principal</button>
+      <button class="tab" data-tab="matches">Partidos</button>
+      <button class="tab" data-tab="player">Detalle jugador</button>
+      <button class="tab" data-tab="knockout">Cruces</button>
+      <button class="tab" data-tab="mini">Mini-porra</button>
+      <button class="tab" data-tab="settings">Datos/API</button>
+    </nav>
+
+    <section id="ranking" class="panel active">
+      <div class="panel-head">
+        <h2>Clasificación porra principal</h2>
+        <input id="rankingSearch" placeholder="Buscar participante..." />
+      </div>
+      <div class="table-wrap"><table id="rankingTable"></table></div>
+    </section>
+
+    <section id="matches" class="panel">
+      <div class="panel-head">
+        <h2>Resultados y partidos</h2>
+        <div class="filters">
+          <select id="groupFilter"><option value="all">Todos los grupos</option></select>
+          <select id="statusFilter"><option value="all">Todos</option><option value="played">Con resultado</option><option value="pending">Pendientes</option></select>
+        </div>
+      </div>
+      <div id="matchesList" class="matchdays"></div>
+    </section>
+
+    <section id="player" class="panel">
+      <div class="panel-head">
+        <h2>Detalle por participante</h2>
+        <select id="playerSelect"></select>
+      </div>
+      <div class="table-wrap"><table id="playerTable"></table></div>
+    </section>
+
+    <section id="knockout" class="panel">
+      <div class="panel-head"><h2>Predicciones de cruces</h2></div>
+      <p class="hint">Incluye las predicciones importadas de la hoja “Plantilla”. El cálculo automático de cruces se puede activar cuando estén claros los clasificados reales.</p>
+      <div class="table-wrap"><table id="knockoutTable"></table></div>
+    </section>
+
+    <section id="mini" class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Clasificación mini-porra</h2>
+          <p class="hint">Competición independiente. Sus puntos no se suman a la porra principal.</p>
+        </div>
+        <input id="miniRankingSearch" placeholder="Buscar participante..." />
+      </div>
+      <section class="cards mini-summary" id="miniSummaryCards"></section>
+      <div class="table-wrap"><table id="miniRankingTable"></table></div>
+
+      <div class="section-head">
+        <h3>Resultados de la mini-porra</h3>
+        <p class="hint">Introduce la respuesta correcta. Para admitir variantes, sepáralas con <strong>|</strong>.</p>
+      </div>
+      <div id="miniResultsList" class="mini-results"></div>
+
+      <div class="section-head">
+        <h3>Apuestas de los participantes</h3>
+      </div>
+      <div class="table-wrap"><table id="miniTable"></table></div>
+    </section>
+
+    <section id="settings" class="panel">
+      <div class="panel-head"><h2>Fuente de datos</h2></div>
+      <div class="settings-grid">
+        <article class="settings-card">
+          <h3>API actual</h3>
+          <p>Por defecto usa OpenFootball World Cup JSON. No requiere clave, pero no es live; se actualiza manualmente/periódicamente.</p>
+          <label>URL OpenFootball
+            <input id="apiUrlInput" />
+          </label>
+          <button id="saveApiUrlBtn">Guardar URL</button>
+        </article>
+        <article class="settings-card">
+          <h3>Reglas</h3>
+          <ul>
+            <li>Marcador exacto: 6 puntos.</li>
+            <li>Quiniela acertada: 2 puntos.</li>
+            <li>Sin resultado: no suma.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Generado desde “PORRA MUNDIAL 2026 VILLAVERDE.xlsx”. Última actualización: <span id="lastUpdate">sin actualizar</span>
+  </footer>
+
+  <script type="module" src="./data/porra-data.js"></script>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
