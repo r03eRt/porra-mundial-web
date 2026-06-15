@@ -98,6 +98,9 @@ function keyForTeams(a, b) {
 }
 
 const TOURNAMENT_TEAM_KEYS = new Set(DATA.matches.flatMap(match => [match.team1, match.team2]).map(teamKey));
+const LOCAL_TEAM_BY_KEY = new Map(DATA.matches
+  .flatMap(match => [match.team1, match.team2])
+  .map(team => [teamKey(team), team]));
 const KNOCKOUT_SCORING = {
   DIECISEISAVOS: { label: 'Dieciseisavos', apiRound: 'Round of 32', previousRound: null, points: 3, expected: 32 },
   OCTAVOS: { label: 'Octavos', apiRound: 'Round of 16', previousRound: 'Round of 32', points: 5, expected: 16 },
@@ -586,6 +589,51 @@ function renderBestThirds() {
   `;
 }
 
+function calculateTopScorers() {
+  const scorers = new Map();
+
+  for (const match of state.apiFixtures) {
+    const teamGoals = [
+      [match.team1, match.goals1],
+      [match.team2, match.goals2]
+    ];
+
+    for (const [apiTeam, goals] of teamGoals) {
+      if (!Array.isArray(goals)) continue;
+      const team = LOCAL_TEAM_BY_KEY.get(teamKey(apiTeam)) || apiTeam;
+
+      for (const goal of goals) {
+        if (!goal?.name || goal.owngoal) continue;
+        const scorerKey = `${normalize(goal.name)}__${teamKey(apiTeam)}`;
+        const scorer = scorers.get(scorerKey) || { name: goal.name, team, goals: 0 };
+        scorer.goals += 1;
+        scorers.set(scorerKey, scorer);
+      }
+    }
+  }
+
+  return [...scorers.values()]
+    .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name, 'es'))
+    .slice(0, 8);
+}
+
+function renderTopScorers() {
+  const scorers = calculateTopScorers();
+  document.getElementById('topScorersTable').innerHTML = scorers.length
+    ? html`
+      <thead><tr><th>Pos.</th><th>Jugador</th><th>Selección</th><th>Goles</th></tr></thead>
+      <tbody>${scorers.map((scorer, index) => html`
+        <tr>
+          <td class="group-position">${index + 1}</td>
+          <td class="scorer-name">${escapeHtml(scorer.name)}</td>
+          <td class="standing-team">${teamLabel(scorer.team)}</td>
+          <td class="points scorer-goals">${scorer.goals}</td>
+        </tr>
+      `).join('')}</tbody>
+    `
+    : '<tbody><tr><td class="empty-state">Todavía no hay goleadores disponibles.</td></tr></tbody>';
+}
+
 function renderPlayerDetail() {
   const playerId = document.getElementById('playerSelect').value || DATA.players[0].id;
   const groups = [...new Set(DATA.matches.map(match => match.group))].sort();
@@ -801,7 +849,7 @@ function renderSettings() {
   document.getElementById('apiUrlInput').value = state.apiUrl;
 }
 
-function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderGroupStandings(); renderBestThirds(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
+function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
 
 async function loadMiniResultsFromSupabase() {
   const { data, error } = await supabase
