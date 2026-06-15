@@ -80,6 +80,7 @@ const state = {
 };
 let apiRefreshInProgress = false;
 let dismissedVersion = null;
+let serviceWorkerRegistration = null;
 
 function normalize(s) {
   return String(s || '')
@@ -192,6 +193,18 @@ async function checkForAppUpdate() {
     toast.hidden = false;
   } catch (error) {
     console.debug('No se pudo comprobar si hay una nueva versión:', error);
+  }
+}
+
+async function registerPwa() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    serviceWorkerRegistration = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {
+      scope: import.meta.env.BASE_URL
+    });
+    await serviceWorkerRegistration.update();
+  } catch (error) {
+    console.error('No se pudo registrar la PWA:', error);
   }
 }
 
@@ -1186,6 +1199,7 @@ renderAll();
 refreshFromApi();
 loadMiniResultsFromSupabase();
 initializeAuth();
+registerPwa();
 checkForAppUpdate();
 setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);
 setInterval(checkForAppUpdate, VERSION_CHECK_INTERVAL_MS);

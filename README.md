@@ -53,6 +53,10 @@ OpenFootball no necesita API key, pero no es una fuente live oficial. Según el 
 
 Los resultados se obtienen automáticamente desde la API configurada al abrir la aplicación y cada 60 minutos. No se pueden editar manualmente desde la aplicación.
 
+## PWA
+
+La aplicación se puede instalar desde el navegador en móvil y escritorio. La interfaz principal queda disponible sin conexión; los resultados y los datos de Supabase requieren conexión para actualizarse.
+
 ## Modo administrador
 
 Añade `?admin=1` a la URL para mostrar el acceso de administrador. Tras iniciar sesión con Supabase Auth se pueden editar los resultados de la mini-porra, acceder a Datos/API e importar o exportar el estado.
