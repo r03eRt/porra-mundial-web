@@ -81,10 +81,7 @@ https://r03ert.github.io/porra-mundial-web/
 - Marcador exacto en fase de grupos: 6 puntos.
 - Signo acertado: 2 puntos.
 - Sin resultado: 0 puntos.
-- Los pluses se suman a la clasificación general.
-- Los pluses Q1-Q13 valen 5 puntos; Q14 y Q15 valen 10.
-- Los resultados de los pluses se corrigen manualmente y se guardan en el navegador.
-- La mini-porra mantiene clasificación y resultados propios, separados de la porra principal y de los pluses.
+- La mini-porra mantiene clasificación y resultados propios, separados de la porra principal.
 
 Pendiente de ampliar si quieres:
 

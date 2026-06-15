@@ -28,7 +28,6 @@
       <button class="tab" data-tab="matches">Partidos</button>
       <button class="tab" data-tab="player">Detalle jugador</button>
       <button class="tab" data-tab="knockout">Cruces</button>
-      <button class="tab" data-tab="pluses">Pluses</button>
       <button class="tab" data-tab="mini">Mini-porra</button>
       <button class="tab" data-tab="settings">Datos/API</button>
     </nav>
@@ -66,30 +65,6 @@
       <div class="table-wrap"><table id="knockoutTable"></table></div>
     </section>
 
-    <section id="pluses" class="panel">
-      <div class="panel-head">
-        <div>
-          <h2>Pluses</h2>
-          <p class="hint">Puntos extra que se suman directamente a la clasificación general.</p>
-        </div>
-        <input id="plusRankingSearch" placeholder="Buscar participante..." />
-      </div>
-      <section class="cards plus-summary" id="plusSummaryCards"></section>
-      <div class="table-wrap"><table id="plusRankingTable"></table></div>
-
-      <div class="section-head">
-        <h3>Resultados de los pluses</h3>
-        <p class="hint">Puedes admitir variantes o empates separándolos con <strong>|</strong>, por ejemplo: Mbappé | K. Mbappé | Kylian Mbappé.</p>
-      </div>
-      <datalist id="teamOptions"></datalist>
-      <div id="plusResultsList" class="plus-results"></div>
-
-      <div class="section-head">
-        <h3>Pronósticos de los participantes</h3>
-      </div>
-      <div class="table-wrap"><table id="plusTable"></table></div>
-    </section>
-
     <section id="mini" class="panel">
       <div class="panel-head">
         <div>
@@ -103,8 +78,9 @@
 
       <div class="section-head">
         <h3>Resultados de la mini-porra</h3>
-        <p class="hint">Estos resultados son independientes de los Pluses. Puedes indicar variantes o empates con <strong>|</strong>.</p>
+        <p class="hint">Puedes indicar variantes o empates con <strong>|</strong>.</p>
       </div>
+      <datalist id="teamOptions"></datalist>
       <div id="miniResultsList" class="mini-results"></div>
 
       <div class="section-head">

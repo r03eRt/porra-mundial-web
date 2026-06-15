@@ -7222,7 +7222,7 @@ window.PORRA_DATA = {
       }
     }
   ],
-  "plusQuestions": [
+  "miniQuestions": [
     {
       "id": "Q1",
       "question": "Primer jugador en marcar en el torneo (5 pts)",
@@ -9901,8 +9901,3 @@ window.PORRA_DATA = {
     "COSTA DE MARFIL": "Ivory Coast"
   }
 };
-
-window.PORRA_DATA.miniQuestions = window.PORRA_DATA.plusQuestions.map(question => ({
-  ...question,
-  answers: { ...question.answers }
-}));
