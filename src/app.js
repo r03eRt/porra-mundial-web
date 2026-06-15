@@ -77,9 +77,24 @@ function apiNameFor(team) {
   return DATA.teamAliases[team] || team;
 }
 
-function keyForTeams(a, b) {
-  return `${normalize(apiNameFor(a))}__${normalize(apiNameFor(b))}`;
+function teamKey(team) {
+  const key = normalize(apiNameFor(team));
+  return key === 'USA' ? 'UNITED STATES' : key;
 }
+
+function keyForTeams(a, b) {
+  return `${teamKey(a)}__${teamKey(b)}`;
+}
+
+const TOURNAMENT_TEAM_KEYS = new Set(DATA.matches.flatMap(match => [match.team1, match.team2]).map(teamKey));
+const KNOCKOUT_SCORING = {
+  DIECISEISAVOS: { label: 'Dieciseisavos', apiRound: 'Round of 32', previousRound: null, points: 3, expected: 32 },
+  OCTAVOS: { label: 'Octavos', apiRound: 'Round of 16', previousRound: 'Round of 32', points: 5, expected: 16 },
+  CUARTOS: { label: 'Cuartos', apiRound: 'Quarter-final', previousRound: 'Round of 16', points: 7, expected: 8 },
+  SEMIS: { label: 'Semifinales', apiRound: 'Semi-final', previousRound: 'Quarter-final', points: 10, expected: 4 },
+  FINAL: { label: 'Final', apiRound: 'Final', previousRound: 'Semi-final', points: 12, expected: 2 },
+  '1º': { label: 'Campeón', apiRound: null, previousRound: 'Final', points: 15, expected: 1 }
+};
 
 function teamLabel(team) {
   return `${TEAM_FLAGS[team] || '🏳️'} ${team}`;
@@ -116,8 +131,6 @@ const MINI_FIELD_TYPES = {
   Q15: 'player'
 };
 
-const KNOCKOUT_STAGES = new Set(['DIECISEISAVOS', 'OCTAVOS', 'CUARTOS', 'SEMIS', 'FINAL', '1º']);
-
 function loadMiniResults() {
   try {
     return JSON.parse(localStorage.getItem(LS_KEYS.mini) || '{}');
@@ -141,7 +154,72 @@ function scorePrediction(prediction, result) {
   return { points: exact ? DATA.meta.scoring.groupExact : (sign ? DATA.meta.scoring.groupSign : 0), exact, sign };
 }
 
+function isTournamentTeam(team) {
+  return TOURNAMENT_TEAM_KEYS.has(teamKey(team));
+}
+
+function winnerFromApiMatch(match) {
+  if (!match || !isTournamentTeam(match.team1) || !isTournamentTeam(match.team2)) return null;
+  const score = match.score || {};
+  const decidingScore = [score.p, score.et, score.ft]
+    .find(value => Array.isArray(value) && value.length >= 2 && Number(value[0]) !== Number(value[1]));
+  if (!decidingScore) return null;
+  return Number(decidingScore[0]) > Number(decidingScore[1]) ? match.team1 : match.team2;
+}
+
+function getKnockoutReality() {
+  const reality = {};
+
+  for (const [stage, config] of Object.entries(KNOCKOUT_SCORING)) {
+    const teams = new Set();
+
+    if (config.apiRound) {
+      state.apiFixtures
+        .filter(match => match.round === config.apiRound)
+        .flatMap(match => [match.team1, match.team2])
+        .filter(isTournamentTeam)
+        .forEach(team => teams.add(teamKey(team)));
+    }
+
+    if (config.previousRound) {
+      state.apiFixtures
+        .filter(match => match.round === config.previousRound)
+        .map(winnerFromApiMatch)
+        .filter(Boolean)
+        .forEach(team => teams.add(teamKey(team)));
+    }
+
+    reality[stage] = {
+      ...config,
+      teams,
+      resolved: teams.size,
+      complete: teams.size >= config.expected
+    };
+  }
+
+  return reality;
+}
+
+function calculatePlayerKnockout(playerId, reality = getKnockoutReality()) {
+  const breakdown = {};
+  let points = 0;
+
+  for (const [stage, stageReality] of Object.entries(reality)) {
+    const predictions = DATA.knockoutPredictions
+      .filter(prediction => prediction.stage === stage)
+      .map(prediction => prediction.predictions[playerId])
+      .filter(Boolean);
+    const hits = predictions.filter(team => stageReality.teams.has(teamKey(team))).length;
+    const stagePoints = hits * stageReality.points;
+    breakdown[stage] = { ...stageReality, hits, points: stagePoints };
+    points += stagePoints;
+  }
+
+  return { points, breakdown };
+}
+
 function calculateRanking() {
+  const knockoutReality = getKnockoutReality();
   return DATA.players.map(player => {
     const group = DATA.matches.reduce((acc, match) => {
       const result = getResult(match);
@@ -152,12 +230,13 @@ function calculateRanking() {
       acc.played += result ? 1 : 0;
       return acc;
     }, { points: 0, exacts: 0, signs: 0, played: 0 });
-    const knockoutPoints = 0;
+    const knockout = calculatePlayerKnockout(player.id, knockoutReality);
     return {
       ...player,
       groupPoints: group.points,
-      knockoutPoints,
-      total: group.points + knockoutPoints,
+      knockoutPoints: knockout.points,
+      knockoutBreakdown: knockout.breakdown,
+      total: group.points + knockout.points,
       exacts: group.exacts,
       signs: group.signs,
       played: group.played
@@ -264,6 +343,8 @@ function renderFilters() {
   }
   const playerSelect = document.getElementById('playerSelect');
   if (!playerSelect.options.length) DATA.players.forEach(p => playerSelect.insertAdjacentHTML('beforeend', `<option value="${p.id}">${p.name}</option>`));
+  const knockoutPlayerSelect = document.getElementById('knockoutPlayerSelect');
+  if (!knockoutPlayerSelect.options.length) DATA.players.forEach(p => knockoutPlayerSelect.insertAdjacentHTML('beforeend', `<option value="${p.id}">${p.name}</option>`));
 }
 
 function getMatchday(match) {
@@ -333,12 +414,89 @@ function renderPlayerDetail() {
     }).join('')}</tbody>`;
 }
 
+function knockoutPredictionStatus(team, stageReality) {
+  if (!team || !stageReality.resolved) return 'pending';
+  if (stageReality.teams.has(teamKey(team))) return 'correct';
+  return stageReality.complete ? 'wrong' : 'pending';
+}
+
+function renderBracketTeam(team, status = 'pending') {
+  const statusMark = status === 'correct' ? '✓' : (status === 'wrong' ? '×' : '');
+  return `<div class="bracket-team ${status}"><span class="bracket-flag">${TEAM_FLAGS[team] || '🏳️'}</span><span>${escapeHtml(team || 'Por definir')}</span><span class="bracket-status">${statusMark}</span></div>`;
+}
+
+function renderBracketRound(stage, playerId, stageScore) {
+  const teams = DATA.knockoutPredictions
+    .filter(prediction => prediction.stage === stage)
+    .sort((a, b) => a.slot - b.slot)
+    .map(prediction => prediction.predictions[playerId] || '');
+
+  const matches = [];
+  for (let index = 0; index < teams.length; index += 2) {
+    matches.push(html`
+      <article class="bracket-match">
+        <span class="bracket-match-number">Cruce ${index / 2 + 1}</span>
+        ${renderBracketTeam(teams[index], knockoutPredictionStatus(teams[index], stageScore))}
+        ${renderBracketTeam(teams[index + 1], knockoutPredictionStatus(teams[index + 1], stageScore))}
+      </article>
+    `);
+  }
+
+  return html`
+    <section class="bracket-round" style="--matches:${matches.length}">
+      <div class="bracket-round-head">
+        <h3>${stageScore.label}</h3>
+        <span>${stageScore.hits} aciertos · +${stageScore.points} pts</span>
+        <small>${stageScore.resolved}/${stageScore.expected} selecciones confirmadas</small>
+      </div>
+      <div class="bracket-matches">${matches.join('')}</div>
+    </section>
+  `;
+}
+
 function renderKnockout() {
-  const samplePlayers = DATA.players.slice(0, 8);
-  const knockoutPredictions = DATA.knockoutPredictions.filter(prediction => KNOCKOUT_STAGES.has(prediction.stage));
-  document.getElementById('knockoutTable').innerHTML = html`
-    <thead><tr><th>Ronda</th><th>Slot</th>${samplePlayers.map(p=>`<th>${p.name}</th>`).join('')}</tr></thead>
-    <tbody>${knockoutPredictions.map(k => html`<tr><td>${k.stage}</td><td>${k.slot}</td>${samplePlayers.map(p=>`<td>${k.predictions[p.id] || ''}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  const playerId = document.getElementById('knockoutPlayerSelect').value || DATA.players[0].id;
+  const player = DATA.players.find(item => item.id === playerId) || DATA.players[0];
+  const champion = DATA.knockoutPredictions.find(prediction => prediction.stage === '1º')?.predictions[playerId] || '';
+  const knockout = calculatePlayerKnockout(playerId);
+  const rounds = ['DIECISEISAVOS', 'OCTAVOS', 'CUARTOS', 'SEMIS', 'FINAL'];
+  const championScore = knockout.breakdown['1º'];
+
+  document.getElementById('knockoutScoreSummary').innerHTML = html`
+    <article class="knockout-total">
+      <b>${knockout.points}</b>
+      <span>puntos en cruces</span>
+    </article>
+    ${Object.entries(knockout.breakdown).map(([, score]) => html`
+      <article>
+        <strong>${score.label}</strong>
+        <span>${score.hits} aciertos · +${score.points} pts</span>
+      </article>
+    `).join('')}
+  `;
+
+  document.getElementById('knockoutBracket').innerHTML = html`
+    <div class="bracket-title">
+      <span>Pronóstico de</span>
+      <strong>${escapeHtml(player.name)}</strong>
+    </div>
+    <div class="bracket">
+      ${rounds.map(stage => renderBracketRound(stage, playerId, knockout.breakdown[stage])).join('')}
+      <section class="bracket-round champion-round">
+        <div class="bracket-round-head">
+          <h3>Campeón</h3>
+          <span>${championScore.hits} aciertos · +${championScore.points} pts</span>
+          <small>${championScore.resolved}/${championScore.expected} confirmado</small>
+        </div>
+        <div class="bracket-matches">
+          <article class="bracket-match champion-card">
+            <span class="trophy" aria-hidden="true">★</span>
+            ${renderBracketTeam(champion, knockoutPredictionStatus(champion, championScore))}
+          </article>
+        </div>
+      </section>
+    </div>
+  `;
 }
 
 function renderQuestionInput(question, result, dataAttribute) {
@@ -483,6 +641,7 @@ document.getElementById('miniRankingSearch').addEventListener('input', renderMin
 document.getElementById('groupFilter').addEventListener('change', renderMatches);
 document.getElementById('statusFilter').addEventListener('change', renderMatches);
 document.getElementById('playerSelect').addEventListener('change', renderPlayerDetail);
+document.getElementById('knockoutPlayerSelect').addEventListener('change', renderKnockout);
 document.getElementById('saveApiUrlBtn').addEventListener('click', () => { state.apiUrl = document.getElementById('apiUrlInput').value.trim() || DEFAULT_API_URL; localStorage.setItem(LS_KEYS.apiUrl, state.apiUrl); alert('URL guardada'); });
 document.getElementById('exportBtn').addEventListener('click', () => {
   const blob = new Blob([JSON.stringify({ miniResults: state.miniResults, apiUrl: state.apiUrl }, null, 2)], { type: 'application/json' });

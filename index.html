@@ -60,9 +60,15 @@
     </section>
 
     <section id="knockout" class="panel">
-      <div class="panel-head"><h2>Predicciones de cruces</h2></div>
-      <p class="hint">Incluye las predicciones importadas de la hoja “Plantilla”. El cálculo automático de cruces se puede activar cuando estén claros los clasificados reales.</p>
-      <div class="table-wrap"><table id="knockoutTable"></table></div>
+      <div class="panel-head">
+        <div>
+          <h2>Cuadro de cruces</h2>
+          <p class="hint">Recorrido previsto por cada participante desde dieciseisavos hasta campeón.</p>
+        </div>
+        <select id="knockoutPlayerSelect" aria-label="Participante del cuadro"></select>
+      </div>
+      <section id="knockoutScoreSummary" class="knockout-score-summary"></section>
+      <div id="knockoutBracket" class="bracket-wrap"></div>
     </section>
 
     <section id="mini" class="panel">
