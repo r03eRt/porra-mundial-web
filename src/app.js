@@ -12,7 +12,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 const LS_KEYS = {
   mini: 'porra.miniResults.v1',
   apiUrl: 'porra.apiUrl.v1',
-  lastUpdate: 'porra.lastUpdate.v1'
+  lastUpdate: 'porra.lastUpdate.v1',
+  theme: 'porra.theme.v1'
 };
 
 const TEAM_FLAGS = {
@@ -157,6 +158,23 @@ function loadMiniResults() {
 
 function isAdmin() {
   return ADMIN_REQUESTED && Boolean(state.adminUser);
+}
+
+function applyTheme(theme) {
+  const selectedTheme = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = selectedTheme;
+  const button = document.getElementById('themeToggleBtn');
+  const lightThemeActive = selectedTheme === 'light';
+  const label = lightThemeActive ? 'Activar tema oscuro' : 'Activar tema claro';
+  button.querySelector('span').textContent = lightThemeActive ? '🌙' : '☀️';
+  button.setAttribute('aria-label', label);
+  button.title = label;
+}
+
+function toggleTheme() {
+  const nextTheme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  localStorage.setItem(LS_KEYS.theme, nextTheme);
+  applyTheme(nextTheme);
 }
 
 function getResult(match) {
@@ -442,6 +460,12 @@ function renderFilters() {
   if (groupSelect.options.length === 1) {
     [...new Set(DATA.matches.map(m => m.group))].forEach(g => groupSelect.insertAdjacentHTML('beforeend', `<option value="${g}">Grupo ${g}</option>`));
   }
+  const teamSelect = document.getElementById('teamFilter');
+  if (teamSelect.options.length === 1) {
+    [...new Set(DATA.matches.flatMap(match => [match.team1, match.team2]))]
+      .sort((a, b) => a.localeCompare(b, 'es'))
+      .forEach(team => teamSelect.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(team)}">${teamLabel(team)}</option>`));
+  }
   const playerSelect = document.getElementById('playerSelect');
   if (!playerSelect.options.length) DATA.players.forEach(p => playerSelect.insertAdjacentHTML('beforeend', `<option value="${p.id}">${p.name}</option>`));
   const knockoutPlayerSelect = document.getElementById('knockoutPlayerSelect');
@@ -501,8 +525,10 @@ function openMatchPredictions(matchId) {
 
 function renderMatches() {
   const group = document.getElementById('groupFilter').value;
+  const team = document.getElementById('teamFilter').value;
   const status = document.getElementById('statusFilter').value;
   let matches = DATA.matches.filter(m => group === 'all' || m.group === group);
+  matches = matches.filter(match => team === 'all' || match.team1 === team || match.team2 === team);
   matches = matches.filter(m => status === 'all' || (status === 'played' ? !!getResult(m) : !getResult(m)));
 
   const matchdays = [1, 2, 3]
@@ -1084,9 +1110,11 @@ document.addEventListener('submit', async e => {
 });
 
 document.getElementById('refreshApiBtn').addEventListener('click', refreshFromApi);
+document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
 document.getElementById('rankingSearch').addEventListener('input', renderRanking);
 document.getElementById('miniRankingSearch').addEventListener('input', renderMini);
 document.getElementById('groupFilter').addEventListener('change', renderMatches);
+document.getElementById('teamFilter').addEventListener('change', renderMatches);
 document.getElementById('statusFilter').addEventListener('change', renderMatches);
 document.getElementById('playerSelect').addEventListener('change', renderPlayerDetail);
 document.getElementById('knockoutPlayerSelect').addEventListener('change', renderKnockout);
@@ -1123,6 +1151,7 @@ document.getElementById('importInput').addEventListener('change', async e => {
   renderAll();
 });
 
+applyTheme(document.documentElement.dataset.theme);
 applyAdminMode();
 renderAll();
 refreshFromApi();

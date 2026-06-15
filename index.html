@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Porrazo 2026</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <script>
+    document.documentElement.dataset.theme = localStorage.getItem('porra.theme.v1') || 'dark';
+  </script>
   <link rel="stylesheet" href="./src/styles.css" />
 </head>
 <body>
@@ -16,6 +19,9 @@
     </div>
     <div class="hero-actions">
       <div class="hero-action-row">
+        <button id="themeToggleBtn" class="theme-toggle" type="button" aria-label="Activar tema claro" title="Activar tema claro">
+          <span aria-hidden="true">☀️</span>
+        </button>
         <button id="refreshApiBtn" class="primary">Actualizar datos</button>
         <button id="exportBtn" data-admin-only>Exportar estado</button>
         <label class="import-btn" data-admin-only>Importar JSON<input id="importInput" type="file" accept="application/json" hidden /></label>
@@ -55,6 +61,7 @@
         </div>
         <div class="filters">
           <select id="groupFilter"><option value="all">Todos los grupos</option></select>
+          <select id="teamFilter"><option value="all">Todas las selecciones</option></select>
           <select id="statusFilter"><option value="all">Todos</option><option value="played">Con resultado</option><option value="pending">Pendientes</option></select>
         </div>
       </div>
