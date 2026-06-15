@@ -7222,7 +7222,7 @@ window.PORRA_DATA = {
       }
     }
   ],
-  "miniQuestions": [
+  "plusQuestions": [
     {
       "id": "Q1",
       "question": "Primer jugador en marcar en el torneo (5 pts)",

@@ -78,9 +78,9 @@ Los resultados se obtienen automáticamente desde la API configurada. No se pued
 - Marcador exacto en fase de grupos: 6 puntos.
 - Signo acertado: 2 puntos.
 - Sin resultado: 0 puntos.
-- La mini-porra tiene clasificación independiente y no suma en la porra principal.
-- Las preguntas Q1-Q13 de la mini-porra valen 5 puntos; Q14 y Q15 valen 10.
-- Los resultados de la mini-porra se corrigen manualmente y se guardan en el navegador.
+- Los pluses se suman a la clasificación general.
+- Los pluses Q1-Q13 valen 5 puntos; Q14 y Q15 valen 10.
+- Los resultados de los pluses se corrigen manualmente y se guardan en el navegador.
 
 Pendiente de ampliar si quieres:
 

@@ -1,7 +1,8 @@
 const DATA = window.PORRA_DATA;
 const DEFAULT_API_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
 const LS_KEYS = {
-  mini: 'porra.miniResults.v1',
+  pluses: 'porra.plusResults.v1',
+  legacyMini: 'porra.miniResults.v1',
   apiUrl: 'porra.apiUrl.v1',
   lastUpdate: 'porra.lastUpdate.v1'
 };
@@ -59,7 +60,7 @@ const TEAM_FLAGS = {
 
 const state = {
   apiUrl: localStorage.getItem(LS_KEYS.apiUrl) || DEFAULT_API_URL,
-  miniResults: loadMiniResults(),
+  plusResults: loadPlusResults(),
   apiResults: {},
   apiFixtures: [],
   activeTab: 'ranking'
@@ -98,8 +99,32 @@ function signFromScore(score) {
   return 'X';
 }
 
-function loadMiniResults() {
-  try { return JSON.parse(localStorage.getItem(LS_KEYS.mini) || '{}'); } catch { return {}; }
+const PLUS_FIELD_TYPES = {
+  Q1: 'player',
+  Q2: 'team',
+  Q3: 'team',
+  Q4: 'team',
+  Q5: 'number',
+  Q6: 'team',
+  Q7: 'team',
+  Q8: 'number',
+  Q9: 'player',
+  Q10: 'player',
+  Q11: 'player',
+  Q12: 'number',
+  Q13: 'number',
+  Q14: 'player',
+  Q15: 'player'
+};
+
+const KNOCKOUT_STAGES = new Set(['DIECISEISAVOS', 'OCTAVOS', 'CUARTOS', 'SEMIS', 'FINAL', '1º']);
+
+function loadPlusResults() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_KEYS.pluses) || localStorage.getItem(LS_KEYS.legacyMini) || '{}');
+  } catch {
+    return {};
+  }
 }
 
 function getResult(match) {
@@ -118,6 +143,7 @@ function scorePrediction(prediction, result) {
 }
 
 function calculateRanking() {
+  const plusPointsByPlayer = new Map(calculatePlusRanking().map(player => [player.id, player.plusPoints]));
   return DATA.players.map(player => {
     const group = DATA.matches.reduce((acc, match) => {
       const result = getResult(match);
@@ -128,33 +154,77 @@ function calculateRanking() {
       acc.played += result ? 1 : 0;
       return acc;
     }, { points: 0, exacts: 0, signs: 0, played: 0 });
-    return { ...player, groupPoints: group.points, knockoutPoints: 0, total: group.points, exacts: group.exacts, signs: group.signs, played: group.played };
+    const plusPoints = plusPointsByPlayer.get(player.id) || 0;
+    const knockoutPoints = 0;
+    return {
+      ...player,
+      groupPoints: group.points,
+      knockoutPoints,
+      plusPoints,
+      total: group.points + knockoutPoints + plusPoints,
+      exacts: group.exacts,
+      signs: group.signs,
+      played: group.played
+    };
   }).sort((a,b) => b.total - a.total || b.exacts - a.exacts || b.signs - a.signs || a.name.localeCompare(b.name));
 }
 
-function getMiniResult(question) {
-  return String(state.miniResults[question.id] || '').trim();
+function getPlusResult(question) {
+  return String(state.plusResults[question.id] || '').trim();
 }
 
-function scoreMiniAnswer(answer, result, points) {
+function normalizeTeam(value) {
+  const aliases = {
+    'ARABIA SAUDI': 'A SAUDI',
+    'COSTA DE MARFIL': 'C MARFIL',
+    'COREA DEL SUR': 'COREA',
+    'ESTADOS UNIDOS': 'EEUU',
+    'NUEVA ZELANDA': 'N ZELANDA',
+    'QATAR': 'CATAR',
+    'REPUBLICA CHECA': 'CHEQUIA',
+    'R CHECA': 'CHEQUIA',
+    'RCHECA': 'CHEQUIA',
+    'RD DEL CONGO': 'RD CONGO',
+    'REPUBLICA DEMOCRATICA DEL CONGO': 'RD CONGO',
+    'CONGO': 'RD CONGO',
+    'UZBEKISTAN': 'UZBEKISTAN'
+  };
+  const normalized = normalize(value).replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  return aliases[normalized] || normalized;
+}
+
+function scorePlusAnswer(question, answer, result) {
   if (!result) return { points: 0, correct: false };
-  const acceptedAnswers = result.split('|').map(normalize).filter(Boolean);
-  const correct = acceptedAnswers.includes(normalize(answer));
-  return { points: correct ? points : 0, correct };
+  const fieldType = PLUS_FIELD_TYPES[question.id];
+  const acceptedAnswers = result.split('|').map(value => value.trim()).filter(Boolean);
+  let correct = false;
+
+  if (fieldType === 'number') {
+    const predicted = String(answer || '').trim();
+    const actual = Number(result);
+    const minimumMatch = predicted.match(/^\+\s*(\d+)$/);
+    correct = Number.isFinite(actual) && (minimumMatch ? actual >= Number(minimumMatch[1]) : Number(predicted) === actual);
+  } else if (fieldType === 'team') {
+    correct = acceptedAnswers.map(normalizeTeam).includes(normalizeTeam(answer));
+  } else {
+    correct = acceptedAnswers.map(normalize).includes(normalize(answer));
+  }
+
+  return { points: correct ? question.points : 0, correct };
 }
 
-function calculateMiniRanking() {
+function calculatePlusRanking() {
   return DATA.players.map(player => {
-    const score = DATA.miniQuestions.reduce((acc, question) => {
-      const result = getMiniResult(question);
-      const answerScore = scoreMiniAnswer(question.answers[player.id], result, question.points);
+    const score = DATA.plusQuestions.reduce((acc, question) => {
+      const result = getPlusResult(question);
+      const answerScore = scorePlusAnswer(question, question.answers[player.id], result);
       acc.points += answerScore.points;
       acc.correct += answerScore.correct ? 1 : 0;
       acc.resolved += result ? 1 : 0;
       return acc;
     }, { points: 0, correct: 0, resolved: 0 });
-    return { ...player, miniPoints: score.points, correct: score.correct, resolved: score.resolved };
-  }).sort((a,b) => b.miniPoints - a.miniPoints || b.correct - a.correct || a.name.localeCompare(b.name));
+    return { ...player, plusPoints: score.points, plusCorrect: score.correct, plusResolved: score.resolved };
+  }).sort((a,b) => b.plusPoints - a.plusPoints || b.plusCorrect - a.plusCorrect || a.name.localeCompare(b.name));
 }
 
 function html(strings, ...values) {
@@ -186,8 +256,8 @@ function renderRanking() {
   const q = normalize(document.getElementById('rankingSearch').value);
   const rows = calculateRanking().filter(p => normalize(p.name).includes(q));
   document.getElementById('rankingTable').innerHTML = html`
-    <thead><tr><th>#</th><th>Participante</th><th>Total</th><th>1ª fase</th><th>Exactos</th><th>Signos</th><th>Cruces</th></tr></thead>
-    <tbody>${rows.map((p,i)=> html`<tr class="${i===0?'rank-1':i===1?'rank-2':''}"><td>${i+1}</td><td>${p.name}</td><td class="points">${p.total}</td><td>${p.groupPoints}</td><td>${p.exacts}</td><td>${p.signs}</td><td>${p.knockoutPoints}</td></tr>`).join('')}</tbody>
+    <thead><tr><th>#</th><th>Participante</th><th>Total</th><th>1ª fase</th><th>Exactos</th><th>Signos</th><th>Cruces</th><th>Pluses</th></tr></thead>
+    <tbody>${rows.map((p,i)=> html`<tr class="${i===0?'rank-1':i===1?'rank-2':''}"><td>${i+1}</td><td>${p.name}</td><td class="points">${p.total}</td><td>${p.groupPoints}</td><td>${p.exacts}</td><td>${p.signs}</td><td>${p.knockoutPoints}</td><td>${p.plusPoints}</td></tr>`).join('')}</tbody>
   `;
 }
 
@@ -269,63 +339,87 @@ function renderPlayerDetail() {
 
 function renderKnockout() {
   const samplePlayers = DATA.players.slice(0, 8);
+  const knockoutPredictions = DATA.knockoutPredictions.filter(prediction => KNOCKOUT_STAGES.has(prediction.stage));
   document.getElementById('knockoutTable').innerHTML = html`
     <thead><tr><th>Ronda</th><th>Slot</th>${samplePlayers.map(p=>`<th>${p.name}</th>`).join('')}</tr></thead>
-    <tbody>${DATA.knockoutPredictions.map(k => html`<tr><td>${k.stage}</td><td>${k.slot}</td>${samplePlayers.map(p=>`<td>${k.predictions[p.id] || ''}</td>`).join('')}</tr>`).join('')}</tbody>`;
+    <tbody>${knockoutPredictions.map(k => html`<tr><td>${k.stage}</td><td>${k.slot}</td>${samplePlayers.map(p=>`<td>${k.predictions[p.id] || ''}</td>`).join('')}</tr>`).join('')}</tbody>`;
 }
 
-function renderMini() {
-  const q = normalize(document.getElementById('miniRankingSearch').value);
-  const ranking = calculateMiniRanking();
-  const rows = ranking.filter(player => normalize(player.name).includes(q));
-  const resolved = DATA.miniQuestions.filter(getMiniResult).length;
-  const maxPoints = DATA.miniQuestions.reduce((total, question) => total + question.points, 0);
+function renderPlusInput(question) {
+  const result = escapeHtml(getPlusResult(question));
+  const fieldType = PLUS_FIELD_TYPES[question.id];
+  if (fieldType === 'number') {
+    return `<input type="number" min="0" step="1" inputmode="numeric" data-plus-result="${question.id}" value="${result}" placeholder="Cantidad" />`;
+  }
+  if (fieldType === 'team') {
+    return `<input type="text" list="teamOptions" data-plus-result="${question.id}" value="${result}" placeholder="Selección" />`;
+  }
+  return `<input type="text" data-plus-result="${question.id}" value="${result}" placeholder="Jugador o variantes" />`;
+}
 
-  document.getElementById('miniSummaryCards').innerHTML = html`
-    <article class="card"><b>${resolved}/${DATA.miniQuestions.length}</b><span>preguntas resueltas</span></article>
-    <article class="card"><b>${ranking[0]?.name || '-'}</b><span>líder mini-porra</span></article>
-    <article class="card"><b>${ranking[0]?.miniPoints || 0}</b><span>puntos del líder</span></article>
+function plusFieldLabel(question) {
+  const labels = { number: 'Cantidad', team: 'Selección', player: 'Jugador' };
+  return labels[PLUS_FIELD_TYPES[question.id]];
+}
+
+function renderPluses() {
+  const q = normalize(document.getElementById('plusRankingSearch').value);
+  const ranking = calculatePlusRanking();
+  const rows = ranking.filter(player => normalize(player.name).includes(q));
+  const resolved = DATA.plusQuestions.filter(getPlusResult).length;
+  const maxPoints = DATA.plusQuestions.reduce((total, question) => total + question.points, 0);
+
+  document.getElementById('teamOptions').innerHTML = [...new Set(DATA.matches.flatMap(match => [match.team1, match.team2]))]
+    .sort((a, b) => a.localeCompare(b, 'es'))
+    .map(team => `<option value="${escapeHtml(team)}"></option>`)
+    .join('');
+
+  document.getElementById('plusSummaryCards').innerHTML = html`
+    <article class="card"><b>${resolved}/${DATA.plusQuestions.length}</b><span>pluses resueltos</span></article>
+    <article class="card"><b>${ranking[0]?.name || '-'}</b><span>más puntos extra</span></article>
+    <article class="card"><b>${ranking[0]?.plusPoints || 0}</b><span>puntos extra del líder</span></article>
     <article class="card"><b>${maxPoints}</b><span>puntos máximos</span></article>
   `;
 
-  document.getElementById('miniRankingTable').innerHTML = html`
+  document.getElementById('plusRankingTable').innerHTML = html`
     <thead><tr><th>#</th><th>Participante</th><th>Puntos</th><th>Aciertos</th><th>Corregidas</th></tr></thead>
     <tbody>${rows.map((player, index) => html`
       <tr class="${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : ''}">
         <td>${index + 1}</td>
         <td>${player.name}</td>
-        <td class="points">${player.miniPoints}</td>
-        <td>${player.correct}</td>
-        <td>${player.resolved}/${DATA.miniQuestions.length}</td>
+        <td class="points">${player.plusPoints}</td>
+        <td>${player.plusCorrect}</td>
+        <td>${player.plusResolved}/${DATA.plusQuestions.length}</td>
       </tr>`).join('')}
     </tbody>
   `;
 
-  document.getElementById('miniResultsList').innerHTML = DATA.miniQuestions.map(question => html`
-    <article class="mini-result-card">
+  document.getElementById('plusResultsList').innerHTML = DATA.plusQuestions.map(question => html`
+    <article class="plus-result-card">
       <div>
         <span class="pill">${question.id} · ${question.points} puntos</span>
         <h4>${question.question}</h4>
+        <span class="field-type">${plusFieldLabel(question)}</span>
       </div>
-      <div class="mini-result-actions">
-        <input data-mini-result="${question.id}" value="${escapeHtml(getMiniResult(question))}" placeholder="Respuesta correcta" />
-        <button data-save-mini="${question.id}">Guardar</button>
-        <button data-clear-mini="${question.id}">Limpiar</button>
+      <div class="plus-result-actions">
+        ${renderPlusInput(question)}
+        <button data-save-plus="${question.id}">Guardar</button>
+        <button data-clear-plus="${question.id}">Limpiar</button>
       </div>
     </article>
   `).join('');
 
-  document.getElementById('miniTable').innerHTML = html`
+  document.getElementById('plusTable').innerHTML = html`
     <thead><tr><th>Pregunta</th><th>Resultado</th><th>Puntos</th>${DATA.players.map(p=>`<th>${p.name}</th>`).join('')}</tr></thead>
-    <tbody>${DATA.miniQuestions.map(question => {
-      const result = getMiniResult(question);
+    <tbody>${DATA.plusQuestions.map(question => {
+      const result = getPlusResult(question);
       return html`<tr>
         <td>${question.question}</td>
         <td>${result ? escapeHtml(result) : '<span class="muted">pendiente</span>'}</td>
         <td>${question.points}</td>
         ${DATA.players.map(player => {
           const answer = question.answers[player.id] || '';
-          const score = scoreMiniAnswer(answer, result, question.points);
+          const score = scorePlusAnswer(question, answer, result);
           return `<td class="${result ? (score.correct ? 'ok' : 'muted') : ''}">${escapeHtml(answer)}${score.correct ? ` (+${score.points})` : ''}</td>`;
         }).join('')}
       </tr>`;
@@ -336,7 +430,7 @@ function renderSettings() {
   document.getElementById('apiUrlInput').value = state.apiUrl;
 }
 
-function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
+function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderPlayerDetail(); renderKnockout(); renderPluses(); renderSettings(); }
 
 async function refreshFromApi() {
   const btn = document.getElementById('refreshApiBtn');
@@ -363,17 +457,17 @@ async function refreshFromApi() {
   } finally { btn.disabled = false; btn.textContent = 'Actualizar desde API'; }
 }
 
-function saveMiniResult(id) {
-  const result = document.querySelector(`[data-mini-result="${id}"]`).value.trim();
+function savePlusResult(id) {
+  const result = document.querySelector(`[data-plus-result="${id}"]`).value.trim();
   if (!result) return alert('Introduce la respuesta correcta.');
-  state.miniResults[id] = result;
-  localStorage.setItem(LS_KEYS.mini, JSON.stringify(state.miniResults));
+  state.plusResults[id] = result;
+  localStorage.setItem(LS_KEYS.pluses, JSON.stringify(state.plusResults));
   renderAll();
 }
 
-function clearMiniResult(id) {
-  delete state.miniResults[id];
-  localStorage.setItem(LS_KEYS.mini, JSON.stringify(state.miniResults));
+function clearPlusResult(id) {
+  delete state.plusResults[id];
+  localStorage.setItem(LS_KEYS.pluses, JSON.stringify(state.plusResults));
   renderAll();
 }
 
@@ -383,27 +477,27 @@ document.addEventListener('click', e => {
     document.querySelectorAll('.tab,.panel').forEach(el => el.classList.remove('active'));
     tab.classList.add('active'); document.getElementById(tab.dataset.tab).classList.add('active');
   }
-  const saveMini = e.target.dataset.saveMini; if (saveMini) saveMiniResult(saveMini);
-  const clearMini = e.target.dataset.clearMini; if (clearMini) clearMiniResult(clearMini);
+  const savePlus = e.target.dataset.savePlus; if (savePlus) savePlusResult(savePlus);
+  const clearPlus = e.target.dataset.clearPlus; if (clearPlus) clearPlusResult(clearPlus);
 });
 
 document.getElementById('refreshApiBtn').addEventListener('click', refreshFromApi);
 document.getElementById('rankingSearch').addEventListener('input', renderRanking);
-document.getElementById('miniRankingSearch').addEventListener('input', renderMini);
+document.getElementById('plusRankingSearch').addEventListener('input', renderPluses);
 document.getElementById('groupFilter').addEventListener('change', renderMatches);
 document.getElementById('statusFilter').addEventListener('change', renderMatches);
 document.getElementById('playerSelect').addEventListener('change', renderPlayerDetail);
 document.getElementById('saveApiUrlBtn').addEventListener('click', () => { state.apiUrl = document.getElementById('apiUrlInput').value.trim() || DEFAULT_API_URL; localStorage.setItem(LS_KEYS.apiUrl, state.apiUrl); alert('URL guardada'); });
 document.getElementById('exportBtn').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify({ miniResults: state.miniResults, apiUrl: state.apiUrl }, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ plusResults: state.plusResults, apiUrl: state.apiUrl }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'porra-estado.json'; a.click(); URL.revokeObjectURL(a.href);
 });
 document.getElementById('importInput').addEventListener('change', async e => {
   const file = e.target.files[0]; if (!file) return;
   const json = JSON.parse(await file.text());
-  state.miniResults = json.miniResults || state.miniResults;
+  state.plusResults = json.plusResults || json.miniResults || state.plusResults;
   state.apiUrl = json.apiUrl || state.apiUrl;
-  localStorage.setItem(LS_KEYS.mini, JSON.stringify(state.miniResults));
+  localStorage.setItem(LS_KEYS.pluses, JSON.stringify(state.plusResults));
   localStorage.setItem(LS_KEYS.apiUrl, state.apiUrl);
   renderAll();
 });
