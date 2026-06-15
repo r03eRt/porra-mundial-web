@@ -55,7 +55,15 @@ Los resultados se obtienen automáticamente desde la API configurada al abrir la
 
 ## Modo administrador
 
-Añade `?admin=1` a la URL para editar resultados de la mini-porra, acceder a Datos/API e importar o exportar el estado. Este modo no incluye autenticación y no debe considerarse una medida de seguridad.
+Añade `?admin=1` a la URL para mostrar el acceso de administrador. Tras iniciar sesión con Supabase Auth se pueden editar los resultados de la mini-porra, acceder a Datos/API e importar o exportar el estado.
+
+### Configuración de Supabase
+
+1. Abre el SQL Editor de Supabase y ejecuta `supabase/setup.sql`.
+2. En Authentication, desactiva el registro público de nuevos usuarios.
+3. En Authentication > Users, crea manualmente el usuario administrador con email y contraseña.
+
+La clave `sb_publishable_...` es pública y puede incluirse en el frontend. La seguridad depende de Supabase Auth y de las políticas RLS, no de ocultar esta clave.
 
 ## Deployment rápido
 
@@ -83,7 +91,7 @@ https://r03ert.github.io/porra-mundial-web/
 ## Reglas implementadas
 
 - Marcador exacto en fase de grupos: 3 puntos.
-- Signo acertado: 2 puntos.
+- Quiniela acertada: 2 puntos.
 - Sin resultado: 0 puntos.
 - La mini-porra mantiene clasificación y resultados propios, separados de la porra principal.
 

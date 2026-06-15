@@ -1,9 +1,14 @@
+import { createClient } from '@supabase/supabase-js';
+
 const DATA = window.PORRA_DATA;
 const DEFAULT_API_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
 const API_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw';
 const adminParam = new URLSearchParams(window.location.search).get('admin');
-const IS_ADMIN = new URLSearchParams(window.location.search).has('admin')
+const ADMIN_REQUESTED = new URLSearchParams(window.location.search).has('admin')
   && !['0', 'false', 'no'].includes(String(adminParam).toLowerCase());
+const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 const LS_KEYS = {
   mini: 'porra.miniResults.v1',
   apiUrl: 'porra.apiUrl.v1',
@@ -66,6 +71,7 @@ const state = {
   miniResults: loadMiniResults(),
   apiResults: {},
   apiFixtures: [],
+  adminUser: null,
   activeTab: 'ranking'
 };
 let apiRefreshInProgress = false;
@@ -142,6 +148,10 @@ function loadMiniResults() {
   } catch {
     return {};
   }
+}
+
+function isAdmin() {
+  return ADMIN_REQUESTED && Boolean(state.adminUser);
 }
 
 function getResult(match) {
@@ -321,10 +331,40 @@ function escapeHtml(value) {
 }
 
 function applyAdminMode() {
+  const admin = isAdmin();
   document.querySelectorAll('[data-admin-only]').forEach(element => {
-    element.hidden = !IS_ADMIN;
+    element.hidden = !admin;
   });
-  document.body.classList.toggle('admin-mode', IS_ADMIN);
+  document.body.classList.toggle('admin-mode', admin);
+
+  const settingsPanel = document.getElementById('settings');
+  if (!admin && settingsPanel.classList.contains('active')) {
+    document.querySelectorAll('.tab,.panel').forEach(element => element.classList.remove('active'));
+    document.querySelector('[data-tab="ranking"]').classList.add('active');
+    document.getElementById('ranking').classList.add('active');
+  }
+
+  renderAdminAccess();
+}
+
+function renderAdminAccess() {
+  const container = document.getElementById('adminAccess');
+  container.hidden = !ADMIN_REQUESTED;
+  if (!ADMIN_REQUESTED) return;
+
+  container.innerHTML = state.adminUser
+    ? html`
+      <span class="admin-session">${escapeHtml(state.adminUser.email)}</span>
+      <button type="button" data-admin-logout>Cerrar sesión</button>
+    `
+    : html`
+      <form id="adminLoginForm" class="admin-login">
+        <input name="email" type="email" autocomplete="username" placeholder="Email admin" required />
+        <input name="password" type="password" autocomplete="current-password" placeholder="Contraseña" required />
+        <button type="submit">Entrar</button>
+      </form>
+      <span id="adminLoginError" class="admin-login-error" role="alert"></span>
+    `;
 }
 
 function renderSummary() {
@@ -341,10 +381,23 @@ function renderSummary() {
 
 function renderRanking() {
   const q = normalize(document.getElementById('rankingSearch').value);
-  const rows = calculateRanking().filter(p => normalize(p.name).includes(q));
+  const medals = ['🥇', '🥈', '🥉'];
+  const ranking = calculateRanking();
+  const rows = ranking
+    .map((player, index) => ({ ...player, position: index + 1 }))
+    .filter(player => normalize(player.name).includes(q));
   document.getElementById('rankingTable').innerHTML = html`
-    <thead><tr><th>#</th><th>Participante</th><th>Total</th><th>1ª fase</th><th>Exactos</th><th>Signos</th><th>Cruces</th></tr></thead>
-    <tbody>${rows.map((p,i)=> html`<tr class="${i===0?'rank-1':i===1?'rank-2':''}"><td>${i+1}</td><td>${p.name}</td><td class="points">${p.total}</td><td>${p.groupPoints}</td><td>${p.exacts}</td><td>${p.signs}</td><td>${p.knockoutPoints}</td></tr>`).join('')}</tbody>
+    <thead><tr><th>#</th><th>Participante</th><th>Total</th><th>1ª fase</th><th>Exactos</th><th>Quiniela</th><th>Cruces</th></tr></thead>
+    <tbody>${rows.map(player => html`
+      <tr class="${player.position <= 3 ? `rank-${player.position}` : ''}">
+        <td class="ranking-position">${medals[player.position - 1] || (player.position === ranking.length ? '💩' : player.position)}</td>
+        <td>${player.name}</td>
+        <td class="points">${player.total}</td>
+        <td>${player.groupPoints}</td>
+        <td>${player.exacts}</td>
+        <td>${player.signs}</td>
+        <td>${player.knockoutPoints}</td>
+      </tr>`).join('')}</tbody>
   `;
 }
 
@@ -434,7 +487,7 @@ function renderPlayerDetail() {
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Partido</th><th>Resultado</th><th>Predicción</th><th>Signo</th><th>Puntos</th></tr></thead>
+            <thead><tr><th>Partido</th><th>Resultado</th><th>Predicción</th><th>Quiniela</th><th>Puntos</th></tr></thead>
             <tbody>${matches.map(match => {
               const result = getResult(match);
               const prediction = match.predictions[playerId];
@@ -542,7 +595,7 @@ function renderKnockout() {
 function renderQuestionInput(question, result, dataAttribute) {
   const escapedResult = escapeHtml(result);
   const fieldType = MINI_FIELD_TYPES[question.id];
-  const readOnly = IS_ADMIN ? '' : ' readonly aria-readonly="true"';
+  const readOnly = isAdmin() ? '' : ' readonly aria-readonly="true"';
   if (fieldType === 'number') {
     return `<input type="number" min="0" step="1" inputmode="numeric" ${dataAttribute}="${question.id}" value="${escapedResult}" placeholder="Cantidad"${readOnly} />`;
   }
@@ -564,7 +617,7 @@ function renderMini() {
   const resolved = DATA.miniQuestions.filter(getMiniResult).length;
   const maxPoints = DATA.miniQuestions.reduce((total, question) => total + question.points, 0);
 
-  document.getElementById('miniResultsHint').innerHTML = IS_ADMIN
+  document.getElementById('miniResultsHint').innerHTML = isAdmin()
     ? 'Puedes indicar variantes o empates con <strong>|</strong>.'
     : 'Resultados visibles en modo consulta. Solo el administrador puede modificarlos.';
 
@@ -602,7 +655,7 @@ function renderMini() {
       </div>
       <div class="mini-result-actions">
         ${renderQuestionInput(question, getMiniResult(question), 'data-mini-result')}
-        ${IS_ADMIN ? html`
+        ${isAdmin() ? html`
           <button data-save-mini="${question.id}">Guardar</button>
           <button data-clear-mini="${question.id}">Limpiar</button>
         ` : ''}
@@ -632,6 +685,35 @@ function renderSettings() {
 }
 
 function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
+
+async function loadMiniResultsFromSupabase() {
+  const { data, error } = await supabase
+    .from('mini_results')
+    .select('question_id,value');
+
+  if (error) {
+    console.error('No se pudieron cargar los resultados de la mini-porra desde Supabase:', error);
+    return;
+  }
+
+  state.miniResults = Object.fromEntries(data.map(row => [row.question_id, row.value]));
+  localStorage.setItem(LS_KEYS.mini, JSON.stringify(state.miniResults));
+  renderMini();
+}
+
+async function initializeAuth() {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) console.error('No se pudo recuperar la sesión de administrador:', error);
+  state.adminUser = data.session?.user || null;
+  applyAdminMode();
+  renderAll();
+
+  supabase.auth.onAuthStateChange((_event, session) => {
+    state.adminUser = session?.user || null;
+    applyAdminMode();
+    renderAll();
+  });
+}
 
 async function refreshFromApi(options = {}) {
   const silent = options?.silent === true;
@@ -666,17 +748,29 @@ async function refreshFromApi(options = {}) {
   }
 }
 
-function saveMiniResult(id) {
-  if (!IS_ADMIN) return;
+async function saveMiniResult(id) {
+  if (!isAdmin()) return;
   const result = document.querySelector(`[data-mini-result="${id}"]`).value.trim();
   if (!result) return alert('Introduce la respuesta correcta.');
+
+  const { error } = await supabase
+    .from('mini_results')
+    .upsert({ question_id: id, value: result, updated_at: new Date().toISOString() });
+  if (error) return alert('No se pudo guardar el resultado: ' + error.message);
+
   state.miniResults[id] = result;
   localStorage.setItem(LS_KEYS.mini, JSON.stringify(state.miniResults));
   renderAll();
 }
 
-function clearMiniResult(id) {
-  if (!IS_ADMIN) return;
+async function clearMiniResult(id) {
+  if (!isAdmin()) return;
+  const { error } = await supabase
+    .from('mini_results')
+    .delete()
+    .eq('question_id', id);
+  if (error) return alert('No se pudo limpiar el resultado: ' + error.message);
+
   delete state.miniResults[id];
   localStorage.setItem(LS_KEYS.mini, JSON.stringify(state.miniResults));
   renderAll();
@@ -690,6 +784,27 @@ document.addEventListener('click', e => {
   }
   const saveMini = e.target.dataset.saveMini; if (saveMini) saveMiniResult(saveMini);
   const clearMini = e.target.dataset.clearMini; if (clearMini) clearMiniResult(clearMini);
+  if (e.target.matches('[data-admin-logout]')) supabase.auth.signOut();
+});
+
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'adminLoginForm') return;
+  e.preventDefault();
+  const submitButton = e.target.querySelector('button[type="submit"]');
+  const errorElement = document.getElementById('adminLoginError');
+  const formData = new FormData(e.target);
+  submitButton.disabled = true;
+  errorElement.textContent = '';
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: formData.get('email'),
+    password: formData.get('password')
+  });
+
+  if (error) {
+    errorElement.textContent = 'Email o contraseña incorrectos.';
+    submitButton.disabled = false;
+  }
 });
 
 document.getElementById('refreshApiBtn').addEventListener('click', refreshFromApi);
@@ -700,22 +815,33 @@ document.getElementById('statusFilter').addEventListener('change', renderMatches
 document.getElementById('playerSelect').addEventListener('change', renderPlayerDetail);
 document.getElementById('knockoutPlayerSelect').addEventListener('change', renderKnockout);
 document.getElementById('saveApiUrlBtn').addEventListener('click', () => {
-  if (!IS_ADMIN) return;
+  if (!isAdmin()) return;
   state.apiUrl = document.getElementById('apiUrlInput').value.trim() || DEFAULT_API_URL;
   localStorage.setItem(LS_KEYS.apiUrl, state.apiUrl);
   alert('URL guardada');
 });
 document.getElementById('exportBtn').addEventListener('click', () => {
-  if (!IS_ADMIN) return;
+  if (!isAdmin()) return;
   const blob = new Blob([JSON.stringify({ miniResults: state.miniResults, apiUrl: state.apiUrl }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'porra-estado.json'; a.click(); URL.revokeObjectURL(a.href);
 });
 document.getElementById('importInput').addEventListener('change', async e => {
-  if (!IS_ADMIN) return;
+  if (!isAdmin()) return;
   const file = e.target.files[0]; if (!file) return;
   const json = JSON.parse(await file.text());
   state.miniResults = json.miniResults || state.miniResults;
   state.apiUrl = json.apiUrl || state.apiUrl;
+
+  const rows = Object.entries(state.miniResults).map(([question_id, value]) => ({
+    question_id,
+    value,
+    updated_at: new Date().toISOString()
+  }));
+  if (rows.length) {
+    const { error } = await supabase.from('mini_results').upsert(rows);
+    if (error) return alert('No se pudieron importar los resultados: ' + error.message);
+  }
+
   localStorage.setItem(LS_KEYS.mini, JSON.stringify(state.miniResults));
   localStorage.setItem(LS_KEYS.apiUrl, state.apiUrl);
   renderAll();
@@ -724,4 +850,6 @@ document.getElementById('importInput').addEventListener('change', async e => {
 applyAdminMode();
 renderAll();
 refreshFromApi();
+loadMiniResultsFromSupabase();
+initializeAuth();
 setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);
