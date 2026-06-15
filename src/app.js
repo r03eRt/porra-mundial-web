@@ -354,8 +354,10 @@ function renderAdminAccess() {
 
   container.innerHTML = state.adminUser
     ? html`
-      <span class="admin-session">${escapeHtml(state.adminUser.email)}</span>
-      <button type="button" data-admin-logout>Cerrar sesión</button>
+      <div class="admin-session-row">
+        <span class="admin-session">${escapeHtml(state.adminUser.email)}</span>
+        <button type="button" data-admin-logout>Cerrar sesión</button>
+      </div>
     `
     : html`
       <form id="adminLoginForm" class="admin-login">
@@ -744,7 +746,7 @@ async function refreshFromApi(options = {}) {
   } finally {
     apiRefreshInProgress = false;
     btn.disabled = false;
-    btn.textContent = 'Actualizar desde API';
+    btn.textContent = 'Actualizar datos';
   }
 }
 

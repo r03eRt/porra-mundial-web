@@ -14,9 +14,11 @@
       <p class="subtitle">Ranking automático desde las predicciones del Excel, con resultados importados desde API o editados a mano.</p>
     </div>
     <div class="hero-actions">
-      <button id="refreshApiBtn" class="primary">Actualizar desde API</button>
-      <button id="exportBtn" data-admin-only>Exportar estado</button>
-      <label class="import-btn" data-admin-only>Importar JSON<input id="importInput" type="file" accept="application/json" hidden /></label>
+      <div class="hero-action-row">
+        <button id="refreshApiBtn" class="primary">Actualizar datos</button>
+        <button id="exportBtn" data-admin-only>Exportar estado</button>
+        <label class="import-btn" data-admin-only>Importar JSON<input id="importInput" type="file" accept="application/json" hidden /></label>
+      </div>
       <div id="adminAccess" class="admin-access" hidden></div>
     </div>
   </header>
