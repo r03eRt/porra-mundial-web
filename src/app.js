@@ -1,5 +1,9 @@
 const DATA = window.PORRA_DATA;
 const DEFAULT_API_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
+const API_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+const adminParam = new URLSearchParams(window.location.search).get('admin');
+const IS_ADMIN = new URLSearchParams(window.location.search).has('admin')
+  && !['0', 'false', 'no'].includes(String(adminParam).toLowerCase());
 const LS_KEYS = {
   mini: 'porra.miniResults.v1',
   apiUrl: 'porra.apiUrl.v1',
@@ -64,6 +68,7 @@ const state = {
   apiFixtures: [],
   activeTab: 'ranking'
 };
+let apiRefreshInProgress = false;
 
 function normalize(s) {
   return String(s || '')
@@ -315,6 +320,13 @@ function escapeHtml(value) {
     .replace(/'/g, '&#039;');
 }
 
+function applyAdminMode() {
+  document.querySelectorAll('[data-admin-only]').forEach(element => {
+    element.hidden = !IS_ADMIN;
+  });
+  document.body.classList.toggle('admin-mode', IS_ADMIN);
+}
+
 function renderSummary() {
   const played = DATA.matches.filter(getResult).length;
   const ranking = calculateRanking();
@@ -406,12 +418,40 @@ function renderMatches() {
 
 function renderPlayerDetail() {
   const playerId = document.getElementById('playerSelect').value || DATA.players[0].id;
-  document.getElementById('playerTable').innerHTML = html`
-    <thead><tr><th>Grupo</th><th>Partido</th><th>Resultado</th><th>Predicción</th><th>Signo</th><th>Puntos</th></tr></thead>
-    <tbody>${DATA.matches.map(m => {
-      const r = getResult(m); const pred = m.predictions[playerId]; const sc = scorePrediction(pred, r);
-      return html`<tr><td>${m.group}</td><td>${teamLabel(m.team1)} - ${teamLabel(m.team2)}</td><td>${r ? `${r.home}-${r.away}` : '<span class="muted">pendiente</span>'}</td><td>${pred.score}</td><td>${pred.sign}</td><td class="${sc.points?'ok':'muted'}">${sc.points}</td></tr>`;
-    }).join('')}</tbody>`;
+  const groups = [...new Set(DATA.matches.map(match => match.group))].sort();
+
+  document.getElementById('playerGroups').innerHTML = groups.map(group => {
+    const matches = DATA.matches.filter(match => match.group === group);
+    const groupPoints = matches.reduce((total, match) => {
+      return total + scorePrediction(match.predictions[playerId], getResult(match)).points;
+    }, 0);
+
+    return html`
+      <section class="player-group">
+        <div class="player-group-head">
+          <h3>Grupo ${group}</h3>
+          <span>${groupPoints} puntos</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Partido</th><th>Resultado</th><th>Predicción</th><th>Signo</th><th>Puntos</th></tr></thead>
+            <tbody>${matches.map(match => {
+              const result = getResult(match);
+              const prediction = match.predictions[playerId];
+              const score = scorePrediction(prediction, result);
+              return html`
+                <tr>
+                  <td>${teamLabel(match.team1)} - ${teamLabel(match.team2)}</td>
+                  <td>${result ? `${result.home}-${result.away}` : '<span class="muted">pendiente</span>'}</td>
+                  <td>${prediction.score}</td>
+                  <td>${prediction.sign}</td>
+                  <td class="${score.points ? 'ok' : 'muted'}">${score.points}</td>
+                </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>
+      </section>`;
+  }).join('');
 }
 
 function knockoutPredictionStatus(team, stageReality) {
@@ -502,13 +542,14 @@ function renderKnockout() {
 function renderQuestionInput(question, result, dataAttribute) {
   const escapedResult = escapeHtml(result);
   const fieldType = MINI_FIELD_TYPES[question.id];
+  const readOnly = IS_ADMIN ? '' : ' readonly aria-readonly="true"';
   if (fieldType === 'number') {
-    return `<input type="number" min="0" step="1" inputmode="numeric" ${dataAttribute}="${question.id}" value="${escapedResult}" placeholder="Cantidad" />`;
+    return `<input type="number" min="0" step="1" inputmode="numeric" ${dataAttribute}="${question.id}" value="${escapedResult}" placeholder="Cantidad"${readOnly} />`;
   }
   if (fieldType === 'team') {
-    return `<input type="text" list="teamOptions" ${dataAttribute}="${question.id}" value="${escapedResult}" placeholder="Selección" />`;
+    return `<input type="text" list="teamOptions" ${dataAttribute}="${question.id}" value="${escapedResult}" placeholder="Selección"${readOnly} />`;
   }
-  return `<input type="text" ${dataAttribute}="${question.id}" value="${escapedResult}" placeholder="Jugador o variantes" />`;
+  return `<input type="text" ${dataAttribute}="${question.id}" value="${escapedResult}" placeholder="Jugador o variantes"${readOnly} />`;
 }
 
 function questionFieldLabel(question) {
@@ -522,6 +563,10 @@ function renderMini() {
   const rows = ranking.filter(player => normalize(player.name).includes(q));
   const resolved = DATA.miniQuestions.filter(getMiniResult).length;
   const maxPoints = DATA.miniQuestions.reduce((total, question) => total + question.points, 0);
+
+  document.getElementById('miniResultsHint').innerHTML = IS_ADMIN
+    ? 'Puedes indicar variantes o empates con <strong>|</strong>.'
+    : 'Resultados visibles en modo consulta. Solo el administrador puede modificarlos.';
 
   document.getElementById('teamOptions').innerHTML = [...new Set(DATA.matches.flatMap(match => [match.team1, match.team2]))]
     .sort((a, b) => a.localeCompare(b, 'es'))
@@ -557,8 +602,10 @@ function renderMini() {
       </div>
       <div class="mini-result-actions">
         ${renderQuestionInput(question, getMiniResult(question), 'data-mini-result')}
-        <button data-save-mini="${question.id}">Guardar</button>
-        <button data-clear-mini="${question.id}">Limpiar</button>
+        ${IS_ADMIN ? html`
+          <button data-save-mini="${question.id}">Guardar</button>
+          <button data-clear-mini="${question.id}">Limpiar</button>
+        ` : ''}
       </div>
     </article>
   `).join('');
@@ -586,7 +633,10 @@ function renderSettings() {
 
 function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
 
-async function refreshFromApi() {
+async function refreshFromApi(options = {}) {
+  const silent = options?.silent === true;
+  if (apiRefreshInProgress) return;
+  apiRefreshInProgress = true;
   const btn = document.getElementById('refreshApiBtn');
   btn.disabled = true; btn.textContent = 'Actualizando...';
   try {
@@ -607,11 +657,17 @@ async function refreshFromApi() {
     localStorage.setItem(LS_KEYS.lastUpdate, new Date().toLocaleString('es-ES'));
     renderAll();
   } catch (err) {
-    alert('No se pudieron actualizar los resultados automáticos. Error: ' + err.message);
-  } finally { btn.disabled = false; btn.textContent = 'Actualizar desde API'; }
+    if (!silent) alert('No se pudieron actualizar los resultados automáticos. Error: ' + err.message);
+    console.error('Error al actualizar los resultados automáticos:', err);
+  } finally {
+    apiRefreshInProgress = false;
+    btn.disabled = false;
+    btn.textContent = 'Actualizar desde API';
+  }
 }
 
 function saveMiniResult(id) {
+  if (!IS_ADMIN) return;
   const result = document.querySelector(`[data-mini-result="${id}"]`).value.trim();
   if (!result) return alert('Introduce la respuesta correcta.');
   state.miniResults[id] = result;
@@ -620,6 +676,7 @@ function saveMiniResult(id) {
 }
 
 function clearMiniResult(id) {
+  if (!IS_ADMIN) return;
   delete state.miniResults[id];
   localStorage.setItem(LS_KEYS.mini, JSON.stringify(state.miniResults));
   renderAll();
@@ -642,12 +699,19 @@ document.getElementById('groupFilter').addEventListener('change', renderMatches)
 document.getElementById('statusFilter').addEventListener('change', renderMatches);
 document.getElementById('playerSelect').addEventListener('change', renderPlayerDetail);
 document.getElementById('knockoutPlayerSelect').addEventListener('change', renderKnockout);
-document.getElementById('saveApiUrlBtn').addEventListener('click', () => { state.apiUrl = document.getElementById('apiUrlInput').value.trim() || DEFAULT_API_URL; localStorage.setItem(LS_KEYS.apiUrl, state.apiUrl); alert('URL guardada'); });
+document.getElementById('saveApiUrlBtn').addEventListener('click', () => {
+  if (!IS_ADMIN) return;
+  state.apiUrl = document.getElementById('apiUrlInput').value.trim() || DEFAULT_API_URL;
+  localStorage.setItem(LS_KEYS.apiUrl, state.apiUrl);
+  alert('URL guardada');
+});
 document.getElementById('exportBtn').addEventListener('click', () => {
+  if (!IS_ADMIN) return;
   const blob = new Blob([JSON.stringify({ miniResults: state.miniResults, apiUrl: state.apiUrl }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'porra-estado.json'; a.click(); URL.revokeObjectURL(a.href);
 });
 document.getElementById('importInput').addEventListener('change', async e => {
+  if (!IS_ADMIN) return;
   const file = e.target.files[0]; if (!file) return;
   const json = JSON.parse(await file.text());
   state.miniResults = json.miniResults || state.miniResults;
@@ -657,5 +721,7 @@ document.getElementById('importInput').addEventListener('change', async e => {
   renderAll();
 });
 
+applyAdminMode();
 renderAll();
 refreshFromApi();
+setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);

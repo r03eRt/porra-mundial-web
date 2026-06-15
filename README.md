@@ -1,4 +1,4 @@
-# Porra Mundial 2026 Villaverde
+# Porrazo 2026
 
 Proyecto web estático generado desde `PORRA MUNDIAL 2026 VILLAVERDE.xlsx`.
 
@@ -51,7 +51,11 @@ OpenFootball no necesita API key, pero no es una fuente live oficial. Según el 
 
 ## Resultados
 
-Los resultados se obtienen automáticamente desde la API configurada. No se pueden editar manualmente desde la aplicación.
+Los resultados se obtienen automáticamente desde la API configurada al abrir la aplicación y cada 60 minutos. No se pueden editar manualmente desde la aplicación.
+
+## Modo administrador
+
+Añade `?admin=1` a la URL para editar resultados de la mini-porra, acceder a Datos/API e importar o exportar el estado. Este modo no incluye autenticación y no debe considerarse una medida de seguridad.
 
 ## Deployment rápido
 
@@ -78,7 +82,7 @@ https://r03ert.github.io/porra-mundial-web/
 
 ## Reglas implementadas
 
-- Marcador exacto en fase de grupos: 6 puntos.
+- Marcador exacto en fase de grupos: 3 puntos.
 - Signo acertado: 2 puntos.
 - Sin resultado: 0 puntos.
 - La mini-porra mantiene clasificación y resultados propios, separados de la porra principal.

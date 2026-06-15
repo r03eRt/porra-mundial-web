@@ -1,10 +1,10 @@
 window.PORRA_DATA = {
   "meta": {
-    "name": "Porra Mundial 2026 Villaverde",
+    "name": "Porrazo 2026",
     "sourceWorkbook": "PORRA MUNDIAL 2026 VILLAVERDE.xlsx",
     "generatedFrom": "Primera Fase, Mini-Porra, Plantilla",
     "scoring": {
-      "groupExact": 6,
+      "groupExact": 3,
       "groupSign": 2
     }
   },

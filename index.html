@@ -3,20 +3,20 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Porra Mundial 2026 Villaverde</title>
+  <title>Porrazo 2026</title>
   <link rel="stylesheet" href="./src/styles.css" />
 </head>
 <body>
   <header class="hero">
     <div>
-      <p class="eyebrow">Porra Mundial 2026</p>
-      <h1>Clasificación Villaverde</h1>
+      <p class="eyebrow">Mundial 2026</p>
+      <h1>Porrazo 2026</h1>
       <p class="subtitle">Ranking automático desde las predicciones del Excel, con resultados importados desde API o editados a mano.</p>
     </div>
     <div class="hero-actions">
       <button id="refreshApiBtn" class="primary">Actualizar desde API</button>
-      <button id="exportBtn">Exportar estado</button>
-      <label class="import-btn">Importar JSON<input id="importInput" type="file" accept="application/json" hidden /></label>
+      <button id="exportBtn" data-admin-only>Exportar estado</button>
+      <label class="import-btn" data-admin-only>Importar JSON<input id="importInput" type="file" accept="application/json" hidden /></label>
     </div>
   </header>
 
@@ -29,7 +29,7 @@
       <button class="tab" data-tab="player">Detalle jugador</button>
       <button class="tab" data-tab="knockout">Cruces</button>
       <button class="tab" data-tab="mini">Mini-porra</button>
-      <button class="tab" data-tab="settings">Datos/API</button>
+      <button class="tab" data-tab="settings" data-admin-only>Datos/API</button>
     </nav>
 
     <section id="ranking" class="panel active">
@@ -56,7 +56,7 @@
         <h2>Detalle por participante</h2>
         <select id="playerSelect"></select>
       </div>
-      <div class="table-wrap"><table id="playerTable"></table></div>
+      <div id="playerGroups" class="player-groups"></div>
     </section>
 
     <section id="knockout" class="panel">
@@ -82,12 +82,14 @@
       <section class="cards mini-summary" id="miniSummaryCards"></section>
       <div class="table-wrap"><table id="miniRankingTable"></table></div>
 
-      <div class="section-head">
-        <h3>Resultados de la mini-porra</h3>
-        <p class="hint">Puedes indicar variantes o empates con <strong>|</strong>.</p>
+      <div>
+        <div class="section-head">
+          <h3>Resultados de la mini-porra</h3>
+          <p id="miniResultsHint" class="hint"></p>
+        </div>
+        <datalist id="teamOptions"></datalist>
+        <div id="miniResultsList" class="mini-results"></div>
       </div>
-      <datalist id="teamOptions"></datalist>
-      <div id="miniResultsList" class="mini-results"></div>
 
       <div class="section-head">
         <h3>Pronósticos de la mini-porra</h3>
@@ -95,7 +97,7 @@
       <div class="table-wrap"><table id="miniTable"></table></div>
     </section>
 
-    <section id="settings" class="panel">
+    <section id="settings" class="panel" data-admin-only>
       <div class="panel-head"><h2>Fuente de datos</h2></div>
       <div class="settings-grid">
         <article class="settings-card">
@@ -109,7 +111,7 @@
         <article class="settings-card">
           <h3>Reglas</h3>
           <ul>
-            <li>Marcador exacto: 6 puntos.</li>
+            <li>Marcador exacto: 3 puntos.</li>
             <li>Quiniela acertada: 2 puntos.</li>
             <li>Sin resultado: no suma.</li>
           </ul>
