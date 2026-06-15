@@ -402,6 +402,7 @@ function renderSummary() {
     <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
     <article class="card"><b>${ranking[0] ? `⭐ ${ranking[0].name}` : '-'}</b><span>líder actual</span></article>
     <article class="card"><b>${ranking[0]?.total || 0}</b><span>puntos del líder</span></article>
+    <article class="card"><b>${ranking.length ? `💩 ${ranking.at(-1).name}` : '-'}</b><span>el purria</span></article>
   `;
   document.getElementById('lastUpdate').textContent = localStorage.getItem(LS_KEYS.lastUpdate) || 'sin actualizar';
 }
@@ -454,12 +455,48 @@ function getMatchday(match) {
 
 function renderMatchCard(match) {
   const result = getResult(match);
-  return html`<article class="match-card">
+  return html`<article class="match-card" role="button" tabindex="0" data-match-id="${match.id}" aria-label="Ver predicciones de ${escapeHtml(match.team1)} contra ${escapeHtml(match.team2)}">
     <span class="pill">Grupo ${match.group} · ${match.id}</span>
     <h3 class="teams"><span>${teamLabel(match.team1)}</span><span class="versus">-</span><span>${teamLabel(match.team2)}</span></h3>
     <div class="match-score ${result ? '' : 'pending'}">${result ? `${result.home} - ${result.away}` : 'Pendiente'}</div>
-    <div class="source">${result ? 'Resultado actualizado automáticamente' : 'Sin resultado disponible en la API'}</div>
+    <div class="source">${result ? 'Resultado actualizado automáticamente' : 'Sin resultado disponible en la API'} · Ver predicciones</div>
   </article>`;
+}
+
+function openMatchPredictions(matchId) {
+  const match = DATA.matches.find(item => item.id === matchId);
+  if (!match) return;
+  const result = getResult(match);
+  const dialog = document.getElementById('matchPredictionsDialog');
+
+  document.getElementById('matchPredictionsContent').innerHTML = html`
+    <div class="predictions-dialog-head">
+      <div>
+        <span class="pill">Grupo ${match.group} · ${match.id}</span>
+        <h2>${teamLabel(match.team1)} - ${teamLabel(match.team2)}</h2>
+        <p>${result ? `Resultado: ${result.home}-${result.away}` : 'Partido pendiente'}</p>
+      </div>
+      <button type="button" class="dialog-close" data-close-predictions aria-label="Cerrar">×</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Participante</th><th>Predicción</th><th>Quiniela</th><th>Puntos</th></tr></thead>
+        <tbody>${DATA.players.map(player => {
+          const prediction = match.predictions[player.id];
+          const score = scorePrediction(prediction, result);
+          return html`
+            <tr>
+              <td>${escapeHtml(player.name)}</td>
+              <td>${escapeHtml(prediction.score)}</td>
+              <td>${escapeHtml(prediction.sign)}</td>
+              <td class="${score.points ? 'ok' : 'muted'}">${score.points}</td>
+            </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+  `;
+
+  dialog.showModal();
 }
 
 function renderMatches() {
@@ -994,6 +1031,16 @@ document.addEventListener('click', e => {
     return;
   }
 
+  const matchCard = e.target.closest('[data-match-id]');
+  if (matchCard) {
+    openMatchPredictions(matchCard.dataset.matchId);
+    return;
+  }
+  if (e.target.matches('[data-close-predictions]')) {
+    document.getElementById('matchPredictionsDialog').close();
+    return;
+  }
+
   const tab = e.target.closest('.tab');
   if (tab) {
     document.querySelectorAll('.tab,.panel').forEach(el => el.classList.remove('active'));
@@ -1002,6 +1049,18 @@ document.addEventListener('click', e => {
   const saveMini = e.target.dataset.saveMini; if (saveMini) saveMiniResult(saveMini);
   const clearMini = e.target.dataset.clearMini; if (clearMini) clearMiniResult(clearMini);
   if (e.target.matches('[data-admin-logout]')) supabase.auth.signOut();
+});
+
+document.addEventListener('keydown', e => {
+  const matchCard = e.target.closest?.('[data-match-id]');
+  if (matchCard && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    openMatchPredictions(matchCard.dataset.matchId);
+  }
+});
+
+document.getElementById('matchPredictionsDialog').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.close();
 });
 
 document.addEventListener('submit', async e => {
