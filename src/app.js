@@ -99,7 +99,7 @@ let serviceWorkerRegistration = null;
 let deferredInstallPrompt = null;
 let liveAlertsPollTimer = null;
 let liveAlertsRefreshInFlight = false;
-const INSTALL_BANNER_DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
+const INSTALL_BANNER_DISMISS_MS = 3 * 24 * 60 * 60 * 1000;
 const LIVE_ALERTS_CACHE_KIND = 'worldcup-2026';
 const LIVE_ALERTS_TABLE = 'football_live_cache';
 
