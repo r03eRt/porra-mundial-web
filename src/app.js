@@ -309,12 +309,8 @@ async function loadLiveAlertsCache() {
 
 async function triggerLiveAlertsSync() {
   const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-football-live`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: SUPABASE_PUBLISHABLE_KEY
-    },
-    body: '{}'
+    method: 'GET',
+    cache: 'no-store'
   });
 
   const contentType = response.headers.get('content-type') || '';
@@ -329,12 +325,8 @@ async function triggerLiveAlertsSync() {
 
 async function triggerSimulatedLiveGoal() {
   const response = await fetch(`${SUPABASE_URL}/functions/v1/simulate-football-live`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: SUPABASE_PUBLISHABLE_KEY
-    },
-    body: '{}'
+    method: 'GET',
+    cache: 'no-store'
   });
 
   const contentType = response.headers.get('content-type') || '';
