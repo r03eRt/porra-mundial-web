@@ -1,10 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { normalize, parseScore, signFromScore, statsCountryFlag, statsCountryLabel } from './lib/statistics-utils.js';
+import { TEAM_DETAIL_METRICS, calculateTeamStats, getTournamentTeams } from './lib/team-stats.js';
+import { buildFinalNotification, buildGoalNotification, collectLiveAlertEvents } from './lib/live-alerts.js';
 
 const DATA = window.PORRA_DATA;
 const DEFAULT_API_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
 const API_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+const LIVE_ALERTS_POLL_INTERVAL_MS = 60 * 1000;
 const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw';
 const adminParam = new URLSearchParams(window.location.search).get('admin');
@@ -16,7 +19,9 @@ const LS_KEYS = {
   apiUrl: 'porra.apiUrl.v1',
   lastUpdate: 'porra.lastUpdate.v1',
   theme: 'porra.theme.v1',
-  installDismissedUntil: 'porra.installBanner.dismissedUntil.v1'
+  installDismissedUntil: 'porra.installBanner.dismissedUntil.v1',
+  liveAlertsSnapshot: 'porra.liveAlerts.snapshot.v1',
+  liveAlertsEnabled: 'porra.liveAlerts.enabled.v1'
 };
 
 const TEAM_FLAGS = {
@@ -82,6 +87,7 @@ const state = {
   statsSearch: { players: '', teams: '' },
   statsExpanded: { players: false, teams: false },
   statsErrors: { players: false, teams: false },
+  selectedTeam: '',
   adminUser: null,
   rankingSort: { key: 'position', direction: 'asc' },
   miniRankingSort: { key: 'position', direction: 'asc' },
@@ -91,7 +97,11 @@ let apiRefreshInProgress = false;
 let dismissedVersion = null;
 let serviceWorkerRegistration = null;
 let deferredInstallPrompt = null;
+let liveAlertsPollTimer = null;
+let liveAlertsRefreshInFlight = false;
 const INSTALL_BANNER_DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
+const LIVE_ALERTS_CACHE_KIND = 'worldcup-2026';
+const LIVE_ALERTS_TABLE = 'football_live_cache';
 
 function apiNameFor(team) {
   return DATA.teamAliases[team] || team;
@@ -212,6 +222,138 @@ async function registerPwa() {
     await serviceWorkerRegistration.update();
   } catch (error) {
     console.error('No se pudo registrar la PWA:', error);
+  }
+}
+
+function loadLiveAlertsSnapshot() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_KEYS.liveAlertsSnapshot) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveLiveAlertsSnapshot(snapshot) {
+  localStorage.setItem(LS_KEYS.liveAlertsSnapshot, JSON.stringify(snapshot || {}));
+}
+
+function isLiveAlertsEnabled() {
+  return localStorage.getItem(LS_KEYS.liveAlertsEnabled) === '1';
+}
+
+function setLiveAlertsEnabled(enabled) {
+  localStorage.setItem(LS_KEYS.liveAlertsEnabled, enabled ? '1' : '0');
+}
+
+function updateLiveAlertsUi(statusText = '') {
+  const button = document.getElementById('liveAlertsBtn');
+  const status = document.getElementById('liveAlertsStatus');
+  if (!button || !status) return;
+
+  const supported = 'Notification' in window && 'serviceWorker' in navigator;
+  const permission = supported ? Notification.permission : 'unsupported';
+  const enabled = isLiveAlertsEnabled();
+
+  if (!supported) {
+    button.disabled = true;
+    button.textContent = 'Alertas no disponibles';
+    status.textContent = 'Este navegador no soporta notificaciones.';
+    return;
+  }
+
+  if (permission === 'denied') {
+    button.disabled = false;
+    button.textContent = 'Permiso denegado';
+    status.textContent = 'Activa las notificaciones desde el navegador para recibir avisos.';
+    return;
+  }
+
+  button.disabled = false;
+  button.textContent = enabled ? 'Desactivar alertas' : 'Activar alertas';
+  status.textContent = statusText || (enabled
+    ? 'Alertas activas. La app comprobará si hay goles y el resultado final.'
+    : 'Pide notificaciones para recibir avisos cuando la app esté instalada o abierta.');
+}
+
+async function ensureLiveAlertsPermission() {
+  if (!('Notification' in window)) return 'unsupported';
+  if (Notification.permission === 'granted') return 'granted';
+  return Notification.requestPermission();
+}
+
+async function showLiveNotification(payload) {
+  if (!serviceWorkerRegistration && 'serviceWorker' in navigator) {
+    serviceWorkerRegistration = await navigator.serviceWorker.ready;
+  }
+  if (!serviceWorkerRegistration || Notification.permission !== 'granted') return;
+  await serviceWorkerRegistration.showNotification(payload.title, {
+    body: payload.body,
+    tag: payload.tag,
+    renotify: true,
+    silent: false,
+    icon: `${import.meta.env.BASE_URL}icon-192.png`,
+    badge: `${import.meta.env.BASE_URL}icon-192.png`
+  });
+}
+
+async function loadLiveAlertsCache() {
+  const { data, error } = await supabase
+    .from(LIVE_ALERTS_TABLE)
+    .select('kind,payload,updated_at')
+    .eq('kind', LIVE_ALERTS_CACHE_KIND)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.payload || null;
+}
+
+async function refreshLiveAlerts({ baseline = false } = {}) {
+  if (liveAlertsRefreshInFlight || !isLiveAlertsEnabled()) return;
+  liveAlertsRefreshInFlight = true;
+
+  try {
+    const currentSnapshot = await loadLiveAlertsCache();
+    if (!currentSnapshot) return;
+
+    const previousSnapshot = loadLiveAlertsSnapshot();
+    if (baseline || !previousSnapshot.matches?.length) {
+      saveLiveAlertsSnapshot(currentSnapshot);
+      updateLiveAlertsUi();
+      return;
+    }
+
+    const events = collectLiveAlertEvents(previousSnapshot, currentSnapshot);
+    for (const event of events) {
+      if (event.type === 'goal') {
+        await showLiveNotification(buildGoalNotification(event.match, event.goal));
+      } else if (event.type === 'final') {
+        await showLiveNotification(buildFinalNotification(event.match));
+      }
+    }
+
+    saveLiveAlertsSnapshot(currentSnapshot);
+    if (events.length) {
+      updateLiveAlertsUi(`Se detectaron ${events.length} aviso${events.length === 1 ? '' : 's'} nuevos.`);
+    }
+  } catch (error) {
+    console.error('No se pudieron actualizar las alertas en vivo:', error);
+    updateLiveAlertsUi('No se pudieron comprobar las alertas en vivo.');
+  } finally {
+    liveAlertsRefreshInFlight = false;
+  }
+}
+
+function startLiveAlertsPolling() {
+  if (liveAlertsPollTimer) return;
+  liveAlertsPollTimer = setInterval(() => {
+    refreshLiveAlerts().catch(() => {});
+  }, LIVE_ALERTS_POLL_INTERVAL_MS);
+}
+
+function stopLiveAlertsPolling() {
+  if (liveAlertsPollTimer) {
+    clearInterval(liveAlertsPollTimer);
+    liveAlertsPollTimer = null;
   }
 }
 
@@ -639,6 +781,141 @@ function renderMatches() {
       </section>
     `).join('')
     : '<p class="empty-state">No hay partidos que coincidan con los filtros.</p>';
+}
+
+function getTournamentTeamList() {
+  return getTournamentTeams(DATA.matches);
+}
+
+function buildTeamChartData(teamStats) {
+  return TEAM_DETAIL_METRICS.map(metric => {
+    const value = teamStats[metric.key] ?? 0;
+    return { ...metric, value };
+  });
+}
+
+function renderTeamChart(metric, maxValue) {
+  const value = Number(metric.value) || 0;
+  const percent = maxValue > 0 ? Math.min(100, (value / maxValue) * 100) : 0;
+  const inverseBad = metric.key === 'goalsAgainst' || metric.key === 'losses' || metric.key === 'failedToScore';
+  return html`
+    <article class="team-chart-card">
+      <header>
+        <h4>${escapeHtml(metric.label)}</h4>
+        <span class="metric-value">${typeof value === 'number' && !Number.isInteger(value) ? value.toFixed(2) : value}</span>
+      </header>
+      <div class="chart-track" aria-hidden="true">
+        <div class="chart-fill ${inverseBad ? 'bad' : ''}" style="width:${percent}%"></div>
+      </div>
+      <div class="team-detail-subtitle">
+        <span>${percent.toFixed(0)}% del máximo del torneo</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderTeams() {
+  const searchInput = document.getElementById('teamsSearch');
+  const select = document.getElementById('teamsSelect');
+  const list = document.getElementById('teamsList');
+  const detail = document.getElementById('teamDetail');
+  const count = document.getElementById('teamsListCount');
+  const query = normalize(searchInput.value);
+  const teams = getTournamentTeamList();
+  const filteredTeams = teams.filter(team => normalize(team).includes(query));
+
+  if (!state.selectedTeam || !teams.includes(state.selectedTeam)) {
+    state.selectedTeam = teams[0] || '';
+  }
+  const selectedTeam = teams.includes(select.value) ? select.value : state.selectedTeam;
+
+  if (!select.dataset.loaded) {
+    select.innerHTML = teams.map(team => `<option value="${escapeHtml(team)}">${escapeHtml(team)}</option>`).join('');
+    select.dataset.loaded = '1';
+  }
+  if (select.value !== selectedTeam) select.value = selectedTeam;
+  state.selectedTeam = selectedTeam;
+
+  if (list.dataset.teams !== String(teams.length)) {
+    list.dataset.teams = String(teams.length);
+  }
+
+  const selectedStats = calculateTeamStats(selectedTeam, DATA.matches, getResult);
+  const teamProfiles = teams.map(team => calculateTeamStats(team, DATA.matches, getResult));
+  const maxByMetric = Object.fromEntries(TEAM_DETAIL_METRICS.map(metric => [
+    metric.key,
+    Math.max(...teamProfiles.map(profile => Number(profile[metric.key]) || 0), 0)
+  ]));
+  const selectedMatches = DATA.matches.filter(match => match.team1 === selectedTeam || match.team2 === selectedTeam);
+  const recentMatches = selectedMatches.slice(-5).reverse();
+
+  count.textContent = `${filteredTeams.length}/${teams.length}`;
+  list.innerHTML = filteredTeams.map(team => {
+    return html`
+      <button class="team-list-item ${team === selectedTeam ? 'active' : ''}" type="button" data-team-select="${escapeHtml(team)}">
+        <span>${teamLabel(team)}</span>
+      </button>
+    `;
+  }).join('');
+
+  const summaryCards = [
+    ['Partidos', `${selectedStats.played}/${selectedStats.scheduled}`],
+    ['Victorias', selectedStats.wins],
+    ['Empates', selectedStats.draws],
+    ['Derrotas', selectedStats.losses]
+  ];
+
+  detail.innerHTML = selectedTeam
+    ? html`
+      <div class="team-detail-head">
+        <div>
+          <h3>${teamLabel(selectedTeam)}</h3>
+          <p>Detalle del equipo con estadísticas de la porra y resumen de su rendimiento actual.</p>
+        </div>
+        <div class="team-detail-subtitle">
+          <span>${selectedStats.points} puntos</span>
+          <span>${selectedStats.goalsFor} GF</span>
+          <span>${selectedStats.goalsAgainst} GC</span>
+          <span>${selectedStats.goalDifference >= 0 ? '+' : ''}${selectedStats.goalDifference} DG</span>
+        </div>
+      </div>
+      <div class="team-summary-grid">
+        ${summaryCards.map(([label, value]) => html`
+          <article class="team-summary-card">
+            <span>${label}</span>
+            <b>${value}</b>
+          </article>
+        `).join('')}
+      </div>
+      <div class="team-chart-grid">
+        ${buildTeamChartData(selectedStats).map(metric => renderTeamChart(metric, maxByMetric[metric.key])).join('')}
+      </div>
+      <div class="section-head">
+        <h3>Últimos partidos</h3>
+        <p class="hint">Los resultados más recientes de este equipo en la porra.</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Partido</th><th>Resultado</th><th>Estado</th></tr></thead>
+          <tbody>
+            ${recentMatches.length ? recentMatches.map(match => {
+              const result = getResult(match);
+              const isHome = match.team1 === selectedTeam;
+              const opponent = isHome ? match.team2 : match.team1;
+              const score = result ? (isHome ? `${result.home}-${result.away}` : `${result.away}-${result.home}`) : 'Pendiente';
+              return html`
+                <tr>
+                  <td>${teamLabel(selectedTeam)} - ${teamLabel(opponent)}</td>
+                  <td>${result ? score : '<span class="muted">pendiente</span>'}</td>
+                  <td>${result ? 'Jugado' : 'Pendiente'}</td>
+                </tr>
+              `;
+            }).join('') : '<tr><td colspan="3" class="empty-state">Todavía no hay partidos disponibles.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `
+    : '<div class="team-empty">No hay equipos disponibles.</div>';
 }
 
 function calculateGroupStandings(group) {
@@ -1137,7 +1414,7 @@ function renderSettings() {
   document.getElementById('apiUrlInput').value = state.apiUrl;
 }
 
-function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderStatistics(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
+function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderTeams(); renderStatistics(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
 
 async function loadMiniResultsFromSupabase() {
   const { data, error } = await supabase
@@ -1331,6 +1608,16 @@ async function clearMiniResult(id) {
 }
 
 document.addEventListener('click', e => {
+  const teamSelectButton = e.target.closest('[data-team-select]');
+  if (teamSelectButton) {
+    state.selectedTeam = teamSelectButton.dataset.teamSelect;
+    const select = document.getElementById('teamsSelect');
+    select.value = state.selectedTeam;
+    renderTeams();
+    document.getElementById('teamDetail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+
   const statsModeButton = e.target.closest('[data-stats-mode]');
   if (statsModeButton) {
     state.statsMode = statsModeButton.dataset.statsMode;
@@ -1406,6 +1693,29 @@ document.addEventListener('submit', async e => {
 
 document.getElementById('refreshApiBtn').addEventListener('click', refreshFromApi);
 document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+document.getElementById('liveAlertsBtn').addEventListener('click', async () => {
+  const permission = await ensureLiveAlertsPermission();
+  if (permission !== 'granted') {
+    setLiveAlertsEnabled(false);
+    updateLiveAlertsUi(permission === 'denied'
+      ? 'Has bloqueado las notificaciones del navegador.'
+      : 'No se han activado las alertas.');
+    stopLiveAlertsPolling();
+    return;
+  }
+
+  const enabled = !isLiveAlertsEnabled();
+  setLiveAlertsEnabled(enabled);
+  updateLiveAlertsUi();
+
+  if (enabled) {
+    await refreshLiveAlerts({ baseline: true });
+    startLiveAlertsPolling();
+  } else {
+    stopLiveAlertsPolling();
+    localStorage.removeItem(LS_KEYS.liveAlertsSnapshot);
+  }
+});
 document.getElementById('installBtn').addEventListener('click', async () => {
   if (!deferredInstallPrompt) return;
   deferredInstallPrompt.prompt();
@@ -1430,6 +1740,11 @@ document.getElementById('miniRankingSearch').addEventListener('input', renderMin
 document.getElementById('groupFilter').addEventListener('change', renderMatches);
 document.getElementById('teamFilter').addEventListener('change', renderMatches);
 document.getElementById('statusFilter').addEventListener('change', renderMatches);
+document.getElementById('teamsSearch').addEventListener('input', renderTeams);
+document.getElementById('teamsSelect').addEventListener('change', e => {
+  state.selectedTeam = e.target.value;
+  renderTeams();
+});
 document.getElementById('playerSelect').addEventListener('change', renderPlayerDetail);
 document.getElementById('knockoutPlayerSelect').addEventListener('change', renderKnockout);
 document.getElementById('statsRankingSelect').addEventListener('change', e => {
@@ -1484,6 +1799,7 @@ document.getElementById('importInput').addEventListener('change', async e => {
 
 applyTheme(document.documentElement.dataset.theme);
 applyAdminMode();
+updateLiveAlertsUi();
 renderAll();
 refreshFromApi();
 loadMiniResultsFromSupabase();
@@ -1492,9 +1808,15 @@ initializeAuth();
 registerPwa();
 setupInstallPrompt();
 checkForAppUpdate();
+startLiveAlertsPolling();
+refreshLiveAlerts({ baseline: true });
 setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);
 setInterval(checkForAppUpdate, VERSION_CHECK_INTERVAL_MS);
 window.addEventListener('focus', checkForAppUpdate);
+window.addEventListener('focus', () => refreshLiveAlerts().catch(() => {}));
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') checkForAppUpdate();
+  if (document.visibilityState === 'visible') {
+    checkForAppUpdate();
+    refreshLiveAlerts().catch(() => {});
+  }
 });

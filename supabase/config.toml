@@ -1,2 +1,5 @@
 [functions.sync-as-rankings]
 verify_jwt = false
+
+[functions.sync-football-live]
+verify_jwt = false

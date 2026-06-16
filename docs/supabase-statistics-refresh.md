@@ -108,6 +108,25 @@ select cron.schedule(
 );
 ```
 
+If you want the exact SQL for this project, paste this version:
+
+```sql
+select cron.schedule(
+  'sync-as-rankings-every-5h',
+  '0 */5 * * *',
+  $$
+  select net.http_post(
+    url := 'https://tsbjhbpdvewqysgmrhci.supabase.co/functions/v1/sync-as-rankings',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'apikey', 'sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw'
+    ),
+    body := '{}'::jsonb
+  );
+  $$
+);
+```
+
 Notes:
 
 - use the function URL, not a dashboard URL

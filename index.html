@@ -28,9 +28,11 @@
           <span aria-hidden="true">☀️</span>
         </button>
         <button id="refreshApiBtn" class="primary">Actualizar datos</button>
+        <button id="liveAlertsBtn" type="button">Activar alertas</button>
         <button id="exportBtn" data-admin-only>Exportar estado</button>
         <label class="import-btn" data-admin-only>Importar JSON<input id="importInput" type="file" accept="application/json" hidden /></label>
       </div>
+      <p id="liveAlertsStatus" class="hint live-alerts-status"></p>
       <div id="adminAccess" class="admin-access" hidden></div>
     </div>
   </header>
@@ -42,6 +44,7 @@
       <button class="tab active" data-tab="ranking">Clasificación porra</button>
       <button class="tab" data-tab="mini">Mini-porra</button>
       <button class="tab" data-tab="matches">Partidos</button>
+      <button class="tab" data-tab="teams">Equipos</button>
       <button class="tab" data-tab="statistics">Estadísticas</button>
       <button class="tab" data-tab="groupStandings">Clasificación grupos</button>
       <button class="tab" data-tab="bestThirds">Mejores terceros</button>
@@ -72,6 +75,29 @@
         </div>
       </div>
       <div id="matchesList" class="matchdays"></div>
+    </section>
+
+    <section id="teams" class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Equipos</h2>
+          <p class="hint">Selecciona una selección para ver su detalle con estadísticas y gráficas.</p>
+        </div>
+        <div class="filters">
+          <select id="teamsSelect" aria-label="Selección de equipos"></select>
+          <input id="teamsSearch" placeholder="Buscar equipo..." />
+        </div>
+      </div>
+      <div class="teams-layout">
+        <aside class="teams-list-panel">
+          <div class="teams-list-head">
+            <h3>Lista de equipos</h3>
+            <span id="teamsListCount" class="hint"></span>
+          </div>
+          <div id="teamsList" class="teams-list"></div>
+        </aside>
+        <section id="teamDetail" class="teams-detail"></section>
+      </div>
     </section>
 
     <section id="groupStandings" class="panel">
