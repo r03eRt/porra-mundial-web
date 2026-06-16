@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "scrape:as-player-rankings": "node scripts/scrape-as-player-rankings.mjs"
   },
   "devDependencies": {
     "vite": "^8.0.16"

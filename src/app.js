@@ -73,6 +73,13 @@ const state = {
   miniResults: loadMiniResults(),
   apiResults: {},
   apiFixtures: [],
+  playerRankings: null,
+  teamRankings: null,
+  statsMode: 'players',
+  statsSelections: { players: '', teams: '' },
+  statsSearch: { players: '', teams: '' },
+  statsExpanded: { players: false, teams: false },
+  statsErrors: { players: false, teams: false },
   adminUser: null,
   rankingSort: { key: 'position', direction: 'asc' },
   miniRankingSort: { key: 'position', direction: 'asc' },
@@ -92,6 +99,70 @@ function normalize(s) {
 
 function apiNameFor(team) {
   return DATA.teamAliases[team] || team;
+}
+
+const STATS_CONFIG = {
+  players: {
+    label: 'Jugadores',
+    searchPlaceholder: 'Buscar jugador o selección...',
+    loadingText: 'Cargando rankings de jugadores...',
+    errorText: 'No se pudieron cargar los rankings de jugadores.'
+  },
+  teams: {
+    label: 'Equipos',
+    searchPlaceholder: 'Buscar equipo...',
+    loadingText: 'Cargando rankings de equipos...',
+    errorText: 'No se pudieron cargar los rankings de equipos.'
+  }
+};
+
+const STATS_COUNTRY_FLAGS = {
+  'ALEMANIA': '🇩🇪',
+  'ARABIA SAUDI': '🇸🇦',
+  'AUSTRALIA': '🇦🇺',
+  'BOSNIA': '🇧🇦',
+  'BRASIL': '🇧🇷',
+  'BELGICA': '🇧🇪',
+  'C MARFIL': '🇨🇮',
+  'CABO VERDE': '🇨🇻',
+  'CANADA': '🇨🇦',
+  'COREA DEL SUR': '🇰🇷',
+  'CURAZAO': '🇨🇼',
+  'EEUU': '🇺🇸',
+  'ECUADOR': '🇪🇨',
+  'EGIPTO': '🇪🇬',
+  'ESCOCIA': '🏴',
+  'ESPAÑA': '🇪🇸',
+  'HAITI': '🇭🇹',
+  'IRAN': '🇮🇷',
+  'JAPON': '🇯🇵',
+  'MARRUECOS': '🇲🇦',
+  'MEXICO': '🇲🇽',
+  'NUEVA ZELANDA': '🇳🇿',
+  'PARAGUAY': '🇵🇾',
+  'PAISES BAJOS': '🇳🇱',
+  'QATAR': '🇶🇦',
+  'R CHECA': '🇨🇿',
+  'SUDAFRICA': '🇿🇦',
+  'SUECIA': '🇸🇪',
+  'SUIZA': '🇨🇭',
+  'TURQUIA': '🇹🇷',
+  'TUNEZ': '🇹🇳',
+  'URUGUAY': '🇺🇾'
+};
+
+function statsCountryKey(value) {
+  return normalize(value).replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function statsCountryFlag(value) {
+  return STATS_COUNTRY_FLAGS[statsCountryKey(value)] || '🏳️';
+}
+
+function statsCountryLabel(value) {
+  return String(value || '')
+    .replace(/\s+[A-ZÁÉÍÓÚÜÑ0-9.]{2,5}$/, '')
+    .trim();
 }
 
 function teamKey(team) {
@@ -184,6 +255,8 @@ async function checkForAppUpdate() {
   try {
     const response = await fetch(`${import.meta.env.BASE_URL}version.json?t=${Date.now()}`, { cache: 'no-store' });
     if (!response.ok) return;
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) return;
     const latest = await response.json();
     if (!latest.version || latest.version === __APP_VERSION__ || latest.version === dismissedVersion) return;
 
@@ -192,7 +265,7 @@ async function checkForAppUpdate() {
     toast.dataset.version = latest.version;
     toast.hidden = false;
   } catch (error) {
-    console.debug('No se pudo comprobar si hay una nueva versión:', error);
+    // Version checks are best-effort; GitHub Pages can return the app shell while a deploy is settling.
   }
 }
 
@@ -758,6 +831,119 @@ function renderTopScorers() {
     : '<tbody><tr><td class="empty-state">Todavía no hay goleadores disponibles.</td></tr></tbody>';
 }
 
+function getStatsDataset(mode = state.statsMode) {
+  return mode === 'teams' ? state.teamRankings : state.playerRankings;
+}
+
+function statsRowText(row) {
+  return [row.position, ...(row.raw || [])].join(' ');
+}
+
+function formatStatsCountryCell(value) {
+  const label = statsCountryLabel(value);
+  const flag = statsCountryFlag(label);
+  return `<span class="stats-country"><span class="stats-flag">${flag}</span><span>${escapeHtml(label)}</span></span>`;
+}
+
+function renderStatistics() {
+  const table = document.getElementById('statsTable');
+  const select = document.getElementById('statsRankingSelect');
+  const meta = document.getElementById('statsMeta');
+  const search = document.getElementById('statsSearch');
+  const toggleRows = document.getElementById('statsToggleRows');
+  const countHint = document.getElementById('statsCountHint');
+  const mode = state.statsMode;
+  const config = STATS_CONFIG[mode];
+  const dataset = getStatsDataset(mode);
+  const rankings = dataset?.rankings || [];
+
+  document.querySelectorAll('[data-stats-mode]').forEach(button => {
+    const active = button.dataset.statsMode === mode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  search.placeholder = config.searchPlaceholder;
+
+  if (!dataset) {
+    meta.textContent = state.statsErrors[mode] ? config.errorText : config.loadingText;
+    select.innerHTML = '';
+    table.innerHTML = `<tbody><tr><td class="empty-state">${escapeHtml(state.statsErrors[mode] ? config.errorText : 'Cargando estadísticas.')}</td></tr></tbody>`;
+    countHint.textContent = '';
+    toggleRows.hidden = true;
+    return;
+  }
+
+  if (select.dataset.mode !== mode) {
+    select.dataset.mode = mode;
+    select.innerHTML = '';
+    rankings.forEach(ranking => {
+      select.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(ranking.slug)}">${escapeHtml(ranking.label)}</option>`);
+    });
+    const savedSelection = state.statsSelections[mode];
+    select.value = rankings.some(ranking => ranking.slug === savedSelection)
+      ? savedSelection
+      : (rankings[0]?.slug || '');
+  }
+
+  const selected = rankings.find(ranking => ranking.slug === select.value) || rankings[0];
+  if (!selected) {
+    meta.textContent = `No hay rankings de ${config.label.toLowerCase()} disponibles.`;
+    table.innerHTML = '<tbody><tr><td class="empty-state">No hay estadísticas disponibles.</td></tr></tbody>';
+    return;
+  }
+
+  if (select.value !== selected.slug) select.value = selected.slug;
+  state.statsSelections[mode] = selected.slug;
+
+  if (search.dataset.mode !== mode) {
+    search.dataset.mode = mode;
+    search.value = state.statsSearch[mode] || '';
+  } else if (search.value !== state.statsSearch[mode]) {
+    search.value = state.statsSearch[mode] || '';
+  }
+
+  const q = normalize(search.value);
+  const rows = selected.rows.filter(row => !q || normalize(statsRowText(row)).includes(q));
+  const visibleRows = state.statsExpanded[mode] ? rows : rows.slice(0, 10);
+  const updatedAt = dataset.scrapedAt
+    ? new Date(dataset.scrapedAt).toLocaleString('es-ES')
+    : 'sin fecha';
+  const hasMoreRows = rows.length > visibleRows.length;
+
+  meta.innerHTML = html`
+    ${config.label}: ${rankings.length} rankings · ${selected.rows.length} registros en este ranking · Actualizado: ${escapeHtml(updatedAt)}
+    · <a href="${escapeHtml(selected.url)}" target="_blank" rel="noopener">ver fuente</a>
+  `;
+  countHint.textContent = rows.length
+    ? `Mostrando ${visibleRows.length} de ${rows.length} filas${q ? ' filtradas' : ''}.`
+    : 'No hay filas para mostrar.';
+  toggleRows.hidden = !hasMoreRows && !state.statsExpanded[mode];
+  toggleRows.textContent = state.statsExpanded[mode] ? 'Ver menos' : 'Ver todo';
+
+  table.innerHTML = visibleRows.length
+    ? html`
+      <thead>
+        <tr>
+          ${selected.headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>${visibleRows.map(row => html`
+        <tr>
+          ${selected.headers.map((_, index) => {
+            const cell = row.raw?.[index] ?? '';
+            const displayCell = mode === 'players' && index === 2
+              ? formatStatsCountryCell(cell)
+              : mode === 'teams' && index === 1
+                ? formatStatsCountryCell(cell)
+                : escapeHtml(cell);
+            return `<td>${displayCell}</td>`;
+          }).join('')}
+        </tr>
+      `).join('')}</tbody>
+    `
+    : `<tbody><tr><td class="empty-state">No hay ${config.label.toLowerCase()} que coincidan con la búsqueda.</td></tr></tbody>`;
+}
+
 function renderPlayerDetail() {
   const playerId = document.getElementById('playerSelect').value || DATA.players[0].id;
   const groups = [...new Set(DATA.matches.map(match => match.group))].sort();
@@ -981,7 +1167,7 @@ function renderSettings() {
   document.getElementById('apiUrlInput').value = state.apiUrl;
 }
 
-function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
+function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderStatistics(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
 
 async function loadMiniResultsFromSupabase() {
   const { data, error } = await supabase
@@ -996,6 +1182,107 @@ async function loadMiniResultsFromSupabase() {
   state.miniResults = Object.fromEntries(data.map(row => [row.question_id, row.value]));
   localStorage.setItem(LS_KEYS.mini, JSON.stringify(state.miniResults));
   renderMini();
+}
+
+async function loadStatsRankings() {
+  const loadLocalRankings = async () => {
+    const fetchRanking = async path => {
+      const response = await fetch(`${import.meta.env.BASE_URL}${path}?t=${Date.now()}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    };
+
+    const [players, teams] = await Promise.allSettled([
+      fetchRanking('data/as-player-rankings.json'),
+      fetchRanking('data/as-team-rankings.json')
+    ]);
+
+    return {
+      players: players.status === 'fulfilled' ? players.value : null,
+      teams: teams.status === 'fulfilled' ? teams.value : null,
+      source: 'local'
+    };
+  };
+
+  const loadSupabaseCache = async () => {
+    const { data, error } = await supabase
+      .from('as_rankings_cache')
+      .select('kind,payload,updated_at');
+
+    if (error) throw error;
+
+    const byKind = Object.fromEntries((data || []).map(row => [row.kind, row]));
+    return {
+      players: byKind.players?.payload || null,
+      teams: byKind.teams?.payload || null,
+      source: 'supabase'
+    };
+  };
+
+  let payload;
+  try {
+    payload = await loadSupabaseCache();
+  } catch (error) {
+    console.warn('No se pudo leer el cache de Supabase, usando JSON local:', error);
+    payload = await loadLocalRankings();
+  }
+
+  if (!payload.players || !payload.teams) {
+    const localPayload = await loadLocalRankings();
+    payload.players ||= localPayload.players;
+    payload.teams ||= localPayload.teams;
+    payload.source = payload.source === 'supabase' ? 'supabase + local fallback' : 'local';
+  }
+
+  if (payload.players) {
+    state.playerRankings = payload.players;
+    state.statsErrors.players = false;
+  } else {
+    state.statsErrors.players = true;
+    console.error('No se pudieron cargar los rankings de jugadores.');
+  }
+
+  if (payload.teams) {
+    state.teamRankings = payload.teams;
+    state.statsErrors.teams = false;
+  } else {
+    state.statsErrors.teams = true;
+    console.error('No se pudieron cargar los rankings de equipos.');
+  }
+
+  renderStatistics();
+}
+
+async function refreshStatsRankings() {
+  const button = document.getElementById('statsRefreshBtn');
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Actualizando...';
+
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-as-rankings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_PUBLISHABLE_KEY
+      },
+      body: '{}'
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`HTTP ${response.status}: ${text}`);
+    }
+
+    await loadStatsRankings();
+    alert('Estadísticas actualizadas.');
+  } catch (error) {
+    console.error('No se pudo forzar el refresco de estadísticas:', error);
+    alert('No se pudo forzar el refresco de estadísticas: ' + error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
 }
 
 async function initializeAuth() {
@@ -1074,6 +1361,13 @@ async function clearMiniResult(id) {
 }
 
 document.addEventListener('click', e => {
+  const statsModeButton = e.target.closest('[data-stats-mode]');
+  if (statsModeButton) {
+    state.statsMode = statsModeButton.dataset.statsMode;
+    renderStatistics();
+    return;
+  }
+
   const sortButton = e.target.closest('[data-sort-table]');
   if (sortButton) {
     const sortState = sortButton.dataset.sortTable === 'ranking' ? state.rankingSort : state.miniRankingSort;
@@ -1160,6 +1454,23 @@ document.getElementById('teamFilter').addEventListener('change', renderMatches);
 document.getElementById('statusFilter').addEventListener('change', renderMatches);
 document.getElementById('playerSelect').addEventListener('change', renderPlayerDetail);
 document.getElementById('knockoutPlayerSelect').addEventListener('change', renderKnockout);
+document.getElementById('statsRankingSelect').addEventListener('change', e => {
+  state.statsSelections[state.statsMode] = e.target.value;
+  state.statsExpanded[state.statsMode] = false;
+  renderStatistics();
+});
+document.getElementById('statsSearch').addEventListener('input', e => {
+  state.statsSearch[state.statsMode] = e.target.value;
+  renderStatistics();
+});
+document.getElementById('statsToggleRows').addEventListener('click', () => {
+  state.statsExpanded[state.statsMode] = !state.statsExpanded[state.statsMode];
+  renderStatistics();
+});
+document.getElementById('statsRefreshBtn').addEventListener('click', () => {
+  if (!isAdmin()) return;
+  refreshStatsRankings();
+});
 document.getElementById('saveApiUrlBtn').addEventListener('click', () => {
   if (!isAdmin()) return;
   state.apiUrl = document.getElementById('apiUrlInput').value.trim() || DEFAULT_API_URL;
@@ -1198,6 +1509,7 @@ applyAdminMode();
 renderAll();
 refreshFromApi();
 loadMiniResultsFromSupabase();
+loadStatsRankings();
 initializeAuth();
 registerPwa();
 checkForAppUpdate();

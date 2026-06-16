@@ -42,6 +42,7 @@
       <button class="tab active" data-tab="ranking">Clasificación porra</button>
       <button class="tab" data-tab="mini">Mini-porra</button>
       <button class="tab" data-tab="matches">Partidos</button>
+      <button class="tab" data-tab="statistics">Estadísticas</button>
       <button class="tab" data-tab="groupStandings">Clasificación grupos</button>
       <button class="tab" data-tab="bestThirds">Mejores terceros</button>
       <button class="tab" data-tab="topScorers">Máximos goleadores</button>
@@ -81,6 +82,31 @@
         </div>
       </div>
       <div id="groupStandingsList" class="group-standings-grid"></div>
+    </section>
+
+    <section id="statistics" class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Estadísticas</h2>
+          <p id="statsMeta" class="hint">Rankings cacheados desde AS.</p>
+        </div>
+        <div class="filters">
+          <div class="stats-mode-tabs" role="tablist" aria-label="Subsecciones de estadísticas">
+            <button class="stats-mode-tab active" type="button" data-stats-mode="players">Jugadores</button>
+            <button class="stats-mode-tab" type="button" data-stats-mode="teams">Equipos</button>
+          </div>
+          <select id="statsRankingSelect" aria-label="Ranking de estadísticas"></select>
+          <input id="statsSearch" placeholder="Buscar jugador o selección..." />
+        </div>
+      </div>
+      <div class="table-wrap stats-table-wrap"><table id="statsTable"></table></div>
+      <div class="stats-footer">
+        <span id="statsCountHint" class="hint"></span>
+        <div class="stats-footer-actions">
+          <button id="statsRefreshBtn" type="button" data-admin-only>Forzar refresco</button>
+          <button id="statsToggleRows" type="button"></button>
+        </div>
+      </div>
     </section>
 
     <section id="bestThirds" class="panel">

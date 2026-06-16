@@ -69,6 +69,86 @@ Añade `?admin=1` a la URL para mostrar el acceso de administrador. Tras iniciar
 
 La clave `sb_publishable_...` es pública y puede incluirse en el frontend. La seguridad depende de Supabase Auth y de las políticas RLS, no de ocultar esta clave.
 
+### Actualización automática de estadísticas
+
+La sección `Estadísticas` lee desde la tabla `as_rankings_cache` y, si no hay cache disponible, cae al JSON local.
+
+Este es el flujo que he usado para dejarlo automático en Supabase:
+
+1. Abrir el proyecto en Supabase y ejecutar `supabase/setup.sql`.
+   - Crea `mini_results`.
+   - Crea `as_rankings_cache`.
+   - Activa las políticas para que el frontend pueda leer el cache.
+2. Desplegar la Edge Function `sync-as-rankings`.
+   - Archivo: `supabase/functions/sync-as-rankings/index.ts`.
+   - Comando típico:
+
+   ```bash
+   npx supabase link --project-ref <project-ref>
+   npx supabase functions deploy sync-as-rankings
+   ```
+
+3. Desactivar la verificación JWT para esa función.
+   - Archivo: `supabase/config.toml`.
+   - Debe incluir:
+
+   ```toml
+   [functions.sync-as-rankings]
+   verify_jwt = false
+   ```
+
+   - Esto evita el `401` cuando la llama `pg_cron` con `apikey`.
+4. Activar `pg_cron` y `pg_net`.
+   - En Supabase, ve a `Integrations -> Cron`.
+   - Activa `pg_cron`.
+   - Si hace falta, activa `pg_net` en `Database -> Extensions`.
+   - Si `cron.schedule(...)` falla con `schema "cron" does not exist`, `pg_cron` aún no está activo.
+5. Crear el cron cada 5 horas.
+   - Schedule: `0 */5 * * *`
+   - URL correcta:
+
+   ```text
+   https://<project-ref>.supabase.co/functions/v1/sync-as-rankings
+   ```
+
+   - Si no usas Vault, puedes pasar la `publishable_key` en el header `apikey`.
+   - Ejemplo:
+
+   ```sql
+   select cron.schedule(
+     'sync-as-rankings-every-5h',
+     '0 */5 * * *',
+     $$
+     select net.http_post(
+       url := 'https://<project-ref>.supabase.co/functions/v1/sync-as-rankings',
+       headers := jsonb_build_object(
+         'Content-Type', 'application/json',
+         'apikey', '<publishable_key>'
+       ),
+       body := '{}'::jsonb
+     );
+     $$
+   );
+   ```
+
+6. Verificar que ya está funcionando.
+   - En `Table Editor`, abre `as_rankings_cache`.
+   - Debes ver dos filas:
+     - `players`
+     - `teams`
+   - También puedes comprobar:
+
+   ```sql
+   select kind, updated_at
+   from as_rankings_cache
+   order by kind;
+   ```
+
+7. La web usa el cache de Supabase y cae al JSON local si falla.
+   - Eso permite que GitHub Pages siga funcionando aunque el cron falle un día.
+
+La guía reusable completa está en [docs/supabase-statistics-refresh.md](./docs/supabase-statistics-refresh.md), por si quieres copiar el mismo flujo a otro proyecto sin perder detalles.
+
 ## Deployment rápido
 
 ### Vercel
