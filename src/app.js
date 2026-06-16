@@ -250,7 +250,7 @@ function updateLiveAlertsUi(statusText = '') {
   const status = document.getElementById('liveAlertsStatus');
   if (!button || !status) return;
 
-  const supported = 'Notification' in window && 'serviceWorker' in navigator;
+  const supported = 'Notification' in window;
   const permission = supported ? Notification.permission : 'unsupported';
   const enabled = isLiveAlertsEnabled();
 
@@ -270,9 +270,9 @@ function updateLiveAlertsUi(statusText = '') {
 
   button.disabled = false;
   button.textContent = enabled ? 'Desactivar alertas' : 'Activar alertas';
-  status.textContent = statusText || (enabled
+  status.textContent = statusText || `Permiso: ${permission}. ${enabled
     ? 'Alertas activas. La app comprobará si hay goles y el resultado final.'
-    : 'Pide notificaciones para recibir avisos cuando la app esté instalada o abierta.');
+    : 'Pide notificaciones para recibir avisos cuando la app esté instalada o abierta.'}`;
 }
 
 async function ensureLiveAlertsPermission() {
@@ -305,6 +305,84 @@ async function loadLiveAlertsCache() {
 
   if (error) throw error;
   return data?.payload || null;
+}
+
+async function triggerLiveAlertsSync() {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-football-live`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_PUBLISHABLE_KEY
+    },
+    body: '{}'
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  const payload = contentType.includes('application/json') ? await response.json() : { ok: false, error: await response.text() };
+
+  if (!response.ok || payload.ok === false) {
+    throw new Error(payload.error || `HTTP ${response.status}`);
+  }
+
+  return payload;
+}
+
+async function triggerSimulatedLiveGoal() {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/simulate-football-live`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_PUBLISHABLE_KEY
+    },
+    body: '{}'
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  const payload = contentType.includes('application/json') ? await response.json() : { ok: false, error: await response.text() };
+
+  if (!response.ok || payload.ok === false) {
+    throw new Error(payload.error || `HTTP ${response.status}`);
+  }
+
+  return payload;
+}
+
+async function triggerTestNotification() {
+  const permission = await ensureLiveAlertsPermission();
+  if (permission !== 'granted') {
+    throw new Error(permission === 'denied'
+      ? 'El navegador ha bloqueado las notificaciones.'
+      : 'No se pudo obtener permiso de notificación.');
+  }
+
+  const payload = {
+    title: 'Prueba de alerta',
+    body: 'Esta es una notificación de prueba en local.',
+    tag: 'test-notification'
+  };
+
+  new Notification(payload.title, {
+    body: payload.body,
+    tag: payload.tag,
+    icon: `${import.meta.env.BASE_URL}icon-192.png`
+  });
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then(registration => {
+      registration.showNotification(payload.title, {
+        body: payload.body,
+        tag: payload.tag,
+        renotify: true,
+        silent: false,
+        icon: `${import.meta.env.BASE_URL}icon-192.png`,
+        badge: `${import.meta.env.BASE_URL}icon-192.png`
+      }).catch(error => {
+        console.warn('No se pudo mostrar la notificación persistente:', error);
+      });
+    }).catch(error => {
+      console.warn('No se pudo preparar el service worker para la prueba:', error);
+    });
+  }
 }
 
 async function refreshLiveAlerts({ baseline = false } = {}) {
@@ -693,11 +771,40 @@ function getMatchday(match) {
   return Math.ceil(matchNumber / 2);
 }
 
+function findApiFixture(match) {
+  const team1 = normalize(match.team1);
+  const team2 = normalize(match.team2);
+  return state.apiFixtures.find(apiMatch => {
+    const apiTeam1 = normalize(apiMatch.team1 || apiMatch.homeTeam?.name || apiMatch.homeTeam?.shortName || '');
+    const apiTeam2 = normalize(apiMatch.team2 || apiMatch.awayTeam?.name || apiMatch.awayTeam?.shortName || '');
+    return (
+      (apiTeam1 === team1 && apiTeam2 === team2) ||
+      (apiTeam1 === team2 && apiTeam2 === team1)
+    );
+  }) || null;
+}
+
+function formatMatchSchedule(match) {
+  const fixture = findApiFixture(match);
+  const rawDate = fixture?.utcDate || fixture?.date || null;
+  if (!rawDate) return 'Horario pendiente';
+
+  const date = new Date(rawDate);
+  if (Number.isNaN(date.getTime())) return 'Horario pendiente';
+
+  const hasTime = /T\d{2}:\d{2}/.test(String(rawDate));
+  return new Intl.DateTimeFormat('es-ES', hasTime
+    ? { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Madrid' }
+    : { dateStyle: 'medium', timeZone: 'Europe/Madrid' }
+  ).format(date);
+}
+
 function renderMatchCard(match) {
   const result = getResult(match);
   return html`<article class="match-card" role="button" tabindex="0" data-match-id="${match.id}" aria-label="Ver predicciones de ${escapeHtml(match.team1)} contra ${escapeHtml(match.team2)}">
     <span class="pill">Grupo ${match.group} · ${match.id}</span>
     <h3 class="teams"><span>${teamLabel(match.team1)}</span><span class="versus">-</span><span>${teamLabel(match.team2)}</span></h3>
+    <div class="match-schedule">${escapeHtml(formatMatchSchedule(match))}</div>
     <div class="match-score ${result ? '' : 'pending'}">${result ? `${result.home} - ${result.away}` : 'Pendiente'}</div>
     <div class="source">${result ? 'Resultado actualizado automáticamente' : 'Sin resultado disponible en la API'} · Ver predicciones</div>
   </article>`;
@@ -714,6 +821,7 @@ function openMatchPredictions(matchId) {
       <div>
         <span class="pill">Grupo ${match.group} · ${match.id}</span>
         <h2>${teamLabel(match.team1)} - ${teamLabel(match.team2)}</h2>
+        <p class="match-schedule">${escapeHtml(formatMatchSchedule(match))}</p>
         <p>${result ? `Resultado: ${result.home}-${result.away}` : 'Partido pendiente'}</p>
       </div>
       <button type="button" class="dialog-close" data-close-predictions aria-label="Cerrar">×</button>
@@ -1560,7 +1668,12 @@ async function refreshFromApi(options = {}) {
     const resultByKey = {};
     for (const apiMatch of state.apiFixtures) {
       if (!apiMatch.score?.ft) continue;
-      resultByKey[keyForTeams(apiMatch.team1, apiMatch.team2)] = { home: Number(apiMatch.score.ft[0]), away: Number(apiMatch.score.ft[1]), date: apiMatch.date };
+      resultByKey[keyForTeams(apiMatch.team1, apiMatch.team2)] = {
+        home: Number(apiMatch.score.ft[0]),
+        away: Number(apiMatch.score.ft[1]),
+        date: apiMatch.date || apiMatch.utcDate || null,
+        utcDate: apiMatch.utcDate || apiMatch.date || null
+      };
     }
     state.apiResults = {};
     for (const m of DATA.matches) {
@@ -1714,6 +1827,56 @@ document.getElementById('liveAlertsBtn').addEventListener('click', async () => {
   } else {
     stopLiveAlertsPolling();
     localStorage.removeItem(LS_KEYS.liveAlertsSnapshot);
+  }
+});
+document.getElementById('testNotificationBtn').addEventListener('click', async () => {
+  try {
+    await triggerTestNotification();
+    updateLiveAlertsUi('Prueba de notificación enviada.');
+    alert('Notificación de prueba enviada.');
+  } catch (error) {
+    console.error('No se pudo lanzar la notificación de prueba:', error);
+    alert('No se pudo lanzar la notificación de prueba: ' + error.message);
+  }
+});
+document.getElementById('runLiveAlertsBtn').addEventListener('click', async () => {
+  if (!isAdmin()) return;
+  const button = document.getElementById('runLiveAlertsBtn');
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Enviando...';
+  try {
+    const result = await triggerLiveAlertsSync();
+    updateLiveAlertsUi(`Cron lanzado. ${result.live || 0} en juego, ${result.finished || 0} finalizados.`);
+    if (isLiveAlertsEnabled()) {
+      await refreshLiveAlerts();
+    }
+  } catch (error) {
+    console.error('No se pudo forzar el cron de alertas:', error);
+    alert('No se pudo forzar el cron de alertas: ' + error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+});
+document.getElementById('simulateLiveGoalBtn').addEventListener('click', async () => {
+  if (!isAdmin()) return;
+  const button = document.getElementById('simulateLiveGoalBtn');
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Simulando...';
+  try {
+    const result = await triggerSimulatedLiveGoal();
+    updateLiveAlertsUi(`Gol simulado: ${result.matchId} (${result.goals} goles).`);
+    if (isLiveAlertsEnabled()) {
+      await refreshLiveAlerts();
+    }
+  } catch (error) {
+    console.error('No se pudo simular el gol de prueba:', error);
+    alert('No se pudo simular el gol de prueba: ' + error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
   }
 });
 document.getElementById('installBtn').addEventListener('click', async () => {
