@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { normalize, parseScore, signFromScore, statsCountryFlag, statsCountryLabel } from './lib/statistics-utils.js';
 
 const DATA = window.PORRA_DATA;
 const DEFAULT_API_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
@@ -14,7 +15,8 @@ const LS_KEYS = {
   mini: 'porra.miniResults.v1',
   apiUrl: 'porra.apiUrl.v1',
   lastUpdate: 'porra.lastUpdate.v1',
-  theme: 'porra.theme.v1'
+  theme: 'porra.theme.v1',
+  installDismissedUntil: 'porra.installBanner.dismissedUntil.v1'
 };
 
 const TEAM_FLAGS = {
@@ -88,14 +90,8 @@ const state = {
 let apiRefreshInProgress = false;
 let dismissedVersion = null;
 let serviceWorkerRegistration = null;
-
-function normalize(s) {
-  return String(s || '')
-    .trim().toUpperCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/&/g, 'AND')
-    .replace(/\s+/g, ' ');
-}
+let deferredInstallPrompt = null;
+const INSTALL_BANNER_DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
 
 function apiNameFor(team) {
   return DATA.teamAliases[team] || team;
@@ -115,55 +111,6 @@ const STATS_CONFIG = {
     errorText: 'No se pudieron cargar los rankings de equipos.'
   }
 };
-
-const STATS_COUNTRY_FLAGS = {
-  'ALEMANIA': '🇩🇪',
-  'ARABIA SAUDI': '🇸🇦',
-  'AUSTRALIA': '🇦🇺',
-  'BOSNIA': '🇧🇦',
-  'BRASIL': '🇧🇷',
-  'BELGICA': '🇧🇪',
-  'C MARFIL': '🇨🇮',
-  'CABO VERDE': '🇨🇻',
-  'CANADA': '🇨🇦',
-  'COREA DEL SUR': '🇰🇷',
-  'CURAZAO': '🇨🇼',
-  'EEUU': '🇺🇸',
-  'ECUADOR': '🇪🇨',
-  'EGIPTO': '🇪🇬',
-  'ESCOCIA': '🏴',
-  'ESPAÑA': '🇪🇸',
-  'HAITI': '🇭🇹',
-  'IRAN': '🇮🇷',
-  'JAPON': '🇯🇵',
-  'MARRUECOS': '🇲🇦',
-  'MEXICO': '🇲🇽',
-  'NUEVA ZELANDA': '🇳🇿',
-  'PARAGUAY': '🇵🇾',
-  'PAISES BAJOS': '🇳🇱',
-  'QATAR': '🇶🇦',
-  'R CHECA': '🇨🇿',
-  'SUDAFRICA': '🇿🇦',
-  'SUECIA': '🇸🇪',
-  'SUIZA': '🇨🇭',
-  'TURQUIA': '🇹🇷',
-  'TUNEZ': '🇹🇳',
-  'URUGUAY': '🇺🇾'
-};
-
-function statsCountryKey(value) {
-  return normalize(value).replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
-}
-
-function statsCountryFlag(value) {
-  return STATS_COUNTRY_FLAGS[statsCountryKey(value)] || '🏳️';
-}
-
-function statsCountryLabel(value) {
-  return String(value || '')
-    .replace(/\s+[A-ZÁÉÍÓÚÜÑ0-9.]{2,5}$/, '')
-    .trim();
-}
 
 function teamKey(team) {
   const key = normalize(apiNameFor(team));
@@ -189,19 +136,6 @@ const KNOCKOUT_SCORING = {
 
 function teamLabel(team) {
   return `${TEAM_FLAGS[team] || '🏳️'} ${team}`;
-}
-
-function parseScore(score) {
-  const m = String(score || '').trim().match(/^(\d+)\s*[-–]\s*(\d+)$/);
-  return m ? [Number(m[1]), Number(m[2])] : null;
-}
-
-function signFromScore(score) {
-  const s = Array.isArray(score) ? score : parseScore(score);
-  if (!s) return '';
-  if (s[0] > s[1]) return '1';
-  if (s[0] < s[1]) return '2';
-  return 'X';
 }
 
 const MINI_FIELD_TYPES = {
@@ -279,6 +213,42 @@ async function registerPwa() {
   } catch (error) {
     console.error('No se pudo registrar la PWA:', error);
   }
+}
+
+function setupInstallPrompt() {
+  const installBanner = document.getElementById('installBanner');
+  const dismissBtn = document.getElementById('dismissInstallBannerBtn');
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (isStandalone) {
+    installBanner.hidden = true;
+    return;
+  }
+
+  const dismissedUntil = Number(localStorage.getItem(LS_KEYS.installDismissedUntil) || 0);
+
+  const isDismissed = () => Date.now() < dismissedUntil;
+  const updateBannerVisibility = () => {
+    installBanner.hidden = !deferredInstallPrompt || isDismissed();
+  };
+
+  window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    updateBannerVisibility();
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    localStorage.removeItem(LS_KEYS.installDismissedUntil);
+    installBanner.hidden = true;
+  });
+
+  dismissBtn.addEventListener('click', () => {
+    localStorage.setItem(LS_KEYS.installDismissedUntil, String(Date.now() + INSTALL_BANNER_DISMISS_MS));
+    installBanner.hidden = true;
+  });
+
+  updateBannerVisibility();
 }
 
 function getResult(match) {
@@ -1436,6 +1406,14 @@ document.addEventListener('submit', async e => {
 
 document.getElementById('refreshApiBtn').addEventListener('click', refreshFromApi);
 document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+document.getElementById('installBtn').addEventListener('click', async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  localStorage.removeItem(LS_KEYS.installDismissedUntil);
+  document.getElementById('installBanner').hidden = true;
+});
 document.getElementById('reloadAppBtn').addEventListener('click', () => {
   const toast = document.getElementById('updateToast');
   const url = new URL(window.location.href);
@@ -1512,6 +1490,7 @@ loadMiniResultsFromSupabase();
 loadStatsRankings();
 initializeAuth();
 registerPwa();
+setupInstallPrompt();
 checkForAppUpdate();
 setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);
 setInterval(checkForAppUpdate, VERSION_CHECK_INTERVAL_MS);

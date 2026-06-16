@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
+import { parseRankingTable, slugLabel } from '../src/lib/statistics-utils.js';
 
 const SOURCES = [
   {
@@ -12,33 +13,6 @@ const SOURCES = [
     outputPath: new URL('../data/as-team-rankings.json', import.meta.url)
   }
 ];
-
-function decodeHtml(value) {
-  return String(value || '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>');
-}
-
-function textFromHtml(value) {
-  return decodeHtml(String(value || '')
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim());
-}
-
-function slugLabel(slug) {
-  return slug
-    .split('-')
-    .filter(Boolean)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
 
 async function fetchHtml(url) {
   const response = await fetch(url, {
@@ -68,31 +42,6 @@ function rankingUrlsFromMain(html, sourceUrl) {
   return [...urls].sort();
 }
 
-function parseTable(html) {
-  const table = html.match(/<table[\s\S]*?<\/table>/i)?.[0] || '';
-  if (!table) return { headers: [], rows: [] };
-
-  const rows = [...table.matchAll(/<tr[\s\S]*?<\/tr>/gi)]
-    .map(rowMatch => {
-      const cells = [...rowMatch[0].matchAll(/<(td|th)[^>]*>([\s\S]*?)<\/\1>/gi)]
-        .map(cell => textFromHtml(cell[2]))
-        .filter(Boolean);
-      return cells;
-    })
-    .filter(row => row.length);
-
-  return {
-    headers: rows[0] || [],
-    rows: rows.slice(1).map(row => ({
-      position: row[0] || '',
-      player: row[1] || '',
-      team: row[2] || '',
-      value: row.at(-1) || '',
-      raw: row
-    }))
-  };
-}
-
 async function scrapeSource({ kind, sourceUrl, outputPath }) {
   const mainHtml = await fetchHtml(sourceUrl);
   const urls = rankingUrlsFromMain(mainHtml, sourceUrl);
@@ -102,7 +51,7 @@ async function scrapeSource({ kind, sourceUrl, outputPath }) {
     const slug = new URL(url).pathname.split('/').filter(Boolean).at(-1);
     console.log(`[${kind}] [${index + 1}/${urls.length}] ${slug}`);
     const html = await fetchHtml(url);
-    const table = parseTable(html);
+    const table = parseRankingTable(html);
     const label = table.headers.at(-1) || slugLabel(slug);
     rankings.push({
       slug,

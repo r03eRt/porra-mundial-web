@@ -6,9 +6,11 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "scrape:as-player-rankings": "node scripts/scrape-as-player-rankings.mjs"
+    "scrape:as-player-rankings": "node scripts/scrape-as-player-rankings.mjs",
+    "test": "vitest run"
   },
   "devDependencies": {
+    "vitest": "^3.2.4",
     "vite": "^8.0.16"
   },
   "dependencies": {
