@@ -2,7 +2,6 @@ import { createClient } from '@supabase/supabase-js';
 import { KNOCKOUT_STAGES, buildPlayerKnockoutBracket } from './lib/knockout-bracket.js';
 import { normalize, parseScore, playerNamesMatch, signFromScore, statsCountryFlag, statsCountryLabel } from './lib/statistics-utils.js';
 import { TEAM_DETAIL_METRICS, calculateTeamStats, getTournamentTeams } from './lib/team-stats.js';
-import { buildFinalNotification, buildGoalNotification, collectLiveAlertEvents } from './lib/live-alerts.js';
 import { simulateProbabilities } from './lib/probabilities.js';
 
 const DATA = window.PORRA_DATA;
@@ -10,7 +9,6 @@ const DEFAULT_API_URL = 'https://raw.githubusercontent.com/openfootball/worldcup
 const API_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 const API_FETCH_TIMEOUT_MS = 10000;
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
-const LIVE_ALERTS_POLL_INTERVAL_MS = 60 * 1000;
 const API_RESUME_REFRESH_THRESHOLD_MS = 2 * 60 * 1000;
 const PWA_ENABLED = false;
 const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
@@ -29,9 +27,7 @@ const LS_KEYS = {
   apiRefreshAt: 'porra.apiRefreshAt.v1',
   lastUpdate: 'porra.lastUpdate.v1',
   theme: 'porra.theme.v1',
-  installDismissedUntil: 'porra.installBanner.dismissedUntil.v1',
-  liveAlertsSnapshot: 'porra.liveAlerts.snapshot.v1',
-  liveAlertsEnabled: 'porra.liveAlerts.enabled.v1'
+  installDismissedUntil: 'porra.installBanner.dismissedUntil.v1'
 };
 
 const TEAM_FLAGS = {
@@ -116,16 +112,11 @@ let apiRefreshInProgress = false;
 let dismissedVersion = null;
 let serviceWorkerRegistration = null;
 let deferredInstallPrompt = null;
-let liveAlertsPollTimer = null;
-let liveAlertsRefreshInFlight = false;
 let appToastTimer = null;
 let lastApiRefreshAt = Number(localStorage.getItem(LS_KEYS.apiRefreshAt) || 0);
 let lastVersionCheckAt = 0;
 let lastResumeRefreshAt = 0;
-let lastLiveAlertsKickAt = 0;
 const INSTALL_BANNER_DISMISS_MS = 3 * 24 * 60 * 60 * 1000;
-const LIVE_ALERTS_CACHE_KIND = 'worldcup-2026';
-const LIVE_ALERTS_TABLE = 'football_live_cache';
 
 function apiNameFor(team) {
   return DATA.teamAliases[team] || team;
@@ -326,52 +317,6 @@ async function disablePwa() {
   }
 }
 
-function loadLiveAlertsSnapshot() {
-  try {
-    return JSON.parse(localStorage.getItem(LS_KEYS.liveAlertsSnapshot) || '{}');
-  } catch {
-    return {};
-  }
-}
-
-function saveLiveAlertsSnapshot(snapshot) {
-  localStorage.setItem(LS_KEYS.liveAlertsSnapshot, JSON.stringify(snapshot || {}));
-}
-
-function isLiveAlertsEnabled() {
-  return localStorage.getItem(LS_KEYS.liveAlertsEnabled) === '1';
-}
-
-function setLiveAlertsEnabled(enabled) {
-  localStorage.setItem(LS_KEYS.liveAlertsEnabled, enabled ? '1' : '0');
-}
-
-function updateLiveAlertsUi() {
-  const button = document.getElementById('liveAlertsBtn');
-  if (!button) return;
-
-  const supported = 'Notification' in window;
-  const permission = supported ? Notification.permission : 'unsupported';
-  const enabled = isLiveAlertsEnabled();
-
-  if (!supported) {
-    button.disabled = true;
-    button.textContent = 'Alertas no disponibles';
-    status.textContent = 'Este navegador no soporta notificaciones.';
-    return;
-  }
-
-  if (permission === 'denied') {
-    button.disabled = false;
-    button.textContent = 'Permiso denegado';
-    status.textContent = 'Activa las notificaciones desde el navegador para recibir avisos.';
-    return;
-  }
-
-  button.disabled = false;
-  button.textContent = enabled ? 'Desactivar alertas' : 'Activar alertas';
-}
-
 function showAppToast(message, duration = 2400) {
   const toast = document.getElementById('appToast');
   const text = document.getElementById('appToastMessage');
@@ -385,165 +330,6 @@ function showAppToast(message, duration = 2400) {
     toast.hidden = true;
     appToastTimer = null;
   }, duration);
-}
-
-async function ensureLiveAlertsPermission() {
-  if (!('Notification' in window)) return 'unsupported';
-  if (Notification.permission === 'granted') return 'granted';
-  return Notification.requestPermission();
-}
-
-async function showLiveNotification(payload) {
-  if (!serviceWorkerRegistration && 'serviceWorker' in navigator) {
-    serviceWorkerRegistration = await navigator.serviceWorker.ready;
-  }
-  if (!serviceWorkerRegistration || Notification.permission !== 'granted') return;
-  await serviceWorkerRegistration.showNotification(payload.title, {
-    body: payload.body,
-    tag: payload.tag,
-    renotify: true,
-    silent: false,
-    icon: `${import.meta.env.BASE_URL}icon-192.png`,
-    badge: `${import.meta.env.BASE_URL}icon-192.png`
-  });
-}
-
-async function loadLiveAlertsCache() {
-  const { data, error } = await supabase
-    .from(LIVE_ALERTS_TABLE)
-    .select('kind,payload,updated_at')
-    .eq('kind', LIVE_ALERTS_CACHE_KIND)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.payload || null;
-}
-
-async function triggerLiveAlertsSync() {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-football-live`, {
-    method: 'GET',
-    cache: 'no-store'
-  });
-
-  const contentType = response.headers.get('content-type') || '';
-  const payload = contentType.includes('application/json') ? await response.json() : { ok: false, error: await response.text() };
-
-  if (!response.ok || payload.ok === false) {
-    throw new Error(payload.error || `HTTP ${response.status}`);
-  }
-
-  return payload;
-}
-
-async function triggerSimulatedLiveGoal() {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/simulate-football-live`, {
-    method: 'GET',
-    cache: 'no-store'
-  });
-
-  const contentType = response.headers.get('content-type') || '';
-  const payload = contentType.includes('application/json') ? await response.json() : { ok: false, error: await response.text() };
-
-  if (!response.ok || payload.ok === false) {
-    throw new Error(payload.error || `HTTP ${response.status}`);
-  }
-
-  return payload;
-}
-
-async function triggerTestNotification() {
-  const permission = await ensureLiveAlertsPermission();
-  if (permission !== 'granted') {
-    throw new Error(permission === 'denied'
-      ? 'El navegador ha bloqueado las notificaciones.'
-      : 'No se pudo obtener permiso de notificación.');
-  }
-
-  const payload = {
-    title: 'Prueba de alerta',
-    body: 'Esta es una notificación de prueba en local.',
-    tag: 'test-notification'
-  };
-
-  new Notification(payload.title, {
-    body: payload.body,
-    tag: payload.tag,
-    icon: `${import.meta.env.BASE_URL}icon-192.png`
-  });
-
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready.then(registration => {
-      registration.showNotification(payload.title, {
-        body: payload.body,
-        tag: payload.tag,
-        renotify: true,
-        silent: false,
-        icon: `${import.meta.env.BASE_URL}icon-192.png`,
-        badge: `${import.meta.env.BASE_URL}icon-192.png`
-      }).catch(error => {
-        console.warn('No se pudo mostrar la notificación persistente:', error);
-      });
-    }).catch(error => {
-      console.warn('No se pudo preparar el service worker para la prueba:', error);
-    });
-  }
-}
-
-async function refreshLiveAlerts({ baseline = false } = {}) {
-  if (liveAlertsRefreshInFlight || !isLiveAlertsEnabled()) return;
-  liveAlertsRefreshInFlight = true;
-
-  try {
-    const currentSnapshot = await loadLiveAlertsCache();
-    if (!currentSnapshot) return;
-
-    const previousSnapshot = loadLiveAlertsSnapshot();
-    if (baseline || !previousSnapshot.matches?.length) {
-      saveLiveAlertsSnapshot(currentSnapshot);
-      updateLiveAlertsUi();
-      return;
-    }
-
-    const events = collectLiveAlertEvents(previousSnapshot, currentSnapshot);
-    for (const event of events) {
-      if (event.type === 'goal') {
-        await showLiveNotification(buildGoalNotification(event.match, event.goal));
-      } else if (event.type === 'final') {
-        await showLiveNotification(buildFinalNotification(event.match));
-      }
-    }
-
-    saveLiveAlertsSnapshot(currentSnapshot);
-    if (events.length) {
-      updateLiveAlertsUi(`Se detectaron ${events.length} aviso${events.length === 1 ? '' : 's'} nuevos.`);
-    }
-  } catch (error) {
-    console.error('No se pudieron actualizar las alertas en vivo:', error);
-    updateLiveAlertsUi('No se pudieron comprobar las alertas en vivo.');
-  } finally {
-    liveAlertsRefreshInFlight = false;
-  }
-}
-
-function kickLiveAlertsRefresh({ baseline = false } = {}) {
-  const now = Date.now();
-  if (!baseline && now - lastLiveAlertsKickAt < 15000) return;
-  lastLiveAlertsKickAt = now;
-  refreshLiveAlerts({ baseline }).catch(() => {});
-}
-
-function startLiveAlertsPolling() {
-  if (liveAlertsPollTimer) return;
-  liveAlertsPollTimer = setInterval(() => {
-    refreshLiveAlerts().catch(() => {});
-  }, LIVE_ALERTS_POLL_INTERVAL_MS);
-}
-
-function stopLiveAlertsPolling() {
-  if (liveAlertsPollTimer) {
-    clearInterval(liveAlertsPollTimer);
-    liveAlertsPollTimer = null;
-  }
 }
 
 function setupInstallPrompt() {
@@ -2513,79 +2299,6 @@ document.addEventListener('submit', async e => {
 
 document.getElementById('refreshApiBtn').addEventListener('click', refreshFromApi);
 document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
-document.getElementById('liveAlertsBtn').addEventListener('click', async () => {
-  const permission = await ensureLiveAlertsPermission();
-  if (permission !== 'granted') {
-    setLiveAlertsEnabled(false);
-    updateLiveAlertsUi(permission === 'denied'
-      ? 'Has bloqueado las notificaciones del navegador.'
-      : 'No se han activado las alertas.');
-    stopLiveAlertsPolling();
-    return;
-  }
-
-  const enabled = !isLiveAlertsEnabled();
-  setLiveAlertsEnabled(enabled);
-  updateLiveAlertsUi();
-
-  if (enabled) {
-    await refreshLiveAlerts({ baseline: true });
-    startLiveAlertsPolling();
-  } else {
-    stopLiveAlertsPolling();
-    localStorage.removeItem(LS_KEYS.liveAlertsSnapshot);
-  }
-});
-document.getElementById('testNotificationBtn').addEventListener('click', async () => {
-  try {
-    await triggerTestNotification();
-    updateLiveAlertsUi('Prueba de notificación enviada.');
-    alert('Notificación de prueba enviada.');
-  } catch (error) {
-    console.error('No se pudo lanzar la notificación de prueba:', error);
-    alert('No se pudo lanzar la notificación de prueba: ' + error.message);
-  }
-});
-document.getElementById('runLiveAlertsBtn').addEventListener('click', async () => {
-  if (!isAdmin()) return;
-  const button = document.getElementById('runLiveAlertsBtn');
-  const originalText = button.textContent;
-  button.disabled = true;
-  button.textContent = 'Enviando...';
-  try {
-    const result = await triggerLiveAlertsSync();
-    updateLiveAlertsUi(`Cron lanzado. ${result.live || 0} en juego, ${result.finished || 0} finalizados.`);
-    if (isLiveAlertsEnabled()) {
-      await refreshLiveAlerts();
-    }
-  } catch (error) {
-    console.error('No se pudo forzar el cron de alertas:', error);
-    alert('No se pudo forzar el cron de alertas: ' + error.message);
-  } finally {
-    button.disabled = false;
-    button.textContent = originalText;
-  }
-});
-document.getElementById('simulateLiveGoalBtn').addEventListener('click', async () => {
-  if (!isAdmin()) return;
-  const button = document.getElementById('simulateLiveGoalBtn');
-  const originalText = button.textContent;
-  button.disabled = true;
-  button.textContent = 'Simulando...';
-  try {
-    const result = await triggerSimulatedLiveGoal();
-    updateLiveAlertsUi(`Gol simulado: ${result.matchId} (${result.goals} goles).`);
-    if (isLiveAlertsEnabled()) {
-      await refreshLiveAlerts();
-    }
-  } catch (error) {
-    console.error('No se pudo simular el gol de prueba:', error);
-    alert('No se pudo simular el gol de prueba: ' + error.message);
-  } finally {
-    button.disabled = false;
-    button.textContent = originalText;
-  }
-});
 document.getElementById('installBtn').addEventListener('click', async () => {
   if (!deferredInstallPrompt) return;
   deferredInstallPrompt.prompt();
@@ -2692,7 +2405,6 @@ async function initializeResultsFlow() {
 
 applyTheme(document.documentElement.dataset.theme);
 applyAdminMode();
-updateLiveAlertsUi();
 renderAll();
 initializeResultsFlow();
 loadMiniResultsFromSupabase();
@@ -2702,19 +2414,15 @@ disablePwa();
 registerPwa();
 setupInstallPrompt();
 checkForAppUpdate();
-startLiveAlertsPolling();
-kickLiveAlertsRefresh({ baseline: true });
 setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);
 setInterval(checkForAppUpdate, VERSION_CHECK_INTERVAL_MS);
 window.addEventListener('online', maybeRefreshFromApiOnResume);
 window.addEventListener('pageshow', event => {
   if (!event.persisted) return;
   maybeRefreshFromApiOnResume();
-  kickLiveAlertsRefresh();
 });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     maybeRefreshFromApiOnResume();
-    kickLiveAlertsRefresh();
   }
 });
