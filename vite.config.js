@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import legacy from '@vitejs/plugin-legacy';
 import { execSync } from 'node:child_process';
 
 function gitValue(command, fallback) {
@@ -116,11 +117,13 @@ self.addEventListener('notificationclick', event => {
 
 export default defineConfig({
   base,
-  build: {
-    target: ['es2019', 'safari13']
-  },
   define: {
     __APP_VERSION__: JSON.stringify(appVersion)
   },
-  plugins: [versionManifest()]
+  plugins: [
+    legacy({
+      targets: ['defaults', 'safari >= 12', 'ios_saf >= 12']
+    }),
+    versionManifest()
+  ]
 });

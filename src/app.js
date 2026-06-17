@@ -8,9 +8,11 @@ import { simulateProbabilities } from './lib/probabilities.js';
 const DATA = window.PORRA_DATA;
 const DEFAULT_API_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
 const API_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+const API_FETCH_TIMEOUT_MS = 10000;
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const LIVE_ALERTS_POLL_INTERVAL_MS = 60 * 1000;
 const API_RESUME_REFRESH_THRESHOLD_MS = 2 * 60 * 1000;
+const PWA_ENABLED = false;
 const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw';
 const adminParam = new URLSearchParams(window.location.search).get('admin');
@@ -206,6 +208,23 @@ function persistApiCache() {
   localStorage.setItem(LS_KEYS.apiRefreshAt, String(lastApiRefreshAt || 0));
 }
 
+async function fetchJsonWithTimeout(url, options = {}, timeoutMs = API_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    return response;
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error(`Timeout al cargar datos tras ${Math.round(timeoutMs / 1000)}s`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function isAdmin() {
   return ADMIN_REQUESTED && Boolean(state.adminUser);
 }
@@ -246,6 +265,7 @@ async function checkForAppUpdate() {
 }
 
 async function registerPwa() {
+  if (!PWA_ENABLED) return;
   if (!('serviceWorker' in navigator)) return;
   try {
     serviceWorkerRegistration = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {
@@ -254,6 +274,26 @@ async function registerPwa() {
     await serviceWorkerRegistration.update();
   } catch (error) {
     console.error('No se pudo registrar la PWA:', error);
+  }
+}
+
+async function disablePwa() {
+  const installBanner = document.getElementById('installBanner');
+  if (installBanner) installBanner.hidden = true;
+  if (!('serviceWorker' in navigator)) return;
+
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map(registration => registration.unregister()));
+
+    if ('caches' in window) {
+      const cacheKeys = await caches.keys();
+      await Promise.all(cacheKeys
+        .filter(key => key.startsWith('porrazo-'))
+        .map(key => caches.delete(key)));
+    }
+  } catch (error) {
+    console.warn('No se pudo desactivar la PWA antigua:', error);
   }
 }
 
@@ -472,6 +512,10 @@ function stopLiveAlertsPolling() {
 
 function setupInstallPrompt() {
   const installBanner = document.getElementById('installBanner');
+  if (!PWA_ENABLED) {
+    installBanner.hidden = true;
+    return;
+  }
   const dismissBtn = document.getElementById('dismissInstallBannerBtn');
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (isStandalone) {
@@ -702,57 +746,6 @@ function sortableHeader(table, key, label, sort) {
   return `<th aria-sort="${ariaSort}"><button type="button" class="sort-button ${active ? 'active' : ''} ${directionClass}" data-sort-table="${table}" data-sort-key="${key}"><span>${indicator}</span>${label}</button></th>`;
 }
 
-function getAvailableTabs() {
-  return Array.from(document.querySelectorAll('.tab[data-tab]')).map(tab => tab.dataset.tab);
-}
-
-function getDefaultTab() {
-  return 'ranking';
-}
-
-function canAccessTab(tabId) {
-  return tabId !== 'settings' || isAdmin();
-}
-
-function parseRouteHash(hash = window.location.hash) {
-  const match = String(hash || '').match(/^#tab=([^&]+)$/);
-  return match ? decodeURIComponent(match[1]) : '';
-}
-
-function buildRouteHash(tabId) {
-  return `#tab=${encodeURIComponent(tabId)}`;
-}
-
-function activateTab(tabId, { updateHash = false, replaceHash = false } = {}) {
-  const availableTabs = getAvailableTabs();
-  const fallbackTab = getDefaultTab();
-  const nextTab = availableTabs.includes(tabId) && canAccessTab(tabId) ? tabId : fallbackTab;
-
-  state.activeTab = nextTab;
-  document.querySelectorAll('.tab,.panel').forEach(element => element.classList.remove('active'));
-  document.querySelector(`.tab[data-tab="${nextTab}"]`)?.classList.add('active');
-  document.getElementById(nextTab)?.classList.add('active');
-
-  if (updateHash) {
-    const nextHash = buildRouteHash(nextTab);
-    if (window.location.hash !== nextHash) {
-      if (replaceHash) {
-        history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash}`);
-      } else {
-        window.location.hash = nextHash;
-      }
-    }
-  }
-}
-
-function syncActiveTabFromLocation({ replaceIfMissing = false } = {}) {
-  const routeTab = parseRouteHash();
-  const availableTabs = getAvailableTabs();
-  const defaultTab = getDefaultTab();
-  const nextTab = availableTabs.includes(routeTab) && canAccessTab(routeTab) ? routeTab : defaultTab;
-  activateTab(nextTab, { updateHash: replaceIfMissing || routeTab !== nextTab, replaceHash: true });
-}
-
 function applyAdminMode() {
   const admin = isAdmin();
   document.querySelectorAll('[data-admin-only]').forEach(element => {
@@ -760,8 +753,14 @@ function applyAdminMode() {
   });
   document.body.classList.toggle('admin-mode', admin);
 
+  const settingsPanel = document.getElementById('settings');
+  if (!admin && settingsPanel.classList.contains('active')) {
+    document.querySelectorAll('.tab,.panel').forEach(element => element.classList.remove('active'));
+    document.querySelector('[data-tab="ranking"]').classList.add('active');
+    document.getElementById('ranking').classList.add('active');
+  }
+
   renderAdminAccess();
-  syncActiveTabFromLocation({ replaceIfMissing: true });
 }
 
 function renderAdminAccess() {
@@ -2240,7 +2239,7 @@ async function refreshFromApi(options = {}) {
   const btn = document.getElementById('refreshApiBtn');
   btn.disabled = true; btn.textContent = 'Actualizando...';
   try {
-    const res = await fetch(state.apiUrl, { cache: 'no-store' });
+    const res = await fetchJsonWithTimeout(state.apiUrl, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     state.apiFixtures = json.matches || [];
@@ -2393,7 +2392,9 @@ document.addEventListener('click', e => {
 
   const tab = e.target.closest('.tab');
   if (tab) {
-    activateTab(tab.dataset.tab, { updateHash: true });
+    document.querySelectorAll('.tab,.panel').forEach(el => el.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab).classList.add('active');
     return;
   }
   const saveMini = e.target.dataset.saveMini; if (saveMini) saveMiniResult(saveMini);
@@ -2609,11 +2610,11 @@ applyTheme(document.documentElement.dataset.theme);
 applyAdminMode();
 updateLiveAlertsUi();
 renderAll();
-syncActiveTabFromLocation({ replaceIfMissing: true });
 refreshFromApi();
 loadMiniResultsFromSupabase();
 loadStatsRankings();
 initializeAuth();
+disablePwa();
 registerPwa();
 setupInstallPrompt();
 checkForAppUpdate();
@@ -2623,7 +2624,6 @@ setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);
 setInterval(checkForAppUpdate, VERSION_CHECK_INTERVAL_MS);
 window.addEventListener('focus', checkForAppUpdate);
 window.addEventListener('focus', maybeRefreshFromApiOnResume);
-window.addEventListener('hashchange', () => syncActiveTabFromLocation());
 window.addEventListener('online', maybeRefreshFromApiOnResume);
 window.addEventListener('focus', () => refreshLiveAlerts().catch(() => {}));
 window.addEventListener('pageshow', () => {
