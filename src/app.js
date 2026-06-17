@@ -108,7 +108,8 @@ const state = {
   groupStandingsView: 'actual',
   matchGoalsExpanded: {},
   compareMatchId: '',
-  comparePlayers: []
+  comparePlayers: [],
+  historyCheckpointId: ''
 };
 let apiRefreshInProgress = false;
 let dismissedVersion = null;
@@ -153,6 +154,10 @@ const TOURNAMENT_TEAM_KEYS = new Set(DATA.matches.flatMap(match => [match.team1,
 const LOCAL_TEAM_BY_KEY = new Map(DATA.matches
   .flatMap(match => [match.team1, match.team2])
   .map(team => [teamKey(team), team]));
+const LOCAL_MATCH_BY_FIXTURE_KEY = new Map(DATA.matches
+  .map(match => [keyForTeams(match.team1, match.team2), match]));
+const MATCH_ORDER_INDEX = new Map(DATA.matches
+  .map((match, index) => [match.id, index]));
 const KNOCKOUT_SCORING = {
   DIECISEISAVOS: { label: 'Dieciseisavos', apiRound: 'Round of 32', previousRound: null, points: 3, expected: 32 },
   OCTAVOS: { label: 'Octavos', apiRound: 'Round of 16', previousRound: 'Round of 32', points: 5, expected: 16 },
@@ -488,7 +493,13 @@ function setupInstallPrompt() {
 }
 
 function getResult(match) {
-  const api = state.apiResults[match.id];
+  const api = getResultFromMap(match, state.apiResults);
+  if (api) return { ...api, source: 'api' };
+  return null;
+}
+
+function getResultFromMap(match, resultsMap = {}) {
+  const api = resultsMap?.[match.id];
   if (api && Number.isFinite(api.home) && Number.isFinite(api.away)) return { ...api, source: 'api' };
   return null;
 }
@@ -515,14 +526,14 @@ function winnerFromApiMatch(match) {
   return Number(decidingScore[0]) > Number(decidingScore[1]) ? match.team1 : match.team2;
 }
 
-function getKnockoutReality() {
+function getKnockoutRealityFromFixtures(fixtures = state.apiFixtures) {
   const reality = {};
 
   for (const [stage, config] of Object.entries(KNOCKOUT_SCORING)) {
     const teams = new Set();
 
     if (config.apiRound) {
-      state.apiFixtures
+      fixtures
         .filter(match => match.round === config.apiRound)
         .flatMap(match => [match.team1, match.team2])
         .filter(isTournamentTeam)
@@ -530,7 +541,7 @@ function getKnockoutReality() {
     }
 
     if (config.previousRound) {
-      state.apiFixtures
+      fixtures
         .filter(match => match.round === config.previousRound)
         .map(winnerFromApiMatch)
         .filter(Boolean)
@@ -548,7 +559,11 @@ function getKnockoutReality() {
   return reality;
 }
 
-function calculatePlayerKnockout(playerId, reality = getKnockoutReality()) {
+function getKnockoutReality() {
+  return getKnockoutRealityFromFixtures(state.apiFixtures);
+}
+
+function calculatePlayerKnockoutFromReality(playerId, reality) {
   const breakdown = {};
   let points = 0;
 
@@ -566,11 +581,15 @@ function calculatePlayerKnockout(playerId, reality = getKnockoutReality()) {
   return { points, breakdown };
 }
 
-function calculateRanking() {
-  const knockoutReality = getKnockoutReality();
+function calculatePlayerKnockout(playerId, reality = getKnockoutReality()) {
+  return calculatePlayerKnockoutFromReality(playerId, reality);
+}
+
+function calculateRankingFromData(resultsMap = state.apiResults, fixtures = state.apiFixtures) {
+  const knockoutReality = getKnockoutRealityFromFixtures(fixtures);
   return DATA.players.map(player => {
     const group = DATA.matches.reduce((acc, match) => {
-      const result = getResult(match);
+      const result = getResultFromMap(match, resultsMap);
       const sc = scorePrediction(match.predictions[player.id], result);
       acc.points += sc.points;
       acc.exacts += sc.exact ? 1 : 0;
@@ -578,7 +597,7 @@ function calculateRanking() {
       acc.played += result ? 1 : 0;
       return acc;
     }, { points: 0, exacts: 0, signs: 0, played: 0 });
-    const knockout = calculatePlayerKnockout(player.id, knockoutReality);
+    const knockout = calculatePlayerKnockoutFromReality(player.id, knockoutReality);
     return {
       ...player,
       groupPoints: group.points,
@@ -590,6 +609,10 @@ function calculateRanking() {
       played: group.played
     };
   }).sort((a,b) => b.total - a.total || b.exacts - a.exacts || b.signs - a.signs || a.name.localeCompare(b.name));
+}
+
+function calculateRanking() {
+  return calculateRankingFromData(state.apiResults, state.apiFixtures);
 }
 
 function normalizeTeam(value) {
@@ -812,6 +835,147 @@ function renderRanking() {
         <td>${player.signs + player.exacts}</td>
         <td>${player.knockoutPoints}</td>
       </tr>`).join('')}</tbody>
+  `;
+}
+
+function buildHistoricalSnapshots() {
+  const playedEntries = state.apiFixtures
+    .map(fixture => {
+      if (!Array.isArray(fixture?.score?.ft) || fixture.score.ft.length < 2) return null;
+      const match = LOCAL_MATCH_BY_FIXTURE_KEY.get(keyForTeams(fixture.team1, fixture.team2));
+      if (!match) return null;
+
+      return {
+        fixture,
+        match,
+        result: {
+          home: Number(fixture.score.ft[0]),
+          away: Number(fixture.score.ft[1]),
+          date: fixture.date || fixture.utcDate || null,
+          utcDate: fixture.utcDate || fixture.date || null
+        },
+        timestamp: parseApiFixtureDateTime(fixture)?.getTime() || Number.POSITIVE_INFINITY
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const timeDiff = a.timestamp - b.timestamp;
+      if (timeDiff) return timeDiff;
+      return (MATCH_ORDER_INDEX.get(a.match.id) || 0) - (MATCH_ORDER_INDEX.get(b.match.id) || 0);
+    });
+
+  const cumulativeResults = {};
+  const cumulativeFixtures = [];
+
+  return playedEntries.map((entry, index) => {
+    cumulativeResults[entry.match.id] = entry.result;
+    cumulativeFixtures.push(entry.fixture);
+
+    const ranking = calculateRankingFromData(cumulativeResults, cumulativeFixtures)
+      .map((player, position) => ({ ...player, position: position + 1 }));
+
+    return {
+      id: entry.match.id,
+      order: index + 1,
+      match: entry.match,
+      fixture: entry.fixture,
+      result: entry.result,
+      ranking,
+      leader: ranking[0] || null,
+      playedMatches: index + 1
+    };
+  });
+}
+
+function historyCheckpointLabel(snapshot) {
+  return `${snapshot.order}. ${snapshot.match.team1} ${snapshot.result.home}-${snapshot.result.away} ${snapshot.match.team2}`;
+}
+
+function historyPositionChange(player, previousSnapshot) {
+  if (!previousSnapshot) return { symbol: '•', delta: 0, className: 'muted', label: 'Primera foto' };
+  const previous = previousSnapshot.ranking.find(item => item.id === player.id);
+  if (!previous) return { symbol: '•', delta: 0, className: 'muted', label: 'Sin referencia' };
+
+  const delta = previous.position - player.position;
+  if (delta > 0) return { symbol: '↑', delta, className: 'ok', label: `Sube ${delta}` };
+  if (delta < 0) return { symbol: '↓', delta: Math.abs(delta), className: 'bad', label: `Baja ${Math.abs(delta)}` };
+  return { symbol: '→', delta: 0, className: 'muted', label: 'Se mantiene' };
+}
+
+function renderHistory() {
+  const select = document.getElementById('historyCheckpointSelect');
+  const summary = document.getElementById('historySummary');
+  const table = document.getElementById('historyTable');
+  if (!select || !summary || !table) return;
+
+  const snapshots = buildHistoricalSnapshots();
+  if (!snapshots.length) {
+    select.innerHTML = '<option value="">Sin partidos resueltos</option>';
+    summary.innerHTML = '<p class="empty-state">Aún no hay suficientes resultados para construir el histórico.</p>';
+    table.innerHTML = '';
+    return;
+  }
+
+  if (!state.historyCheckpointId || !snapshots.some(snapshot => snapshot.id === state.historyCheckpointId)) {
+    state.historyCheckpointId = snapshots[snapshots.length - 1].id;
+  }
+
+  select.innerHTML = snapshots.map(snapshot => `
+    <option value="${snapshot.id}">${escapeHtml(historyCheckpointLabel(snapshot))}</option>
+  `).join('');
+  select.value = state.historyCheckpointId;
+
+  const snapshot = snapshots.find(item => item.id === state.historyCheckpointId) || snapshots[snapshots.length - 1];
+  const previousSnapshot = snapshots.find(item => item.order === snapshot.order - 1) || null;
+  const leaderChange = previousSnapshot?.leader && snapshot.leader && previousSnapshot.leader.id !== snapshot.leader.id;
+  const medals = ['🥇', '🥈', '🥉'];
+
+  summary.innerHTML = html`
+    <article class="card">
+      <b>${snapshot.playedMatches}/${DATA.matches.length}</b>
+      <span>partidos computados</span>
+    </article>
+    <article class="card">
+      <b>${snapshot.leader ? `⭐ ${snapshot.leader.name}` : '-'}</b>
+      <span>líder tras este partido</span>
+    </article>
+    <article class="card">
+      <b>${snapshot.leader?.total || 0}</b>
+      <span>puntos del líder</span>
+    </article>
+    <article class="card">
+      <b>${leaderChange ? 'Sí' : 'No'}</b>
+      <span>cambio de líder</span>
+    </article>
+  `;
+
+  table.innerHTML = html`
+    <thead><tr>
+      <th>#</th>
+      <th>Mov.</th>
+      <th>Participante</th>
+      <th>Total</th>
+      <th>1ª fase</th>
+      <th>Exactos</th>
+      <th>Aciertos</th>
+      <th>Cruces</th>
+      <th>Jugados</th>
+    </tr></thead>
+    <tbody>${snapshot.ranking.map(player => {
+      const movement = historyPositionChange(player, previousSnapshot);
+      return html`
+      <tr class="${player.position <= 3 ? `rank-${player.position}` : ''}">
+        <td class="ranking-position">${medals[player.position - 1] || player.position}</td>
+        <td class="${movement.className}" title="${movement.label}">${movement.symbol}${movement.delta ? ` ${movement.delta}` : ''}</td>
+        <td>${escapeHtml(player.name)}</td>
+        <td class="points">${player.total}</td>
+        <td>${player.groupPoints}</td>
+        <td>${player.exacts}</td>
+        <td>${player.signs + player.exacts}</td>
+        <td>${player.knockoutPoints}</td>
+        <td>${player.played}</td>
+      </tr>`;
+    }).join('')}</tbody>
   `;
 }
 
@@ -2034,7 +2198,7 @@ function renderSettings() {
   document.getElementById('apiUrlInput').value = state.apiUrl;
 }
 
-function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderProbabilities(); renderCompare(); renderMatches(); renderTeams(); renderStatistics(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
+function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderHistory(); renderProbabilities(); renderCompare(); renderMatches(); renderTeams(); renderStatistics(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
 
 async function loadMiniResultsFromSupabase() {
   const { data, error } = await supabase
@@ -2436,6 +2600,10 @@ document.getElementById('dismissUpdateBtn').addEventListener('click', () => {
   toast.hidden = true;
 });
 document.getElementById('rankingSearch').addEventListener('input', renderRanking);
+document.getElementById('historyCheckpointSelect').addEventListener('change', e => {
+  state.historyCheckpointId = e.target.value;
+  renderHistory();
+});
 document.getElementById('miniRankingSearch').addEventListener('input', renderMini);
 document.getElementById('groupFilter').addEventListener('change', renderMatches);
 document.getElementById('teamFilter').addEventListener('change', renderMatches);
