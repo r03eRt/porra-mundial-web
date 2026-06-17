@@ -120,6 +120,9 @@ let liveAlertsPollTimer = null;
 let liveAlertsRefreshInFlight = false;
 let appToastTimer = null;
 let lastApiRefreshAt = Number(localStorage.getItem(LS_KEYS.apiRefreshAt) || 0);
+let lastVersionCheckAt = 0;
+let lastResumeRefreshAt = 0;
+let lastLiveAlertsKickAt = 0;
 const INSTALL_BANNER_DISMISS_MS = 3 * 24 * 60 * 60 * 1000;
 const LIVE_ALERTS_CACHE_KIND = 'worldcup-2026';
 const LIVE_ALERTS_TABLE = 'football_live_cache';
@@ -270,6 +273,9 @@ function toggleTheme() {
 }
 
 async function checkForAppUpdate() {
+  const now = Date.now();
+  if (now - lastVersionCheckAt < 15000) return;
+  lastVersionCheckAt = now;
   try {
     const response = await fetch(`${import.meta.env.BASE_URL}version.json?t=${Date.now()}`, { cache: 'no-store' });
     if (!response.ok) return;
@@ -517,6 +523,13 @@ async function refreshLiveAlerts({ baseline = false } = {}) {
   } finally {
     liveAlertsRefreshInFlight = false;
   }
+}
+
+function kickLiveAlertsRefresh({ baseline = false } = {}) {
+  const now = Date.now();
+  if (!baseline && now - lastLiveAlertsKickAt < 15000) return;
+  lastLiveAlertsKickAt = now;
+  refreshLiveAlerts({ baseline }).catch(() => {});
 }
 
 function startLiveAlertsPolling() {
@@ -2144,8 +2157,10 @@ async function bootstrapWorldcupResultsCache() {
       state.rankingLoading = false;
       renderAll();
     }
+    return loaded;
   } catch (error) {
     console.warn('No se pudo cargar el cache de resultados desde Supabase:', error);
+    return false;
   }
 }
 
@@ -2336,6 +2351,9 @@ async function refreshFromApi(options = {}) {
 }
 
 function maybeRefreshFromApiOnResume() {
+  const now = Date.now();
+  if (now - lastResumeRefreshAt < 15000) return;
+  lastResumeRefreshAt = now;
   if (apiRefreshInProgress || !navigator.onLine) return;
   if (!lastApiRefreshAt || (Date.now() - lastApiRefreshAt) >= API_RESUME_REFRESH_THRESHOLD_MS) {
     refreshFromApi({ silent: true });
@@ -2665,12 +2683,18 @@ document.getElementById('importInput').addEventListener('change', async e => {
   renderAll();
 });
 
+async function initializeResultsFlow() {
+  const loadedFromSupabase = await bootstrapWorldcupResultsCache();
+  if (!loadedFromSupabase || !lastApiRefreshAt || (Date.now() - lastApiRefreshAt) >= API_RESUME_REFRESH_THRESHOLD_MS) {
+    refreshFromApi({ silent: true });
+  }
+}
+
 applyTheme(document.documentElement.dataset.theme);
 applyAdminMode();
 updateLiveAlertsUi();
 renderAll();
-bootstrapWorldcupResultsCache();
-refreshFromApi();
+initializeResultsFlow();
 loadMiniResultsFromSupabase();
 loadStatsRankings();
 initializeAuth();
@@ -2679,22 +2703,23 @@ registerPwa();
 setupInstallPrompt();
 checkForAppUpdate();
 startLiveAlertsPolling();
-refreshLiveAlerts({ baseline: true });
+kickLiveAlertsRefresh({ baseline: true });
 setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);
 setInterval(checkForAppUpdate, VERSION_CHECK_INTERVAL_MS);
 window.addEventListener('focus', checkForAppUpdate);
 window.addEventListener('focus', maybeRefreshFromApiOnResume);
 window.addEventListener('online', maybeRefreshFromApiOnResume);
-window.addEventListener('focus', () => refreshLiveAlerts().catch(() => {}));
-window.addEventListener('pageshow', () => {
+window.addEventListener('focus', () => kickLiveAlertsRefresh());
+window.addEventListener('pageshow', event => {
+  if (!event.persisted) return;
   checkForAppUpdate();
   maybeRefreshFromApiOnResume();
-  refreshLiveAlerts().catch(() => {});
+  kickLiveAlertsRefresh();
 });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     checkForAppUpdate();
     maybeRefreshFromApiOnResume();
-    refreshLiveAlerts().catch(() => {});
+    kickLiveAlertsRefresh();
   }
 });
