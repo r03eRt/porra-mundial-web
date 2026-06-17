@@ -684,6 +684,57 @@ function sortableHeader(table, key, label, sort) {
   return `<th aria-sort="${ariaSort}"><button type="button" class="sort-button ${active ? 'active' : ''} ${directionClass}" data-sort-table="${table}" data-sort-key="${key}"><span>${indicator}</span>${label}</button></th>`;
 }
 
+function getAvailableTabs() {
+  return Array.from(document.querySelectorAll('.tab[data-tab]')).map(tab => tab.dataset.tab);
+}
+
+function getDefaultTab() {
+  return 'ranking';
+}
+
+function canAccessTab(tabId) {
+  return tabId !== 'settings' || isAdmin();
+}
+
+function parseRouteHash(hash = window.location.hash) {
+  const match = String(hash || '').match(/^#tab=([^&]+)$/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
+function buildRouteHash(tabId) {
+  return `#tab=${encodeURIComponent(tabId)}`;
+}
+
+function activateTab(tabId, { updateHash = false, replaceHash = false } = {}) {
+  const availableTabs = getAvailableTabs();
+  const fallbackTab = getDefaultTab();
+  const nextTab = availableTabs.includes(tabId) && canAccessTab(tabId) ? tabId : fallbackTab;
+
+  state.activeTab = nextTab;
+  document.querySelectorAll('.tab,.panel').forEach(element => element.classList.remove('active'));
+  document.querySelector(`.tab[data-tab="${nextTab}"]`)?.classList.add('active');
+  document.getElementById(nextTab)?.classList.add('active');
+
+  if (updateHash) {
+    const nextHash = buildRouteHash(nextTab);
+    if (window.location.hash !== nextHash) {
+      if (replaceHash) {
+        history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash}`);
+      } else {
+        window.location.hash = nextHash;
+      }
+    }
+  }
+}
+
+function syncActiveTabFromLocation({ replaceIfMissing = false } = {}) {
+  const routeTab = parseRouteHash();
+  const availableTabs = getAvailableTabs();
+  const defaultTab = getDefaultTab();
+  const nextTab = availableTabs.includes(routeTab) && canAccessTab(routeTab) ? routeTab : defaultTab;
+  activateTab(nextTab, { updateHash: replaceIfMissing || routeTab !== nextTab, replaceHash: true });
+}
+
 function applyAdminMode() {
   const admin = isAdmin();
   document.querySelectorAll('[data-admin-only]').forEach(element => {
@@ -691,14 +742,8 @@ function applyAdminMode() {
   });
   document.body.classList.toggle('admin-mode', admin);
 
-  const settingsPanel = document.getElementById('settings');
-  if (!admin && settingsPanel.classList.contains('active')) {
-    document.querySelectorAll('.tab,.panel').forEach(element => element.classList.remove('active'));
-    document.querySelector('[data-tab="ranking"]').classList.add('active');
-    document.getElementById('ranking').classList.add('active');
-  }
-
   renderAdminAccess();
+  syncActiveTabFromLocation({ replaceIfMissing: true });
 }
 
 function renderAdminAccess() {
@@ -2294,8 +2339,8 @@ document.addEventListener('click', e => {
 
   const tab = e.target.closest('.tab');
   if (tab) {
-    document.querySelectorAll('.tab,.panel').forEach(el => el.classList.remove('active'));
-    tab.classList.add('active'); document.getElementById(tab.dataset.tab).classList.add('active');
+    activateTab(tab.dataset.tab, { updateHash: true });
+    return;
   }
   const saveMini = e.target.dataset.saveMini; if (saveMini) saveMiniResult(saveMini);
   const clearMini = e.target.dataset.clearMini; if (clearMini) clearMiniResult(clearMini);
@@ -2510,6 +2555,7 @@ applyTheme(document.documentElement.dataset.theme);
 applyAdminMode();
 updateLiveAlertsUi();
 renderAll();
+syncActiveTabFromLocation({ replaceIfMissing: true });
 refreshFromApi();
 loadMiniResultsFromSupabase();
 loadStatsRankings();
@@ -2523,6 +2569,7 @@ setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);
 setInterval(checkForAppUpdate, VERSION_CHECK_INTERVAL_MS);
 window.addEventListener('focus', checkForAppUpdate);
 window.addEventListener('focus', maybeRefreshFromApiOnResume);
+window.addEventListener('hashchange', () => syncActiveTabFromLocation());
 window.addEventListener('online', maybeRefreshFromApiOnResume);
 window.addEventListener('focus', () => refreshLiveAlerts().catch(() => {}));
 document.addEventListener('visibilitychange', () => {
