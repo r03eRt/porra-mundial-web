@@ -105,6 +105,7 @@ let serviceWorkerRegistration = null;
 let deferredInstallPrompt = null;
 let liveAlertsPollTimer = null;
 let liveAlertsRefreshInFlight = false;
+let appToastTimer = null;
 const INSTALL_BANNER_DISMISS_MS = 3 * 24 * 60 * 60 * 1000;
 const LIVE_ALERTS_CACHE_KIND = 'worldcup-2026';
 const LIVE_ALERTS_TABLE = 'football_live_cache';
@@ -275,6 +276,21 @@ function updateLiveAlertsUi() {
 
   button.disabled = false;
   button.textContent = enabled ? 'Desactivar alertas' : 'Activar alertas';
+}
+
+function showAppToast(message, duration = 2400) {
+  const toast = document.getElementById('appToast');
+  const text = document.getElementById('appToastMessage');
+  if (!toast || !text) return;
+
+  text.textContent = message;
+  toast.hidden = false;
+
+  if (appToastTimer) clearTimeout(appToastTimer);
+  appToastTimer = setTimeout(() => {
+    toast.hidden = true;
+    appToastTimer = null;
+  }, duration);
 }
 
 async function ensureLiveAlertsPermission() {
@@ -730,7 +746,7 @@ function renderRanking() {
       ${sortableHeader('ranking', 'total', 'Total', state.rankingSort)}
       ${sortableHeader('ranking', 'groupPoints', '1ª fase', state.rankingSort)}
       ${sortableHeader('ranking', 'exacts', 'Exactos', state.rankingSort)}
-      ${sortableHeader('ranking', 'signs', 'Quiniela', state.rankingSort)}
+      ${sortableHeader('ranking', 'signs', 'Aciertos', state.rankingSort)}
       ${sortableHeader('ranking', 'knockoutPoints', 'Cruces', state.rankingSort)}
     </tr></thead>
     <tbody>${rows.map(player => html`
@@ -740,7 +756,7 @@ function renderRanking() {
         <td class="points">${player.total}</td>
         <td>${player.groupPoints}</td>
         <td>${player.exacts}</td>
-        <td>${player.signs}</td>
+        <td>${player.signs + player.exacts}</td>
         <td>${player.knockoutPoints}</td>
       </tr>`).join('')}</tbody>
   `;
@@ -1905,6 +1921,7 @@ async function saveMiniResult(id) {
   if (!isAdmin()) return;
   const result = document.querySelector(`[data-mini-result="${id}"]`).value.trim();
   if (!result) return alert('Introduce la respuesta correcta.');
+  const question = DATA.miniQuestions.find(item => item.id === id);
 
   const { error } = await supabase
     .from('mini_results')
@@ -1914,10 +1931,12 @@ async function saveMiniResult(id) {
   state.miniResults[id] = result;
   localStorage.setItem(LS_KEYS.mini, JSON.stringify(state.miniResults));
   renderAll();
+  showAppToast(`Resultado guardado${question ? `: ${question.id}` : ''}.`);
 }
 
 async function clearMiniResult(id) {
   if (!isAdmin()) return;
+  const question = DATA.miniQuestions.find(item => item.id === id);
   const { error } = await supabase
     .from('mini_results')
     .delete()
@@ -1927,6 +1946,7 @@ async function clearMiniResult(id) {
   delete state.miniResults[id];
   localStorage.setItem(LS_KEYS.mini, JSON.stringify(state.miniResults));
   renderAll();
+  showAppToast(`Resultado eliminado${question ? `: ${question.id}` : ''}.`);
 }
 
 document.addEventListener('click', e => {
