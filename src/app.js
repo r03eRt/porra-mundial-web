@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { KNOCKOUT_STAGES, buildPlayerKnockoutBracket } from './lib/knockout-bracket.js';
 import { normalize, parseScore, signFromScore, statsCountryFlag, statsCountryLabel } from './lib/statistics-utils.js';
 import { TEAM_DETAIL_METRICS, calculateTeamStats, getTournamentTeams } from './lib/team-stats.js';
 import { buildFinalNotification, buildGoalNotification, collectLiveAlertEvents } from './lib/live-alerts.js';
@@ -245,10 +246,9 @@ function setLiveAlertsEnabled(enabled) {
   localStorage.setItem(LS_KEYS.liveAlertsEnabled, enabled ? '1' : '0');
 }
 
-function updateLiveAlertsUi(statusText = '') {
+function updateLiveAlertsUi() {
   const button = document.getElementById('liveAlertsBtn');
-  const status = document.getElementById('liveAlertsStatus');
-  if (!button || !status) return;
+  if (!button) return;
 
   const supported = 'Notification' in window;
   const permission = supported ? Notification.permission : 'unsupported';
@@ -270,9 +270,6 @@ function updateLiveAlertsUi(statusText = '') {
 
   button.disabled = false;
   button.textContent = enabled ? 'Desactivar alertas' : 'Activar alertas';
-  status.textContent = statusText || `Permiso: ${permission}. ${enabled
-    ? 'Alertas activas. La app comprobará si hay goles y el resultado final.'
-    : 'Pide notificaciones para recibir avisos cuando la app esté instalada o abierta.'}`;
 }
 
 async function ensureLiveAlertsPermission() {
@@ -701,6 +698,7 @@ function renderAdminAccess() {
 function renderSummary() {
   const played = DATA.matches.filter(getResult).length;
   const ranking = calculateRanking();
+  const lastUpdate = localStorage.getItem(LS_KEYS.lastUpdate) || 'sin actualizar';
   document.getElementById('summaryCards').innerHTML = html`
     <article class="card"><b>${DATA.players.length}</b><span>participantes</span></article>
     <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
@@ -708,7 +706,9 @@ function renderSummary() {
     <article class="card"><b>${ranking[0]?.total || 0}</b><span>puntos del líder</span></article>
     <article class="card"><b>${ranking.length ? `💩 ${ranking.at(-1).name}` : '-'}</b><span>el purria</span></article>
   `;
-  document.getElementById('lastUpdate').textContent = localStorage.getItem(LS_KEYS.lastUpdate) || 'sin actualizar';
+  const headerLastUpdate = document.getElementById('headerLastUpdate');
+  if (headerLastUpdate) headerLastUpdate.textContent = `Última actualización: ${lastUpdate}`;
+  document.getElementById('lastUpdate').textContent = lastUpdate;
 }
 
 function renderRanking() {
@@ -763,32 +763,91 @@ function getMatchday(match) {
   return Math.ceil(matchNumber / 2);
 }
 
+function scheduleTeamTokens(team) {
+  return [team, apiNameFor(team)]
+    .filter(Boolean)
+    .flatMap(value => [value, normalize(value)])
+    .filter(Boolean);
+}
+
+function parseApiFixtureDateTime(fixture) {
+  const rawDate = fixture?.utcDate || fixture?.date || '';
+  const rawTime = fixture?.time || '';
+  if (!rawDate) return null;
+
+  if (fixture?.utcDate) {
+    const direct = new Date(fixture.utcDate);
+    return Number.isNaN(direct.getTime()) ? null : direct;
+  }
+
+  const dateMatch = String(rawDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch = String(rawTime).match(/^(\d{2}):(\d{2})(?:\s+UTC([+-]\d+))?$/i);
+  if (!dateMatch) {
+    const fallback = new Date(rawDate);
+    return Number.isNaN(fallback.getTime()) ? null : fallback;
+  }
+
+  const [, year, month, day] = dateMatch;
+  if (!timeMatch) {
+    return new Date(`${year}-${month}-${day}T12:00:00Z`);
+  }
+
+  const [, hours, minutes, offsetRaw] = timeMatch;
+  const offsetHours = Number(offsetRaw || 0);
+  const utcHour = Number(hours) - offsetHours;
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), utcHour, Number(minutes), 0));
+}
+
 function findApiFixture(match) {
-  const team1 = normalize(match.team1);
-  const team2 = normalize(match.team2);
+  const localTeam1Tokens = scheduleTeamTokens(match.team1);
+  const localTeam2Tokens = scheduleTeamTokens(match.team2);
   return state.apiFixtures.find(apiMatch => {
     const apiTeam1 = normalize(apiMatch.team1 || apiMatch.homeTeam?.name || apiMatch.homeTeam?.shortName || '');
     const apiTeam2 = normalize(apiMatch.team2 || apiMatch.awayTeam?.name || apiMatch.awayTeam?.shortName || '');
+    const apiTokens1 = [apiTeam1, normalize(apiMatch.homeTeam?.name || ''), normalize(apiMatch.homeTeam?.shortName || '')].filter(Boolean);
+    const apiTokens2 = [apiTeam2, normalize(apiMatch.awayTeam?.name || ''), normalize(apiMatch.awayTeam?.shortName || '')].filter(Boolean);
     return (
-      (apiTeam1 === team1 && apiTeam2 === team2) ||
-      (apiTeam1 === team2 && apiTeam2 === team1)
+      (localTeam1Tokens.some(token => apiTokens1.includes(token)) && localTeam2Tokens.some(token => apiTokens2.includes(token))) ||
+      (localTeam1Tokens.some(token => apiTokens2.includes(token)) && localTeam2Tokens.some(token => apiTokens1.includes(token)))
     );
   }) || null;
 }
 
 function formatMatchSchedule(match) {
   const fixture = findApiFixture(match);
-  const rawDate = fixture?.utcDate || fixture?.date || null;
-  if (!rawDate) return 'Horario pendiente';
+  if (!fixture) return 'Horario pendiente';
 
-  const date = new Date(rawDate);
-  if (Number.isNaN(date.getTime())) return 'Horario pendiente';
+  const date = parseApiFixtureDateTime(fixture);
+  if (!date) return 'Horario pendiente';
 
-  const hasTime = /T\d{2}:\d{2}/.test(String(rawDate));
+  const hasTime = Boolean(fixture.utcDate || fixture.time);
   return new Intl.DateTimeFormat('es-ES', hasTime
-    ? { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Madrid' }
+    ? { dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23', timeZone: 'Europe/Madrid' }
     : { dateStyle: 'medium', timeZone: 'Europe/Madrid' }
   ).format(date);
+}
+
+function getMatchScheduleTimestamp(match) {
+  const fixture = findApiFixture(match);
+  const date = fixture ? parseApiFixtureDateTime(fixture) : null;
+  return date ? date.getTime() : Number.POSITIVE_INFINITY;
+}
+
+function compareMatchesForDisplay(a, b) {
+  const playedA = !!getResult(a);
+  const playedB = !!getResult(b);
+  if (playedA !== playedB) return playedA ? 1 : -1;
+
+  const timeDiff = getMatchScheduleTimestamp(a) - getMatchScheduleTimestamp(b);
+  if (timeDiff) return timeDiff;
+
+  return a.team1.localeCompare(b.team1, 'es') || a.team2.localeCompare(b.team2, 'es');
+}
+
+function getMatchdaySortKey(matchday) {
+  const pending = matchday.matches.filter(match => !getResult(match));
+  if (!pending.length) return Number.POSITIVE_INFINITY;
+  return Math.min(...pending.map(getMatchScheduleTimestamp));
 }
 
 function renderMatchCard(match) {
@@ -846,18 +905,20 @@ function renderMatches() {
   let matches = DATA.matches.filter(m => group === 'all' || m.group === group);
   matches = matches.filter(match => team === 'all' || match.team1 === team || match.team2 === team);
   matches = matches.filter(m => status === 'all' || (status === 'played' ? !!getResult(m) : !getResult(m)));
+  matches = [...matches].sort(compareMatchesForDisplay);
 
   const matchdays = [1, 2, 3]
     .map(number => {
-      const matchdayMatches = matches.filter(match => getMatchday(match) === number);
+      const matchdayMatches = matches.filter(match => getMatchday(match) === number).sort(compareMatchesForDisplay);
       const groups = [...new Set(matchdayMatches.map(match => match.group))]
         .sort()
         .map(groupName => ({
           name: groupName,
-          matches: matchdayMatches.filter(match => match.group === groupName)
+          matches: matchdayMatches.filter(match => match.group === groupName).sort(compareMatchesForDisplay)
         }));
       return { number, matches: matchdayMatches, groups };
     })
+    .sort((a, b) => getMatchdaySortKey(a) - getMatchdaySortKey(b) || a.number - b.number)
     .filter(matchday => matchday.matches.length);
 
   document.getElementById('matchesList').innerHTML = matchdays.length
@@ -1340,17 +1401,12 @@ function renderBracketTeam(team, status = 'pending') {
   return `<div class="bracket-team ${status}"><span class="bracket-flag">${TEAM_FLAGS[team] || '🏳️'}</span><span>${escapeHtml(team || 'Por definir')}</span><span class="bracket-status">${statusMark}</span></div>`;
 }
 
-function renderBracketRound(stage, playerId, stageScore) {
-  const teams = DATA.knockoutPredictions
-    .filter(prediction => prediction.stage === stage)
-    .sort((a, b) => a.slot - b.slot)
-    .map(prediction => prediction.predictions[playerId] || '');
-
+function renderBracketRound(stage, teams, stageScore, { matchOffset = 0, side = 'left' } = {}) {
   const matches = [];
   for (let index = 0; index < teams.length; index += 2) {
     matches.push(html`
-      <article class="bracket-match">
-        <span class="bracket-match-number">Cruce ${index / 2 + 1}</span>
+      <article class="bracket-match ${side === 'right' ? 'right-side' : ''}">
+        <span class="bracket-match-number">Cruce ${matchOffset + index / 2 + 1}</span>
         ${renderBracketTeam(teams[index], knockoutPredictionStatus(teams[index], stageScore))}
         ${renderBracketTeam(teams[index + 1], knockoutPredictionStatus(teams[index + 1], stageScore))}
       </article>
@@ -1358,7 +1414,7 @@ function renderBracketRound(stage, playerId, stageScore) {
   }
 
   return html`
-    <section class="bracket-round" style="--matches:${matches.length}">
+    <section class="bracket-round ${side === 'right' ? 'right-bracket-round' : ''}" style="--matches:${matches.length}">
       <div class="bracket-round-head">
         <h3>${stageScore.label}</h3>
         <span>${stageScore.hits} aciertos · +${stageScore.points} pts</span>
@@ -1369,13 +1425,47 @@ function renderBracketRound(stage, playerId, stageScore) {
   `;
 }
 
+function renderFinalRound(finalTeams, champion, finalScore, championScore) {
+  return html`
+    <section class="bracket-round bracket-final-round">
+      <div class="bracket-round-head">
+        <h3>Final</h3>
+        <span>${finalScore.hits} aciertos · +${finalScore.points} pts</span>
+        <small>${finalScore.resolved}/${finalScore.expected} selecciones confirmadas</small>
+      </div>
+      <div class="bracket-matches">
+        <article class="bracket-match">
+          <span class="bracket-match-number">Final</span>
+          ${renderBracketTeam(finalTeams[0], knockoutPredictionStatus(finalTeams[0], finalScore))}
+          ${renderBracketTeam(finalTeams[1], knockoutPredictionStatus(finalTeams[1], finalScore))}
+        </article>
+        <article class="bracket-match champion-card">
+          <span class="trophy" aria-hidden="true">★</span>
+          ${renderBracketTeam(champion, knockoutPredictionStatus(champion, championScore))}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
 function renderKnockout() {
   const playerId = document.getElementById('knockoutPlayerSelect').value || DATA.players[0].id;
   const player = DATA.players.find(item => item.id === playerId) || DATA.players[0];
   const champion = DATA.knockoutPredictions.find(prediction => prediction.stage === '1º')?.predictions[playerId] || '';
   const knockout = calculatePlayerKnockout(playerId);
-  const rounds = ['DIECISEISAVOS', 'OCTAVOS', 'CUARTOS', 'SEMIS', 'FINAL'];
+  const bracket = buildPlayerKnockoutBracket(DATA.knockoutPredictions, playerId, teamKey);
   const championScore = knockout.breakdown['1º'];
+  const halfRounds = KNOCKOUT_STAGES.slice(0, -1);
+  const leftRounds = halfRounds.map(stage => ({
+    stage,
+    teams: bracket[stage].slice(0, bracket[stage].length / 2),
+    matchOffset: 0
+  }));
+  const rightRounds = halfRounds.map(stage => ({
+    stage,
+    teams: bracket[stage].slice(bracket[stage].length / 2),
+    matchOffset: bracket[stage].length / 4
+  })).reverse();
 
   document.getElementById('knockoutScoreSummary').innerHTML = html`
     <article class="knockout-total">
@@ -1396,20 +1486,9 @@ function renderKnockout() {
       <strong>${escapeHtml(player.name)}</strong>
     </div>
     <div class="bracket">
-      ${rounds.map(stage => renderBracketRound(stage, playerId, knockout.breakdown[stage])).join('')}
-      <section class="bracket-round champion-round">
-        <div class="bracket-round-head">
-          <h3>Campeón</h3>
-          <span>${championScore.hits} aciertos · +${championScore.points} pts</span>
-          <small>${championScore.resolved}/${championScore.expected} confirmado</small>
-        </div>
-        <div class="bracket-matches">
-          <article class="bracket-match champion-card">
-            <span class="trophy" aria-hidden="true">★</span>
-            ${renderBracketTeam(champion, knockoutPredictionStatus(champion, championScore))}
-          </article>
-        </div>
-      </section>
+      ${leftRounds.map(({ stage, teams, matchOffset }) => renderBracketRound(stage, teams, knockout.breakdown[stage], { matchOffset })).join('')}
+      ${renderFinalRound(bracket.FINAL, champion, knockout.breakdown.FINAL, championScore)}
+      ${rightRounds.map(({ stage, teams, matchOffset }) => renderBracketRound(stage, teams, knockout.breakdown[stage], { matchOffset, side: 'right' })).join('')}
     </div>
   `;
 }
