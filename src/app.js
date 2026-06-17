@@ -3,6 +3,7 @@ import { KNOCKOUT_STAGES, buildPlayerKnockoutBracket } from './lib/knockout-brac
 import { normalize, parseScore, signFromScore, statsCountryFlag, statsCountryLabel } from './lib/statistics-utils.js';
 import { TEAM_DETAIL_METRICS, calculateTeamStats, getTournamentTeams } from './lib/team-stats.js';
 import { buildFinalNotification, buildGoalNotification, collectLiveAlertEvents } from './lib/live-alerts.js';
+import { simulateProbabilities } from './lib/probabilities.js';
 
 const DATA = window.PORRA_DATA;
 const DEFAULT_API_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
@@ -92,7 +93,11 @@ const state = {
   adminUser: null,
   rankingSort: { key: 'position', direction: 'asc' },
   miniRankingSort: { key: 'position', direction: 'asc' },
-  activeTab: 'ranking'
+  activeTab: 'ranking',
+  probabilities: null,
+  probabilitiesKey: '',
+  probabilitiesError: '',
+  probabilitiesExpanded: { players: false, teams: false, mini: false }
 };
 let apiRefreshInProgress = false;
 let dismissedVersion = null;
@@ -1589,11 +1594,144 @@ function renderMini() {
     }).join('')}</tbody>`;
 }
 
+function getProbabilitiesKey() {
+  return JSON.stringify({
+    apiResults: state.apiResults,
+    miniResults: state.miniResults,
+    playerRankings: state.playerRankings?.scrapedAt || state.playerRankings?.source || '',
+    teamRankings: state.teamRankings?.scrapedAt || state.teamRankings?.source || ''
+  });
+}
+
+function ensureProbabilities() {
+  const key = getProbabilitiesKey();
+  if (state.probabilities && state.probabilitiesKey === key) return state.probabilities;
+
+  try {
+    state.probabilities = simulateProbabilities({
+      data: DATA,
+      apiResults: state.apiResults,
+      apiFixtures: state.apiFixtures,
+      miniResults: state.miniResults,
+      playerRankings: state.playerRankings,
+      teamRankings: state.teamRankings
+    });
+    state.probabilitiesKey = key;
+    state.probabilitiesError = '';
+  } catch (error) {
+    state.probabilities = null;
+    state.probabilitiesError = error.message;
+    console.error('No se pudieron calcular las probabilidades:', error);
+  }
+
+  return state.probabilities;
+}
+
+function formatProbability(value) {
+  return `${(Number(value || 0) * 100).toFixed(1)}%`;
+}
+
+function formatAveragePoints(value) {
+  return Number(value || 0).toFixed(1);
+}
+
+function probabilityRows(rows, expanded) {
+  return expanded ? rows : rows.slice(0, 8);
+}
+
+function renderProbabilities() {
+  const meta = document.getElementById('probabilitiesMeta');
+  const playersTable = document.getElementById('probabilitiesPlayersTable');
+  const teamsTable = document.getElementById('probabilitiesTeamsTable');
+  const miniTable = document.getElementById('probabilitiesMiniTable');
+  const playersToggle = document.getElementById('probabilitiesPlayersToggle');
+  const teamsToggle = document.getElementById('probabilitiesTeamsToggle');
+  const miniToggle = document.getElementById('probabilitiesMiniToggle');
+
+  if (!Object.keys(state.apiResults).length) {
+    meta.textContent = 'Esperando resultados para calcular la simulación.';
+    playersTable.innerHTML = '<tbody><tr><td class="empty-state">Todavía no hay datos suficientes.</td></tr></tbody>';
+    teamsTable.innerHTML = '<tbody><tr><td class="empty-state">Todavía no hay datos suficientes.</td></tr></tbody>';
+    miniTable.innerHTML = '<tbody><tr><td class="empty-state">Todavía no hay datos suficientes.</td></tr></tbody>';
+    playersToggle.hidden = true;
+    teamsToggle.hidden = true;
+    miniToggle.hidden = true;
+    return;
+  }
+
+  const probabilities = ensureProbabilities();
+  if (!probabilities) {
+    meta.textContent = state.probabilitiesError || 'No se pudo calcular la simulación.';
+    playersTable.innerHTML = '<tbody><tr><td class="empty-state">No se pudieron calcular las probabilidades.</td></tr></tbody>';
+    teamsTable.innerHTML = '<tbody><tr><td class="empty-state">No se pudieron calcular las probabilidades.</td></tr></tbody>';
+    miniTable.innerHTML = '<tbody><tr><td class="empty-state">No se pudieron calcular las probabilidades.</td></tr></tbody>';
+    playersToggle.hidden = true;
+    teamsToggle.hidden = true;
+    miniToggle.hidden = true;
+    return;
+  }
+
+  meta.textContent = `Simulación Monte Carlo (${probabilities.meta.iterations} iteraciones) · ${probabilities.meta.pendingMatches} partidos pendientes · ${probabilities.meta.resolvedMiniQuestions}/${DATA.miniQuestions.length} preguntas mini resueltas.`;
+  const currentRanking = new Map(calculateRanking().map(player => [player.id, player.total]));
+  const currentMiniRanking = new Map(calculateMiniRanking().map(player => [player.id, player.miniPoints]));
+
+  const playerRows = probabilityRows(probabilities.players, state.probabilitiesExpanded.players);
+  playersTable.innerHTML = html`
+    <thead><tr><th>#</th><th>Participante</th><th>Prob. ganar</th><th>Media pts</th><th>Puntos actuales</th></tr></thead>
+    <tbody>${playerRows.map((player, index) => html`
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(player.name)}</td>
+        <td class="points">${formatProbability(player.winProbability)}</td>
+        <td>${formatAveragePoints(player.averagePoints)}</td>
+        <td>${currentRanking.get(player.id) || 0}</td>
+      </tr>
+    `).join('')}</tbody>
+  `;
+  playersToggle.hidden = probabilities.players.length <= 8;
+  playersToggle.textContent = state.probabilitiesExpanded.players ? 'Ver menos' : `Ver todos (${probabilities.players.length})`;
+
+  const teamRows = probabilityRows(probabilities.teams, state.probabilitiesExpanded.teams);
+  teamsTable.innerHTML = html`
+    <thead><tr><th>#</th><th>Selección</th><th>1/16</th><th>1/8</th><th>1/4</th><th>Semis</th><th>Final</th><th>Campeón</th></tr></thead>
+    <tbody>${teamRows.map((team, index) => html`
+      <tr>
+        <td>${index + 1}</td>
+        <td>${teamLabel(team.team)}</td>
+        <td>${formatProbability(team.dieciseisavos)}</td>
+        <td>${formatProbability(team.octavos)}</td>
+        <td>${formatProbability(team.cuartos)}</td>
+        <td>${formatProbability(team.semis)}</td>
+        <td>${formatProbability(team.final)}</td>
+        <td class="points">${formatProbability(team.champion)}</td>
+      </tr>
+    `).join('')}</tbody>
+  `;
+  teamsToggle.hidden = probabilities.teams.length <= 8;
+  teamsToggle.textContent = state.probabilitiesExpanded.teams ? 'Ver menos' : `Ver todas (${probabilities.teams.length})`;
+
+  const miniRows = probabilityRows(probabilities.miniPlayers, state.probabilitiesExpanded.mini);
+  miniTable.innerHTML = html`
+    <thead><tr><th>#</th><th>Participante</th><th>Prob. ganar</th><th>Media pts</th><th>Puntos actuales</th></tr></thead>
+    <tbody>${miniRows.map((player, index) => html`
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(player.name)}</td>
+        <td class="points">${formatProbability(player.winProbability)}</td>
+        <td>${formatAveragePoints(player.averagePoints)}</td>
+        <td>${currentMiniRanking.get(player.id) || 0}</td>
+      </tr>
+    `).join('')}</tbody>
+  `;
+  miniToggle.hidden = probabilities.miniPlayers.length <= 8;
+  miniToggle.textContent = state.probabilitiesExpanded.mini ? 'Ver menos' : `Ver todos (${probabilities.miniPlayers.length})`;
+}
+
 function renderSettings() {
   document.getElementById('apiUrlInput').value = state.apiUrl;
 }
 
-function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderMatches(); renderTeams(); renderStatistics(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
+function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderProbabilities(); renderMatches(); renderTeams(); renderStatistics(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
 
 async function loadMiniResultsFromSupabase() {
   const { data, error } = await supabase
@@ -1830,6 +1968,22 @@ document.addEventListener('click', e => {
   }
   if (e.target.matches('[data-close-predictions]')) {
     document.getElementById('matchPredictionsDialog').close();
+    return;
+  }
+
+  if (e.target.id === 'probabilitiesPlayersToggle') {
+    state.probabilitiesExpanded.players = !state.probabilitiesExpanded.players;
+    renderProbabilities();
+    return;
+  }
+  if (e.target.id === 'probabilitiesTeamsToggle') {
+    state.probabilitiesExpanded.teams = !state.probabilitiesExpanded.teams;
+    renderProbabilities();
+    return;
+  }
+  if (e.target.id === 'probabilitiesMiniToggle') {
+    state.probabilitiesExpanded.mini = !state.probabilitiesExpanded.mini;
+    renderProbabilities();
     return;
   }
 

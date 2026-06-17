@@ -45,6 +45,7 @@
 
     <nav class="tabs" aria-label="Secciones">
       <button class="tab active" data-tab="ranking">Clasificación porra</button>
+      <button class="tab" data-tab="probabilities">Probabilidades</button>
       <button class="tab" data-tab="mini">Mini-porra</button>
       <button class="tab" data-tab="matches">Partidos</button>
       <button class="tab" data-tab="teams">Equipos</button>
@@ -63,6 +64,60 @@
         <input id="rankingSearch" placeholder="Buscar participante..." />
       </div>
       <div class="table-wrap"><table id="rankingTable"></table></div>
+    </section>
+
+    <section id="probabilities" class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Probabilidades</h2>
+          <p id="probabilitiesMeta" class="hint">Estimación por simulación a partir de los resultados actuales y los pronósticos cargados.</p>
+        </div>
+      </div>
+
+      <article class="info-card probabilities-info">
+        <h3>Cómo se calcula</h3>
+        <ul>
+          <li>Porra principal: se simulan los partidos pendientes usando como base los marcadores pronosticados por los participantes, y en cada simulación se recalcula la clasificación completa.</li>
+          <li>Jugadores porra: el porcentaje mostrado es la frecuencia con la que cada participante termina primero. Si hay empate en cabeza, esa simulación se reparte entre los empatados.</li>
+          <li>Selecciones: se estima la probabilidad de llegar a dieciseisavos, octavos, cuartos, semifinales, final y de salir campeona.</li>
+          <li>Mini-porra: mezcla resultados ya resueltos con una estimación heurística para las preguntas abiertas, por lo que esta tabla es más orientativa que la de la porra principal.</li>
+        </ul>
+      </article>
+
+      <div class="probability-sections">
+        <section class="probability-card">
+          <div class="section-head">
+            <h3>Jugadores porra</h3>
+            <p class="hint">Probabilidad estimada de acabar primero en la porra principal.</p>
+          </div>
+          <div class="table-wrap"><table id="probabilitiesPlayersTable"></table></div>
+          <div class="probability-actions">
+            <button id="probabilitiesPlayersToggle" type="button" hidden></button>
+          </div>
+        </section>
+
+        <section class="probability-card">
+          <div class="section-head">
+            <h3>Selecciones</h3>
+            <p class="hint">Probabilidad estimada de llegar a cada ronda y de salir campeona.</p>
+          </div>
+          <div class="table-wrap"><table id="probabilitiesTeamsTable"></table></div>
+          <div class="probability-actions">
+            <button id="probabilitiesTeamsToggle" type="button" hidden></button>
+          </div>
+        </section>
+
+        <section class="probability-card">
+          <div class="section-head">
+            <h3>Jugadores mini-porra</h3>
+            <p class="hint">Estimación heurística según resultados ya cerrados y preguntas aún abiertas.</p>
+          </div>
+          <div class="table-wrap"><table id="probabilitiesMiniTable"></table></div>
+          <div class="probability-actions">
+            <button id="probabilitiesMiniToggle" type="button" hidden></button>
+          </div>
+        </section>
+      </div>
     </section>
 
     <section id="matches" class="panel">
