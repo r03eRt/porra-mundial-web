@@ -779,6 +779,29 @@ function renderHeaderSyncStatus() {
   `;
 }
 
+function calculateBestCurrentStreak() {
+  const playedMatches = DATA.matches
+    .filter(match => getResult(match))
+    .sort(compareMatchesForDisplay);
+
+  if (!playedMatches.length) return null;
+
+  const streaks = DATA.players.map(player => {
+    let streak = 0;
+    for (let index = playedMatches.length - 1; index >= 0; index -= 1) {
+      const score = scorePrediction(playedMatches[index].predictions[player.id], getResult(playedMatches[index]));
+      if (score.points > 0) {
+        streak += 1;
+      } else {
+        break;
+      }
+    }
+    return { player, streak };
+  }).sort((a, b) => b.streak - a.streak || a.player.name.localeCompare(b.player.name, 'es'));
+
+  return streaks[0]?.streak > 0 ? streaks[0] : null;
+}
+
 function renderSummary() {
   const played = DATA.matches.filter(getResult).length;
   const ranking = calculateRanking();
@@ -786,6 +809,7 @@ function renderSummary() {
   const nextMatch = DATA.matches
     .filter(match => !getResult(match))
     .sort((a, b) => getMatchScheduleTimestamp(a) - getMatchScheduleTimestamp(b))[0] || null;
+  const bestStreak = calculateBestCurrentStreak();
   document.getElementById('summaryCards').innerHTML = html`
     <article class="card"><b>${DATA.players.length}</b><span>participantes</span></article>
     <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
@@ -796,6 +820,11 @@ function renderSummary() {
       <b>${nextMatch ? `${TEAM_FLAGS[nextMatch.team1] || '🏳️'} ${nextMatch.team1}<span class="next-match-separator">-</span>${TEAM_FLAGS[nextMatch.team2] || '🏳️'} ${nextMatch.team2}` : '-'}</b>
       <span>${nextMatch ? 'siguiente partido' : 'sin partidos pendientes'}</span>
       <span class="card-detail">${nextMatch ? formatMatchSchedule(nextMatch) : ''}</span>
+    </article>
+    <article class="card">
+      <b>${bestStreak ? `🔥 ${bestStreak.player.name}` : '-'}</b>
+      <span>${bestStreak ? 'mejor racha actual' : 'sin rachas activas'}</span>
+      <span class="card-detail">${bestStreak ? `${bestStreak.streak} acierto${bestStreak.streak === 1 ? '' : 's'} seguido${bestStreak.streak === 1 ? '' : 's'}` : ''}</span>
     </article>
   `;
   renderHeaderSyncStatus();
