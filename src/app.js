@@ -2706,19 +2706,14 @@ startLiveAlertsPolling();
 kickLiveAlertsRefresh({ baseline: true });
 setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);
 setInterval(checkForAppUpdate, VERSION_CHECK_INTERVAL_MS);
-window.addEventListener('focus', checkForAppUpdate);
-window.addEventListener('focus', maybeRefreshFromApiOnResume);
 window.addEventListener('online', maybeRefreshFromApiOnResume);
-window.addEventListener('focus', () => kickLiveAlertsRefresh());
 window.addEventListener('pageshow', event => {
   if (!event.persisted) return;
-  checkForAppUpdate();
   maybeRefreshFromApiOnResume();
   kickLiveAlertsRefresh();
 });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    checkForAppUpdate();
     maybeRefreshFromApiOnResume();
     kickLiveAlertsRefresh();
   }
