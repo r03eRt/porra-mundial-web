@@ -829,7 +829,7 @@ function renderSummary() {
     <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
     <article class="card"><b>${ranking[0] ? `⭐ ${ranking[0].name}` : '-'}</b><span>líder actual</span></article>
     <article class="card"><b>${ranking[0]?.total || 0}</b><span>puntos del líder</span></article>
-    <article class="card"><b>${ranking.length ? `💩 ${ranking.at(-1).name}` : '-'}</b><span>el purria</span></article>
+    <article class="card"><b>${ranking.length ? `💩 ${ranking[ranking.length - 1].name}` : '-'}</b><span>el purria</span></article>
   `;
   renderHeaderSyncStatus();
   document.getElementById('lastUpdate').textContent = lastUpdate;

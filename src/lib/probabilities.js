@@ -987,7 +987,7 @@ function sampleWeightedAnswer(distribution, rng) {
     remaining -= item.weight;
     if (remaining <= 0) return item.answer;
   }
-  return distribution.at(-1).answer;
+  return distribution[distribution.length - 1].answer;
 }
 
 function scoreMiniAnswer(question, answer, result) {

@@ -126,7 +126,7 @@ export function playerNamesMatch(left, right) {
 
   const firstTokens = first.split(' ');
   const secondTokens = second.split(' ');
-  if (firstTokens.at(-1) !== secondTokens.at(-1)) return false;
+  if (firstTokens[firstTokens.length - 1] !== secondTokens[secondTokens.length - 1]) return false;
 
   const firstName = firstTokens[0] || '';
   const secondName = secondTokens[0] || '';
@@ -155,7 +155,7 @@ export function parseRankingTable(html) {
       position: row[0] || '',
       player: row[1] || '',
       team: row[2] || '',
-      value: row.at(-1) || '',
+      value: row[row.length - 1] || '',
       raw: row
     }))
   };

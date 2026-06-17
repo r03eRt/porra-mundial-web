@@ -116,6 +116,9 @@ self.addEventListener('notificationclick', event => {
 
 export default defineConfig({
   base,
+  build: {
+    target: ['es2019', 'safari13']
+  },
   define: {
     __APP_VERSION__: JSON.stringify(appVersion)
   },
