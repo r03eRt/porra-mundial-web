@@ -15,6 +15,8 @@ const API_RESUME_REFRESH_THRESHOLD_MS = 2 * 60 * 1000;
 const PWA_ENABLED = false;
 const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw';
+const WORLDCUP_RESULTS_TABLE = 'worldcup_results_cache';
+const WORLDCUP_RESULTS_KIND = 'openfootball-2026';
 const adminParam = new URLSearchParams(window.location.search).get('admin');
 const ADMIN_REQUESTED = new URLSearchParams(window.location.search).has('admin')
   && !['0', 'false', 'no'].includes(String(adminParam).toLowerCase());
@@ -206,6 +208,27 @@ function persistApiCache() {
   localStorage.setItem(LS_KEYS.apiResults, JSON.stringify(state.apiResults || {}));
   localStorage.setItem(LS_KEYS.apiFixtures, JSON.stringify(state.apiFixtures || []));
   localStorage.setItem(LS_KEYS.apiRefreshAt, String(lastApiRefreshAt || 0));
+}
+
+function applyResultsPayload(payload, { updatedAt } = {}) {
+  state.apiFixtures = Array.isArray(payload?.matches) ? payload.matches : [];
+  const resultByKey = {};
+  for (const apiMatch of state.apiFixtures) {
+    if (!apiMatch.score?.ft) continue;
+    resultByKey[keyForTeams(apiMatch.team1, apiMatch.team2)] = {
+      home: Number(apiMatch.score.ft[0]),
+      away: Number(apiMatch.score.ft[1]),
+      date: apiMatch.date || apiMatch.utcDate || null,
+      utcDate: apiMatch.utcDate || apiMatch.date || null
+    };
+  }
+  state.apiResults = {};
+  for (const match of DATA.matches) {
+    const found = resultByKey[keyForTeams(match.team1, match.team2)];
+    if (found) state.apiResults[match.id] = found;
+  }
+  lastApiRefreshAt = updatedAt ? new Date(updatedAt).getTime() || Date.now() : Date.now();
+  persistApiCache();
 }
 
 async function fetchJsonWithTimeout(url, options = {}, timeoutMs = API_FETCH_TIMEOUT_MS) {
@@ -2114,6 +2137,18 @@ async function loadMiniResultsFromSupabase() {
   renderMini();
 }
 
+async function bootstrapWorldcupResultsCache() {
+  try {
+    const loaded = await loadWorldcupResultsCache();
+    if (loaded) {
+      state.rankingLoading = false;
+      renderAll();
+    }
+  } catch (error) {
+    console.warn('No se pudo cargar el cache de resultados desde Supabase:', error);
+  }
+}
+
 async function loadStatsRankings() {
   const loadLocalRankings = async () => {
     const fetchRanking = async path => {
@@ -2183,6 +2218,23 @@ async function loadStatsRankings() {
   renderStatistics();
 }
 
+async function loadWorldcupResultsCache() {
+  const { data, error } = await supabase
+    .from(WORLDCUP_RESULTS_TABLE)
+    .select('kind,payload,updated_at')
+    .eq('kind', WORLDCUP_RESULTS_KIND)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data?.payload) return false;
+
+  applyResultsPayload(data.payload, { updatedAt: data.updated_at || data.payload.scrapedAt });
+  if (data.updated_at) {
+    localStorage.setItem(LS_KEYS.lastUpdate, new Date(data.updated_at).toLocaleString('es-ES'));
+  }
+  return true;
+}
+
 async function refreshStatsRankings() {
   const button = document.getElementById('statsRefreshBtn');
   const originalLabel = button.textContent;
@@ -2239,35 +2291,42 @@ async function refreshFromApi(options = {}) {
   const btn = document.getElementById('refreshApiBtn');
   btn.disabled = true; btn.textContent = 'Actualizando...';
   try {
-    const res = await fetchJsonWithTimeout(state.apiUrl, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    state.apiFixtures = json.matches || [];
-    const resultByKey = {};
-    for (const apiMatch of state.apiFixtures) {
-      if (!apiMatch.score?.ft) continue;
-      resultByKey[keyForTeams(apiMatch.team1, apiMatch.team2)] = {
-        home: Number(apiMatch.score.ft[0]),
-        away: Number(apiMatch.score.ft[1]),
-        date: apiMatch.date || apiMatch.utcDate || null,
-        utcDate: apiMatch.utcDate || apiMatch.date || null
-      };
+    const syncResponse = await fetchJsonWithTimeout(`${SUPABASE_URL}/functions/v1/sync-worldcup-results`, {
+      method: 'GET',
+      cache: 'no-store'
+    });
+
+    if (!syncResponse.ok) throw new Error(`HTTP ${syncResponse.status}`);
+
+    const syncPayload = await syncResponse.json();
+    if (syncPayload.ok === false) {
+      throw new Error(syncPayload.error || 'No se pudo sincronizar el cache de resultados.');
     }
-    state.apiResults = {};
-    for (const m of DATA.matches) {
-      const found = resultByKey[keyForTeams(m.team1, m.team2)];
-      if (found) state.apiResults[m.id] = found;
+
+    const loaded = await loadWorldcupResultsCache();
+    if (!loaded) {
+      throw new Error('Supabase no devolvió resultados cacheados tras la sincronización.');
     }
-    lastApiRefreshAt = Date.now();
-    persistApiCache();
+
     state.rankingLoading = false;
     localStorage.setItem(LS_KEYS.lastUpdate, new Date().toLocaleString('es-ES'));
     renderAll();
   } catch (err) {
-    state.rankingLoading = false;
-    renderRanking();
-    if (!silent) alert('No se pudieron actualizar los resultados automáticos. Error: ' + err.message);
-    console.error('Error al actualizar los resultados automáticos:', err);
+    console.warn('Fallo leyendo resultados desde Supabase cacheado. Intentando fallback directo...', err);
+    try {
+      const res = await fetchJsonWithTimeout(state.apiUrl, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      applyResultsPayload(json);
+      state.rankingLoading = false;
+      localStorage.setItem(LS_KEYS.lastUpdate, new Date().toLocaleString('es-ES'));
+      renderAll();
+    } catch (fallbackError) {
+      state.rankingLoading = false;
+      renderRanking();
+      if (!silent) alert('No se pudieron actualizar los resultados automáticos. Error: ' + fallbackError.message);
+      console.error('Error al actualizar los resultados automáticos:', fallbackError);
+    }
   } finally {
     apiRefreshInProgress = false;
     btn.disabled = false;
@@ -2610,6 +2669,7 @@ applyTheme(document.documentElement.dataset.theme);
 applyAdminMode();
 updateLiveAlertsUi();
 renderAll();
+bootstrapWorldcupResultsCache();
 refreshFromApi();
 loadMiniResultsFromSupabase();
 loadStatsRankings();

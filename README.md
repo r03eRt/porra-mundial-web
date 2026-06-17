@@ -215,6 +215,39 @@ Este es el flujo que he usado para dejarlo automático en Supabase:
 7. La web usa el cache de Supabase y cae al JSON local si falla.
    - Eso permite que GitHub Pages siga funcionando aunque el cron falle un día.
 
+## Cache de resultados del Mundial en Supabase
+
+La clasificación puede leer los resultados del Mundial desde Supabase en vez de consultar OpenFootball directamente desde cada móvil.
+
+Pasos:
+
+1. Ejecuta `supabase/setup.sql`.
+   - Añade la tabla `worldcup_results_cache`.
+   - Deja lectura pública para el frontend.
+
+2. Despliega la Edge Function:
+
+   ```bash
+   npx supabase functions deploy sync-worldcup-results
+   ```
+
+3. Verifica que `supabase/config.toml` incluye:
+
+   ```toml
+   [functions.sync-worldcup-results]
+   verify_jwt = false
+   ```
+
+4. Crea un cron cada 15 minutos apuntando a:
+
+   ```text
+   https://<project-ref>.supabase.co/functions/v1/sync-worldcup-results
+   ```
+
+5. La web intentará:
+   - sincronizar y leer `worldcup_results_cache`
+   - y si falla, hacer fallback al JSON directo de OpenFootball
+
 La guía reusable completa está en [docs/supabase-statistics-refresh.md](./docs/supabase-statistics-refresh.md), por si quieres copiar el mismo flujo a otro proyecto sin perder detalles.
 
 ## Deployment rápido
