@@ -20,6 +20,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 const LS_KEYS = {
   mini: 'porra.miniResults.v1',
   apiUrl: 'porra.apiUrl.v1',
+  apiResults: 'porra.apiResults.v1',
+  apiFixtures: 'porra.apiFixtures.v1',
+  apiRefreshAt: 'porra.apiRefreshAt.v1',
   lastUpdate: 'porra.lastUpdate.v1',
   theme: 'porra.theme.v1',
   installDismissedUntil: 'porra.installBanner.dismissedUntil.v1',
@@ -81,8 +84,8 @@ const TEAM_FLAGS = {
 const state = {
   apiUrl: localStorage.getItem(LS_KEYS.apiUrl) || DEFAULT_API_URL,
   miniResults: loadMiniResults(),
-  apiResults: {},
-  apiFixtures: [],
+  apiResults: loadStoredJson(LS_KEYS.apiResults, {}),
+  apiFixtures: loadStoredJson(LS_KEYS.apiFixtures, []),
   playerRankings: null,
   teamRankings: null,
   statsMode: 'players',
@@ -95,7 +98,7 @@ const state = {
   rankingSort: { key: 'position', direction: 'asc' },
   miniRankingSort: { key: 'position', direction: 'asc' },
   activeTab: 'ranking',
-  rankingLoading: true,
+  rankingLoading: !Object.keys(loadStoredJson(LS_KEYS.apiResults, {})).length,
   probabilities: null,
   probabilitiesKey: '',
   probabilitiesError: '',
@@ -112,7 +115,7 @@ let deferredInstallPrompt = null;
 let liveAlertsPollTimer = null;
 let liveAlertsRefreshInFlight = false;
 let appToastTimer = null;
-let lastApiRefreshAt = 0;
+let lastApiRefreshAt = Number(localStorage.getItem(LS_KEYS.apiRefreshAt) || 0);
 const INSTALL_BANNER_DISMISS_MS = 3 * 24 * 60 * 60 * 1000;
 const LIVE_ALERTS_CACHE_KIND = 'worldcup-2026';
 const LIVE_ALERTS_TABLE = 'football_live_cache';
@@ -186,6 +189,21 @@ function loadMiniResults() {
   } catch {
     return {};
   }
+}
+
+function loadStoredJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistApiCache() {
+  localStorage.setItem(LS_KEYS.apiResults, JSON.stringify(state.apiResults || {}));
+  localStorage.setItem(LS_KEYS.apiFixtures, JSON.stringify(state.apiFixtures || []));
+  localStorage.setItem(LS_KEYS.apiRefreshAt, String(lastApiRefreshAt || 0));
 }
 
 function isAdmin() {
@@ -768,6 +786,40 @@ function renderAdminAccess() {
     `;
 }
 
+function formatRelativeUpdateTime(timestamp) {
+  if (!timestamp) return 'sin actualizar';
+  const diffMs = Math.max(0, Date.now() - timestamp);
+  const diffMinutes = Math.floor(diffMs / 60000);
+  if (diffMinutes < 1) return 'hace menos de 1 min';
+  if (diffMinutes === 1) return 'hace 1 min';
+  if (diffMinutes < 60) return `hace ${diffMinutes} min`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours === 1) return 'hace 1 h';
+  if (diffHours < 24) return `hace ${diffHours} h`;
+  const diffDays = Math.floor(diffHours / 24);
+  return diffDays === 1 ? 'hace 1 día' : `hace ${diffDays} días`;
+}
+
+function renderHeaderSyncStatus() {
+  const headerLastUpdate = document.getElementById('headerLastUpdate');
+  if (!headerLastUpdate) return;
+
+  const lastUpdateLabel = localStorage.getItem(LS_KEYS.lastUpdate) || 'sin actualizar';
+  const hasCachedResults = Object.keys(state.apiResults || {}).length > 0;
+  const sourceLabel = apiRefreshInProgress
+    ? 'Actualizando resultados...'
+    : (hasCachedResults ? 'Mostrando resultados guardados y sincronizados' : 'Pendiente de cargar resultados');
+  const freshnessLabel = lastApiRefreshAt
+    ? `${formatRelativeUpdateTime(lastApiRefreshAt)}`
+    : 'sin datos en caché';
+
+  headerLastUpdate.innerHTML = html`
+    <strong>${escapeHtml(sourceLabel)}</strong>
+    <br />
+    <span>Última actualización: ${escapeHtml(lastUpdateLabel)} · ${escapeHtml(freshnessLabel)}</span>
+  `;
+}
+
 function renderSummary() {
   const played = DATA.matches.filter(getResult).length;
   const ranking = calculateRanking();
@@ -779,8 +831,7 @@ function renderSummary() {
     <article class="card"><b>${ranking[0]?.total || 0}</b><span>puntos del líder</span></article>
     <article class="card"><b>${ranking.length ? `💩 ${ranking.at(-1).name}` : '-'}</b><span>el purria</span></article>
   `;
-  const headerLastUpdate = document.getElementById('headerLastUpdate');
-  if (headerLastUpdate) headerLastUpdate.textContent = `Última actualización: ${lastUpdate}`;
+  renderHeaderSyncStatus();
   document.getElementById('lastUpdate').textContent = lastUpdate;
 }
 
@@ -2183,6 +2234,7 @@ async function refreshFromApi(options = {}) {
   const silent = options?.silent === true;
   if (apiRefreshInProgress) return;
   apiRefreshInProgress = true;
+  renderHeaderSyncStatus();
   state.rankingLoading = !Object.keys(state.apiResults).length;
   if (state.rankingLoading) renderRanking();
   const btn = document.getElementById('refreshApiBtn');
@@ -2208,6 +2260,7 @@ async function refreshFromApi(options = {}) {
       if (found) state.apiResults[m.id] = found;
     }
     lastApiRefreshAt = Date.now();
+    persistApiCache();
     state.rankingLoading = false;
     localStorage.setItem(LS_KEYS.lastUpdate, new Date().toLocaleString('es-ES'));
     renderAll();
@@ -2220,6 +2273,7 @@ async function refreshFromApi(options = {}) {
     apiRefreshInProgress = false;
     btn.disabled = false;
     btn.textContent = 'Actualizar datos';
+    renderHeaderSyncStatus();
   }
 }
 
@@ -2572,6 +2626,11 @@ window.addEventListener('focus', maybeRefreshFromApiOnResume);
 window.addEventListener('hashchange', () => syncActiveTabFromLocation());
 window.addEventListener('online', maybeRefreshFromApiOnResume);
 window.addEventListener('focus', () => refreshLiveAlerts().catch(() => {}));
+window.addEventListener('pageshow', () => {
+  checkForAppUpdate();
+  maybeRefreshFromApiOnResume();
+  refreshLiveAlerts().catch(() => {});
+});
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     checkForAppUpdate();
