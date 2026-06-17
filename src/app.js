@@ -820,29 +820,36 @@ function renderRanking() {
   const q = normalize(document.getElementById('rankingSearch').value);
   const medals = ['🥇', '🥈', '🥉'];
   const ranking = calculateRanking();
+  const historySnapshots = buildHistoricalSnapshots();
+  const previousSnapshot = historySnapshots.length > 1 ? historySnapshots[historySnapshots.length - 2] : null;
   const rows = sortRows(ranking
-    .map((player, index) => ({ ...player, position: index + 1 }))
+    .map((player, index) => ({ ...player, position: index + 1, hits: player.signs + player.exacts }))
     .filter(player => normalize(player.name).includes(q)), state.rankingSort);
   document.getElementById('rankingTable').innerHTML = html`
     <thead><tr>
       ${sortableHeader('ranking', 'position', '#', state.rankingSort)}
+      <th>Mov.</th>
       <th>Participante</th>
       ${sortableHeader('ranking', 'total', 'Total', state.rankingSort)}
       ${sortableHeader('ranking', 'groupPoints', '1ª fase', state.rankingSort)}
       ${sortableHeader('ranking', 'exacts', 'Exactos', state.rankingSort)}
-      ${sortableHeader('ranking', 'signs', 'Aciertos', state.rankingSort)}
+      ${sortableHeader('ranking', 'hits', 'Aciertos', state.rankingSort)}
       ${sortableHeader('ranking', 'knockoutPoints', 'Cruces', state.rankingSort)}
     </tr></thead>
-    <tbody>${rows.map(player => html`
+    <tbody>${rows.map(player => {
+      const movement = historyPositionChange(player, previousSnapshot);
+      return html`
       <tr class="${player.position <= 3 ? `rank-${player.position}` : ''}">
         <td class="ranking-position">${medals[player.position - 1] || (player.position === ranking.length ? '💩' : player.position)}</td>
+        <td class="${movement.className}" title="${movement.label}">${movement.symbol}${movement.delta ? ` ${movement.delta}` : ''}</td>
         <td>${player.name}</td>
         <td class="points">${player.total}</td>
         <td>${player.groupPoints}</td>
         <td>${player.exacts}</td>
         <td>${player.signs + player.exacts}</td>
         <td>${player.knockoutPoints}</td>
-      </tr>`).join('')}</tbody>
+      </tr>`;
+    }).join('')}</tbody>
   `;
 }
 
@@ -1806,7 +1813,7 @@ function calculateTopScorers() {
 
   return [...scorers.values()]
     .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name, 'es'))
-    .slice(0, 8);
+    .slice(0, 15);
 }
 
 function renderTopScorers() {
