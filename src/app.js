@@ -820,19 +820,82 @@ function parseApiFixtureDateTime(fixture) {
   return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), utcHour, Number(minutes), 0));
 }
 
-function findApiFixture(match) {
+function findApiFixtureInfo(match) {
   const localTeam1Tokens = scheduleTeamTokens(match.team1);
   const localTeam2Tokens = scheduleTeamTokens(match.team2);
-  return state.apiFixtures.find(apiMatch => {
+  for (const apiMatch of state.apiFixtures) {
     const apiTeam1 = normalize(apiMatch.team1 || apiMatch.homeTeam?.name || apiMatch.homeTeam?.shortName || '');
     const apiTeam2 = normalize(apiMatch.team2 || apiMatch.awayTeam?.name || apiMatch.awayTeam?.shortName || '');
     const apiTokens1 = [apiTeam1, normalize(apiMatch.homeTeam?.name || ''), normalize(apiMatch.homeTeam?.shortName || '')].filter(Boolean);
     const apiTokens2 = [apiTeam2, normalize(apiMatch.awayTeam?.name || ''), normalize(apiMatch.awayTeam?.shortName || '')].filter(Boolean);
-    return (
-      (localTeam1Tokens.some(token => apiTokens1.includes(token)) && localTeam2Tokens.some(token => apiTokens2.includes(token))) ||
-      (localTeam1Tokens.some(token => apiTokens2.includes(token)) && localTeam2Tokens.some(token => apiTokens1.includes(token)))
-    );
-  }) || null;
+    const direct = localTeam1Tokens.some(token => apiTokens1.includes(token)) && localTeam2Tokens.some(token => apiTokens2.includes(token));
+    if (direct) return { fixture: apiMatch, swapped: false };
+    const swapped = localTeam1Tokens.some(token => apiTokens2.includes(token)) && localTeam2Tokens.some(token => apiTokens1.includes(token));
+    if (swapped) return { fixture: apiMatch, swapped: true };
+  }
+  return null;
+}
+
+function findApiFixture(match) {
+  return findApiFixtureInfo(match)?.fixture || null;
+}
+
+function getMatchGoalBreakdown(match) {
+  const fixtureInfo = findApiFixtureInfo(match);
+  if (!fixtureInfo?.fixture) return null;
+
+  const { fixture, swapped } = fixtureInfo;
+  const homeGoals = swapped ? (fixture.goals2 || []) : (fixture.goals1 || []);
+  const awayGoals = swapped ? (fixture.goals1 || []) : (fixture.goals2 || []);
+
+  return {
+    team1: homeGoals.map(goal => ({
+      name: goal.name || '',
+      minute: goal.minute || '',
+      penalty: Boolean(goal.penalty),
+      ownGoal: Boolean(goal.owngoal)
+    })),
+    team2: awayGoals.map(goal => ({
+      name: goal.name || '',
+      minute: goal.minute || '',
+      penalty: Boolean(goal.penalty),
+      ownGoal: Boolean(goal.owngoal)
+    }))
+  };
+}
+
+function formatGoalEvent(goal) {
+  if (!goal?.name) return '';
+  const marker = goal.ownGoal ? '↺ P.P.' : (goal.penalty ? '🎯' : '⚽');
+  const minute = goal.minute ? `${escapeHtml(goal.minute)}'` : '';
+  return `<span class="goal-event"><span class="goal-marker">${marker}</span><span>${escapeHtml(goal.name)}${minute ? ` ${minute}` : ''}</span></span>`;
+}
+
+function renderGoalBreakdown(match) {
+  const goals = getMatchGoalBreakdown(match);
+  const result = getResult(match);
+  if (!result || !goals) return '';
+
+  const lines = [];
+  if (goals.team1.length) {
+    lines.push(html`
+      <div class="goal-line">
+        <strong>${teamLabel(match.team1)}</strong>
+        <div class="goal-events">${goals.team1.map(formatGoalEvent).join('')}</div>
+      </div>
+    `);
+  }
+  if (goals.team2.length) {
+    lines.push(html`
+      <div class="goal-line">
+        <strong>${teamLabel(match.team2)}</strong>
+        <div class="goal-events">${goals.team2.map(formatGoalEvent).join('')}</div>
+      </div>
+    `);
+  }
+  if (!lines.length) return '';
+
+  return `<div class="match-goals">${lines.join('')}</div>`;
 }
 
 function formatMatchSchedule(match) {
@@ -879,6 +942,7 @@ function renderMatchCard(match) {
     <h3 class="teams"><span>${teamLabel(match.team1)}</span><span class="versus">-</span><span>${teamLabel(match.team2)}</span></h3>
     <div class="match-schedule">${escapeHtml(formatMatchSchedule(match))}</div>
     <div class="match-score ${result ? '' : 'pending'}">${result ? `${result.home} - ${result.away}` : 'Pendiente'}</div>
+    ${result ? renderGoalBreakdown(match) : ''}
     <div class="source">${result ? 'Resultado actualizado automáticamente' : 'Sin resultado disponible en la API'} · Ver predicciones</div>
   </article>`;
 }
@@ -896,6 +960,7 @@ function openMatchPredictions(matchId) {
         <h2>${teamLabel(match.team1)} - ${teamLabel(match.team2)}</h2>
         <p class="match-schedule">${escapeHtml(formatMatchSchedule(match))}</p>
         <p>${result ? `Resultado: ${result.home}-${result.away}` : 'Partido pendiente'}</p>
+        ${result ? renderGoalBreakdown(match) : ''}
       </div>
       <button type="button" class="dialog-close" data-close-predictions aria-label="Cerrar">×</button>
     </div>
@@ -1079,7 +1144,7 @@ function renderTeams() {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Partido</th><th>Resultado</th><th>Estado</th></tr></thead>
+          <thead><tr><th>Partido</th><th>Resultado</th><th>Goles</th><th>Estado</th></tr></thead>
           <tbody>
             ${recentMatches.length ? recentMatches.map(match => {
               const result = getResult(match);
@@ -1090,10 +1155,11 @@ function renderTeams() {
                 <tr>
                   <td>${teamLabel(selectedTeam)} - ${teamLabel(opponent)}</td>
                   <td>${result ? score : '<span class="muted">pendiente</span>'}</td>
+                  <td class="goal-cell">${result ? renderGoalBreakdown(match) : '<span class="muted">-</span>'}</td>
                   <td>${result ? 'Jugado' : 'Pendiente'}</td>
                 </tr>
               `;
-            }).join('') : '<tr><td colspan="3" class="empty-state">Todavía no hay partidos disponibles.</td></tr>'}
+            }).join('') : '<tr><td colspan="4" class="empty-state">Todavía no hay partidos disponibles.</td></tr>'}
           </tbody>
         </table>
       </div>
