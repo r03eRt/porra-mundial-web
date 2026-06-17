@@ -26,6 +26,8 @@ const LS_KEYS = {
   apiFixtures: 'porra.apiFixtures.v1',
   apiRefreshAt: 'porra.apiRefreshAt.v1',
   lastUpdate: 'porra.lastUpdate.v1',
+  softAlertsSnapshot: 'porra.softAlerts.snapshot.v1',
+  softAlertsSeen: 'porra.softAlerts.seen.v1',
   theme: 'porra.theme.v1',
   installDismissedUntil: 'porra.installBanner.dismissedUntil.v1'
 };
@@ -113,6 +115,7 @@ let dismissedVersion = null;
 let serviceWorkerRegistration = null;
 let deferredInstallPrompt = null;
 let appToastTimer = null;
+let appToastQueueTimer = null;
 let lastApiRefreshAt = Number(localStorage.getItem(LS_KEYS.apiRefreshAt) || 0);
 let lastVersionCheckAt = 0;
 let lastResumeRefreshAt = 0;
@@ -330,6 +333,118 @@ function showAppToast(message, duration = 2400) {
     toast.hidden = true;
     appToastTimer = null;
   }, duration);
+}
+
+function loadSoftAlertSnapshot() {
+  return loadStoredJson(LS_KEYS.softAlertsSnapshot, null);
+}
+
+function saveSoftAlertSnapshot(snapshot) {
+  localStorage.setItem(LS_KEYS.softAlertsSnapshot, JSON.stringify(snapshot));
+}
+
+function loadSeenSoftAlerts() {
+  const stored = loadStoredJson(LS_KEYS.softAlertsSeen, []);
+  return Array.isArray(stored) ? stored.filter(value => typeof value === 'string') : [];
+}
+
+function saveSeenSoftAlerts(ids) {
+  localStorage.setItem(LS_KEYS.softAlertsSeen, JSON.stringify(ids.slice(-80)));
+}
+
+function buildSoftAlertSnapshot() {
+  const ranking = calculateRanking();
+  return {
+    leaderId: ranking[0]?.id || '',
+    leaderName: ranking[0]?.name || '',
+    leaderPoints: ranking[0]?.total || 0,
+    results: Object.fromEntries(DATA.matches
+      .map(match => {
+        const result = getResult(match);
+        return result ? [match.id, `${result.home}-${result.away}`] : null;
+      })
+      .filter(Boolean)),
+    playedMatches: DATA.matches.filter(getResult).length
+  };
+}
+
+function buildSoftAlertEvents(previousSnapshot, nextSnapshot) {
+  if (!previousSnapshot?.results) return [];
+
+  const previousResults = previousSnapshot.results || {};
+  const nextResults = nextSnapshot.results || {};
+  const events = [];
+
+  const finishedMatches = DATA.matches.filter(match => !previousResults[match.id] && nextResults[match.id]);
+  if (finishedMatches.length) {
+    const firstMatch = finishedMatches[0];
+    const score = nextResults[firstMatch.id];
+    const extraCount = finishedMatches.length - 1;
+    const summary = extraCount > 0 ? ` y ${extraCount} más` : '';
+    events.push({
+      id: `match-finished:${finishedMatches.map(match => `${match.id}:${nextResults[match.id]}`).join('|')}`,
+      message: `Final: ${firstMatch.team1} ${score} ${firstMatch.team2}${summary}.`
+    });
+  }
+
+  if (
+    previousSnapshot.leaderId
+    && nextSnapshot.leaderId
+    && previousSnapshot.leaderId !== nextSnapshot.leaderId
+  ) {
+    events.push({
+      id: `leader-changed:${nextSnapshot.leaderId}:${nextSnapshot.leaderPoints}`,
+      message: `Nuevo líder de la porra: ${nextSnapshot.leaderName} con ${nextSnapshot.leaderPoints} puntos.`
+    });
+  }
+
+  const resultsChanged = previousSnapshot.playedMatches !== nextSnapshot.playedMatches
+    || Object.keys(previousResults).length !== Object.keys(nextResults).length
+    || Object.entries(nextResults).some(([matchId, score]) => previousResults[matchId] !== score);
+
+  if (resultsChanged) {
+    events.push({
+      id: `ranking-updated:${nextSnapshot.playedMatches}:${nextSnapshot.leaderId}:${nextSnapshot.leaderPoints}`,
+      message: 'Clasificación actualizada según los últimos resultados.'
+    });
+  }
+
+  return events;
+}
+
+function enqueueSoftAlertToasts(events) {
+  if (!events.length) return;
+
+  const seen = loadSeenSoftAlerts();
+  const unseenEvents = events.filter(event => !seen.includes(event.id));
+  if (!unseenEvents.length) return;
+
+  saveSeenSoftAlerts([...seen, ...unseenEvents.map(event => event.id)]);
+
+  if (appToastQueueTimer) {
+    clearTimeout(appToastQueueTimer);
+    appToastQueueTimer = null;
+  }
+
+  const queue = unseenEvents.slice(0, 3);
+  const showNext = index => {
+    if (index >= queue.length) {
+      appToastQueueTimer = null;
+      return;
+    }
+    showAppToast(queue[index].message);
+    appToastQueueTimer = setTimeout(() => showNext(index + 1), 2800);
+  };
+
+  showNext(0);
+}
+
+function processSoftAlerts() {
+  const previousSnapshot = loadSoftAlertSnapshot();
+  const nextSnapshot = buildSoftAlertSnapshot();
+  const events = buildSoftAlertEvents(previousSnapshot, nextSnapshot);
+  saveSoftAlertSnapshot(nextSnapshot);
+  enqueueSoftAlertToasts(events);
 }
 
 function setupInstallPrompt() {
@@ -2030,6 +2145,7 @@ async function loadWorldcupResultsCache() {
   if (!data?.payload) return false;
 
   applyResultsPayload(data.payload, { updatedAt: data.updated_at || data.payload.scrapedAt });
+  processSoftAlerts();
   if (data.updated_at) {
     localStorage.setItem(LS_KEYS.lastUpdate, new Date(data.updated_at).toLocaleString('es-ES'));
   }
@@ -2119,6 +2235,7 @@ async function refreshFromApi(options = {}) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       applyResultsPayload(json);
+      processSoftAlerts();
       state.rankingLoading = false;
       localStorage.setItem(LS_KEYS.lastUpdate, new Date().toLocaleString('es-ES'));
       renderAll();
