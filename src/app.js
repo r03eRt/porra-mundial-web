@@ -902,16 +902,118 @@ function historyPositionChange(player, previousSnapshot) {
   return { symbol: '→', delta: 0, className: 'muted', label: 'Se mantiene' };
 }
 
+function historyLineColor(index) {
+  const palette = ['#53e0b4', '#5da9ff', '#ffd76a', '#ff8f6b', '#c08cff', '#7ce2ff', '#ff6b6b', '#8bd450', '#f6c177', '#7aa2f7', '#f7768e', '#9ece6a', '#bb9af7', '#e0af68', '#73daca', '#c0caf5'];
+  return palette[index % palette.length];
+}
+
+function renderHistoryChart(snapshots, snapshot) {
+  const container = document.getElementById('historyChart');
+  if (!container || !snapshots.length) return;
+  const mobileOnlyTop = window.matchMedia('(max-width: 760px)').matches;
+
+  const width = Math.max(720, snapshots.length * 56);
+  const height = 320;
+  const padding = { top: 18, right: 22, bottom: 34, left: mobileOnlyTop ? 88 : 126 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const playerCount = DATA.players.length;
+  const maxIndex = Math.max(1, snapshots.length - 1);
+  const maxPosition = Math.max(1, playerCount - 1);
+  const selectedIndex = Math.max(0, snapshots.findIndex(item => item.id === snapshot.id));
+
+  const xFor = index => padding.left + (chartWidth * (maxIndex ? index / maxIndex : 0));
+  const yFor = position => padding.top + (chartHeight * (maxPosition ? (position - 1) / maxPosition : 0));
+
+  const visiblePlayerIds = new Set((mobileOnlyTop ? snapshot.ranking.slice(0, 8) : snapshot.ranking).map(player => player.id));
+  const series = DATA.players
+    .filter(player => visiblePlayerIds.has(player.id))
+    .map((player, index) => {
+      const color = historyLineColor(index);
+      const points = snapshots.map((item, snapshotIndex) => {
+        const row = item.ranking.find(entry => entry.id === player.id);
+      return {
+        snapshotId: item.id,
+        snapshotIndex,
+        position: row?.position || playerCount,
+        total: row?.total || 0
+      };
+    });
+    const selectedPoint = points[selectedIndex] || points[points.length - 1];
+      return { player, color, points, selectedPoint };
+    });
+
+  const horizontalMarks = Array.from(new Set([1, Math.ceil(playerCount / 2), playerCount])).sort((a, b) => a - b);
+  const lineMarkup = series.map(item => {
+    const path = item.points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${xFor(point.snapshotIndex).toFixed(1)} ${yFor(point.position).toFixed(1)}`).join(' ');
+    const selectedX = xFor(item.selectedPoint.snapshotIndex).toFixed(1);
+    const selectedY = yFor(item.selectedPoint.position).toFixed(1);
+    const firstPoint = item.points[0];
+    const firstY = yFor(firstPoint.position).toFixed(1);
+    return `
+      <path d="${path}" fill="none" stroke="${item.color}" stroke-width="${item.player.id === snapshot.leader?.id ? 3.5 : 2}" stroke-linecap="round" stroke-linejoin="round" opacity="${item.player.id === snapshot.leader?.id ? 1 : 0.7}" />
+      <text x="${(padding.left - 8).toFixed(1)}" y="${(Number(firstY) + 2).toFixed(1)}" fill="${item.color}" font-size="7" font-weight="700" text-anchor="end">${escapeHtml(item.player.name)}</text>
+      <circle cx="${selectedX}" cy="${selectedY}" r="${item.player.id === snapshot.leader?.id ? 4.5 : 3.2}" fill="${item.color}" />
+    `;
+  }).join('');
+
+  const gridMarkup = horizontalMarks.map(mark => `
+    <g>
+      <line x1="${padding.left}" y1="${yFor(mark).toFixed(1)}" x2="${width - padding.right}" y2="${yFor(mark).toFixed(1)}" stroke="rgba(153,166,194,0.18)" stroke-width="1" />
+      <text x="${padding.left - 10}" y="${(yFor(mark) + 4).toFixed(1)}" fill="var(--muted)" font-size="11" text-anchor="end">${mark}</text>
+    </g>
+  `).join('');
+
+  const xLabelsMarkup = snapshots.map((item, index) => `
+    <text x="${xFor(index).toFixed(1)}" y="${height - 10}" fill="var(--muted)" font-size="10" text-anchor="middle">${item.order}</text>
+  `).join('');
+
+  const markerX = xFor(selectedIndex).toFixed(1);
+  const legend = series
+    .slice()
+    .sort((a, b) => a.selectedPoint.position - b.selectedPoint.position || b.selectedPoint.total - a.selectedPoint.total)
+    .map(item => `
+      <div class="history-legend-item">
+        <span class="history-legend-swatch" style="background:${item.color}"></span>
+        <span class="history-legend-name">${escapeHtml(item.player.name)}</span>
+        <span class="history-legend-meta">#${item.selectedPoint.position} · ${item.selectedPoint.total} pts</span>
+      </div>
+    `).join('');
+
+  container.innerHTML = html`
+    <div class="history-chart-head">
+      <div>
+        <h3>Gráfica de posiciones</h3>
+        <p class="hint">${mobileOnlyTop ? 'La gráfica muestra los 8 mejores del punto seleccionado en móvil.' : 'La gráfica muestra a todos los participantes en escritorio.'} La línea vertical marca el partido histórico activo.</p>
+      </div>
+      <span class="pill">${mobileOnlyTop ? 'Top 8' : `${series.length} jugadores`} · ${snapshots.length} hitos</span>
+    </div>
+    <div class="history-chart-wrap">
+      <svg class="history-chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfica histórica de posiciones">
+        <rect x="${padding.left}" y="${padding.top}" width="${chartWidth}" height="${chartHeight}" rx="14" fill="rgba(16,24,43,0.6)" stroke="rgba(153,166,194,0.14)" />
+        ${gridMarkup}
+        <line x1="${markerX}" y1="${padding.top}" x2="${markerX}" y2="${height - padding.bottom}" stroke="rgba(255,215,106,0.7)" stroke-width="2" stroke-dasharray="6 6" />
+        ${lineMarkup}
+        ${xLabelsMarkup}
+      </svg>
+    </div>
+    <div class="history-chart-legend">${legend}</div>
+  `;
+}
+
 function renderHistory() {
   const select = document.getElementById('historyCheckpointSelect');
+  const slider = document.getElementById('historyCheckpointSlider');
   const summary = document.getElementById('historySummary');
+  const chart = document.getElementById('historyChart');
   const table = document.getElementById('historyTable');
-  if (!select || !summary || !table) return;
+  if (!select || !slider || !summary || !chart || !table) return;
 
   const snapshots = buildHistoricalSnapshots();
   if (!snapshots.length) {
     select.innerHTML = '<option value="">Sin partidos resueltos</option>';
     summary.innerHTML = '<p class="empty-state">Aún no hay suficientes resultados para construir el histórico.</p>';
+    chart.innerHTML = '';
     table.innerHTML = '';
     return;
   }
@@ -924,11 +1026,16 @@ function renderHistory() {
     <option value="${snapshot.id}">${escapeHtml(historyCheckpointLabel(snapshot))}</option>
   `).join('');
   select.value = state.historyCheckpointId;
+  slider.min = '1';
+  slider.max = String(snapshots.length);
 
   const snapshot = snapshots.find(item => item.id === state.historyCheckpointId) || snapshots[snapshots.length - 1];
+  slider.value = String(snapshot.order);
   const previousSnapshot = snapshots.find(item => item.order === snapshot.order - 1) || null;
   const leaderChange = previousSnapshot?.leader && snapshot.leader && previousSnapshot.leader.id !== snapshot.leader.id;
   const medals = ['🥇', '🥈', '🥉'];
+
+  renderHistoryChart(snapshots, snapshot);
 
   summary.innerHTML = html`
     <article class="card">
@@ -2602,6 +2709,14 @@ document.getElementById('dismissUpdateBtn').addEventListener('click', () => {
 document.getElementById('rankingSearch').addEventListener('input', renderRanking);
 document.getElementById('historyCheckpointSelect').addEventListener('change', e => {
   state.historyCheckpointId = e.target.value;
+  renderHistory();
+});
+document.getElementById('historyCheckpointSlider').addEventListener('input', e => {
+  const snapshots = buildHistoricalSnapshots();
+  const order = Number(e.target.value);
+  const snapshot = snapshots.find(item => item.order === order);
+  if (!snapshot) return;
+  state.historyCheckpointId = snapshot.id;
   renderHistory();
 });
 document.getElementById('miniRankingSearch').addEventListener('input', renderMini);
