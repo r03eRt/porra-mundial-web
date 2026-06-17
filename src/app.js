@@ -783,12 +783,20 @@ function renderSummary() {
   const played = DATA.matches.filter(getResult).length;
   const ranking = calculateRanking();
   const lastUpdate = localStorage.getItem(LS_KEYS.lastUpdate) || 'sin actualizar';
+  const nextMatch = DATA.matches
+    .filter(match => !getResult(match))
+    .sort((a, b) => getMatchScheduleTimestamp(a) - getMatchScheduleTimestamp(b))[0] || null;
   document.getElementById('summaryCards').innerHTML = html`
     <article class="card"><b>${DATA.players.length}</b><span>participantes</span></article>
     <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
     <article class="card"><b>${ranking[0] ? `⭐ ${ranking[0].name}` : '-'}</b><span>líder actual</span></article>
     <article class="card"><b>${ranking[0]?.total || 0}</b><span>puntos del líder</span></article>
     <article class="card"><b>${ranking.length ? `💩 ${ranking[ranking.length - 1].name}` : '-'}</b><span>el purria</span></article>
+    <article class="card next-match-card ${nextMatch ? 'summary-match-card' : ''}" ${nextMatch ? `role="button" tabindex="0" data-match-id="${nextMatch.id}" aria-label="Ver predicciones de ${escapeHtml(nextMatch.team1)} contra ${escapeHtml(nextMatch.team2)}"` : ''}>
+      <b>${nextMatch ? `${TEAM_FLAGS[nextMatch.team1] || '🏳️'} ${nextMatch.team1}<span class="next-match-separator">-</span>${TEAM_FLAGS[nextMatch.team2] || '🏳️'} ${nextMatch.team2}` : '-'}</b>
+      <span>${nextMatch ? 'siguiente partido' : 'sin partidos pendientes'}</span>
+      <span class="card-detail">${nextMatch ? formatMatchSchedule(nextMatch) : ''}</span>
+    </article>
   `;
   renderHeaderSyncStatus();
   document.getElementById('lastUpdate').textContent = lastUpdate;
