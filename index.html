@@ -46,6 +46,7 @@
     <nav class="tabs" aria-label="Secciones">
       <button class="tab active" data-tab="ranking">Clasificación porra</button>
       <button class="tab" data-tab="probabilities">Probabilidades</button>
+      <button class="tab" data-tab="compare">Comparador</button>
       <button class="tab" data-tab="mini">Mini-porra</button>
       <button class="tab" data-tab="matches">Partidos</button>
       <button class="tab" data-tab="teams">Equipos</button>
@@ -118,6 +119,20 @@
           </div>
         </section>
       </div>
+    </section>
+
+    <section id="compare" class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Comparador</h2>
+          <p class="hint">Compara cómo han pronosticado uno o dos jugadores un partido concreto frente al resultado real.</p>
+        </div>
+        <div class="filters">
+          <select id="compareMatchSelect" aria-label="Partido a comparar"></select>
+        </div>
+      </div>
+      <div id="compareSummary" class="compare-summary"></div>
+      <div id="compareCards" class="compare-grid"></div>
     </section>
 
     <section id="matches" class="panel">

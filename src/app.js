@@ -95,12 +95,15 @@ const state = {
   rankingSort: { key: 'position', direction: 'asc' },
   miniRankingSort: { key: 'position', direction: 'asc' },
   activeTab: 'ranking',
+  rankingLoading: true,
   probabilities: null,
   probabilitiesKey: '',
   probabilitiesError: '',
   probabilitiesExpanded: { players: false, teams: false, mini: false },
   groupStandingsView: 'actual',
-  matchGoalsExpanded: {}
+  matchGoalsExpanded: {},
+  compareMatchId: '',
+  comparePlayers: []
 };
 let apiRefreshInProgress = false;
 let dismissedVersion = null;
@@ -737,6 +740,20 @@ function renderSummary() {
 }
 
 function renderRanking() {
+  if (state.rankingLoading && !Object.keys(state.apiResults).length) {
+    document.getElementById('rankingTable').innerHTML = html`
+      <tbody>
+        <tr>
+          <td class="loading-cell">
+            <span class="loading-spinner" aria-hidden="true"></span>
+            <span>Cargando clasificación...</span>
+          </td>
+        </tr>
+      </tbody>
+    `;
+    return;
+  }
+
   const q = normalize(document.getElementById('rankingSearch').value);
   const medals = ['🥇', '🥈', '🥉'];
   const ranking = calculateRanking();
@@ -764,6 +781,142 @@ function renderRanking() {
         <td>${player.knockoutPoints}</td>
       </tr>`).join('')}</tbody>
   `;
+}
+
+function compareStatus(score) {
+  if (!score.points) return { label: 'Fallado', className: 'bad' };
+  if (score.exact) return { label: 'Exacto', className: 'ok' };
+  return { label: 'Quiniela', className: 'points' };
+}
+
+function comparePlayerCard(player, prediction, result, index) {
+  const score = scorePrediction(prediction, result);
+  const status = result ? compareStatus(score) : { label: 'Pendiente', className: 'muted' };
+  return html`
+    <article class="compare-card">
+      <div class="compare-card-head">
+        <span class="pill">Participante</span>
+        <div class="compare-card-actions">
+          <button type="button" class="match-link-button" data-compare-remove="${index}">Quitar</button>
+        </div>
+      </div>
+      <h3>${escapeHtml(player.name)}</h3>
+      <div class="compare-main-score">${escapeHtml(prediction.score)}</div>
+      <div class="compare-subline">Quiniela: <strong>${escapeHtml(prediction.sign)}</strong></div>
+      <div class="compare-subline">Estado: <span class="${status.className}">${status.label}</span></div>
+      <div class="compare-points">+${score.points} pts</div>
+    </article>
+  `;
+}
+
+function compareAddCard() {
+  const selectedIds = new Set(state.comparePlayers);
+  const selectOptions = DATA.players
+    .filter(player => !selectedIds.has(player.id))
+    .map(player => `<option value="${player.id}">${escapeHtml(player.name)}</option>`)
+    .join('');
+
+  return html`
+    <article class="compare-card compare-card-empty">
+      <span class="pill">Comparación</span>
+      <h3>Jugadores</h3>
+      <p class="compare-subline">Selecciona directamente qué jugador quieres comparar en este partido.</p>
+      <div class="compare-picker">
+        <select data-compare-player-select ${selectOptions ? '' : 'disabled'}>
+          <option value="">Jugador a comparar...</option>
+          ${selectOptions}
+        </select>
+      </div>
+      ${!selectOptions ? '<p class="hint">Ya están añadidos todos los jugadores disponibles.</p>' : ''}
+    </article>
+  `;
+}
+
+function comparePlayerCards(match, result) {
+  const selectedPlayers = state.comparePlayers
+    .map(playerId => DATA.players.find(player => player.id === playerId))
+    .filter(Boolean);
+
+  if (!selectedPlayers.length) return '';
+  return selectedPlayers.map((player, index) => {
+    const prediction = match.predictions[player.id];
+    return comparePlayerCard(player, prediction, result, index);
+  }).join('');
+}
+
+function compareResultCard(match, result) {
+  return html`
+    <article class="compare-card compare-card-result">
+      <span class="pill">Resultado</span>
+      <h3>${teamLabel(match.team1)} - ${teamLabel(match.team2)}</h3>
+      <div class="compare-main-score ${result ? '' : 'pending'}">${result ? `${result.home} - ${result.away}` : 'Pendiente'}</div>
+      <div class="compare-subline">${escapeHtml(formatMatchSchedule(match))}</div>
+      ${result ? renderGoalBreakdown(match) : '<div class="compare-subline muted">Aún sin resultado disponible.</div>'}
+    </article>
+  `;
+}
+
+function compareMatchLabel(match) {
+  return `Grupo ${match.group} · ${match.team1} - ${match.team2}`;
+}
+
+function renderCompare() {
+  const matchSelect = document.getElementById('compareMatchSelect');
+  const summary = document.getElementById('compareSummary');
+  const cards = document.getElementById('compareCards');
+
+  if (state.compareMatchId && !DATA.matches.some(match => match.id === state.compareMatchId)) {
+    state.compareMatchId = '';
+  }
+  if (!Array.isArray(state.comparePlayers)) {
+    state.comparePlayers = [];
+  }
+  state.comparePlayers = state.comparePlayers.filter(playerId => DATA.players.some(player => player.id === playerId));
+
+  matchSelect.innerHTML = [
+    '<option value="">Selecciona un partido...</option>',
+    ...DATA.matches.map(match => `<option value="${match.id}">${escapeHtml(compareMatchLabel(match))}</option>`)
+  ].join('');
+  matchSelect.value = state.compareMatchId;
+
+  const match = DATA.matches.find(item => item.id === state.compareMatchId);
+  if (!match) {
+    summary.innerHTML = html`
+      <article class="card">
+        <b>0</b>
+        <span>partidos añadidos</span>
+      </article>
+      <article class="card">
+        <b>0</b>
+        <span>jugadores añadidos</span>
+      </article>
+    `;
+    cards.innerHTML = '<p class="empty-state">Selecciona un partido para añadirlo al comparador y luego ve incorporando jugadores uno a uno.</p>';
+    return;
+  }
+
+  const result = getResult(match);
+
+  summary.innerHTML = html`
+    <article class="card">
+      <b>${match.id}</b>
+      <span>${teamLabel(match.team1)} - ${teamLabel(match.team2)}</span>
+    </article>
+    <article class="card">
+      <b>${result ? `${result.home}-${result.away}` : 'Pendiente'}</b>
+      <span>resultado real</span>
+    </article>
+    <article class="card">
+      <b>${state.comparePlayers.length}</b>
+      <span>jugadores añadidos</span>
+    </article>
+  `;
+
+  cards.innerHTML = [
+    compareResultCard(match, result),
+    compareAddCard(),
+    comparePlayerCards(match, result)
+  ].join('');
 }
 
 function renderFilters() {
@@ -1849,7 +2002,7 @@ function renderSettings() {
   document.getElementById('apiUrlInput').value = state.apiUrl;
 }
 
-function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderProbabilities(); renderMatches(); renderTeams(); renderStatistics(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
+function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderProbabilities(); renderCompare(); renderMatches(); renderTeams(); renderStatistics(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
 
 async function loadMiniResultsFromSupabase() {
   const { data, error } = await supabase
@@ -1985,6 +2138,8 @@ async function refreshFromApi(options = {}) {
   const silent = options?.silent === true;
   if (apiRefreshInProgress) return;
   apiRefreshInProgress = true;
+  state.rankingLoading = !Object.keys(state.apiResults).length;
+  if (state.rankingLoading) renderRanking();
   const btn = document.getElementById('refreshApiBtn');
   btn.disabled = true; btn.textContent = 'Actualizando...';
   try {
@@ -2008,9 +2163,12 @@ async function refreshFromApi(options = {}) {
       if (found) state.apiResults[m.id] = found;
     }
     lastApiRefreshAt = Date.now();
+    state.rankingLoading = false;
     localStorage.setItem(LS_KEYS.lastUpdate, new Date().toLocaleString('es-ES'));
     renderAll();
   } catch (err) {
+    state.rankingLoading = false;
+    renderRanking();
     if (!silent) alert('No se pudieron actualizar los resultados automáticos. Error: ' + err.message);
     console.error('Error al actualizar los resultados automáticos:', err);
   } finally {
@@ -2097,6 +2255,15 @@ document.addEventListener('click', e => {
     const matchId = toggleGoalsButton.dataset.toggleGoals;
     state.matchGoalsExpanded[matchId] = !state.matchGoalsExpanded[matchId];
     renderMatches();
+    return;
+  }
+  const compareRemoveButton = e.target.closest('[data-compare-remove]');
+  if (compareRemoveButton) {
+    const index = Number(compareRemoveButton.dataset.compareRemove);
+    if (Number.isInteger(index) && index >= 0) {
+      state.comparePlayers.splice(index, 1);
+    }
+    renderCompare();
     return;
   }
   const matchCard = e.target.closest('[data-match-id]');
@@ -2266,11 +2433,23 @@ document.getElementById('miniRankingSearch').addEventListener('input', renderMin
 document.getElementById('groupFilter').addEventListener('change', renderMatches);
 document.getElementById('teamFilter').addEventListener('change', renderMatches);
 document.getElementById('statusFilter').addEventListener('change', renderMatches);
+document.getElementById('compareMatchSelect').addEventListener('change', e => {
+  state.compareMatchId = e.target.value;
+  renderCompare();
+});
 document.getElementById('groupStandingsView').addEventListener('change', e => {
   state.groupStandingsView = e.target.value;
   renderGroupStandings();
 });
 document.getElementById('teamsSearch').addEventListener('input', renderTeams);
+document.addEventListener('change', e => {
+  const comparePlayerSelect = e.target.closest('[data-compare-player-select]');
+  if (!comparePlayerSelect) return;
+  if (comparePlayerSelect.value && !state.comparePlayers.includes(comparePlayerSelect.value)) {
+    state.comparePlayers.push(comparePlayerSelect.value);
+  }
+  renderCompare();
+});
 document.getElementById('teamsSelect').addEventListener('change', e => {
   state.selectedTeam = e.target.value;
   renderTeams();
