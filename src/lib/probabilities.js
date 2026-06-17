@@ -1,4 +1,4 @@
-import { normalize, parseScore, signFromScore } from './statistics-utils.js';
+import { normalize, normalizePlayerName, parseScore, playerNamesMatch, signFromScore } from './statistics-utils.js';
 
 const MINI_FIELD_TYPES = {
   Q1: 'player',
@@ -552,7 +552,7 @@ function buildRankingMaps(dataset, type) {
       const team = type === 'players' ? raw[2] || row.team || '' : raw[1] || row.player || '';
       return {
         name,
-        key: type === 'players' ? normalizeLoose(name) : normalizeTeam(name),
+        key: type === 'players' ? normalizePlayerName(name) : normalizeTeam(name),
         team: normalizeTeam(team),
         value: parseNumericValue(row.value)
       };
@@ -1004,7 +1004,7 @@ function scoreMiniAnswer(question, answer, result) {
   } else if (type === 'team') {
     correct = acceptedAnswers.map(normalizeTeam).includes(normalizeTeam(answer));
   } else {
-    correct = acceptedAnswers.some(candidate => playerNameMatches(answer, candidate));
+    correct = acceptedAnswers.some(candidate => playerNamesMatch(answer, candidate));
   }
 
   return { points: correct ? question.points : 0, correct };
@@ -1043,27 +1043,9 @@ function getPlayerRankingValue(entries = [], answer, teamFilter = '') {
   const teamKey = teamFilter ? normalizeTeam(teamFilter) : '';
   const entry = entries.find(item =>
     (!teamKey || item.team === teamKey)
-    && playerNameMatches(answer, item.name)
+    && playerNamesMatch(answer, item.name)
   );
   return entry?.value || 0;
-}
-
-function playerNameMatches(answer, candidate) {
-  const left = normalizeLoose(answer);
-  const right = normalizeLoose(candidate);
-  if (!left || !right) return false;
-  if (left === right || left.includes(right) || right.includes(left)) return true;
-
-  const leftTokens = left.split(' ');
-  const rightTokens = right.split(' ');
-  if (leftTokens.at(-1) !== rightTokens.at(-1)) return false;
-
-  const leftFirst = leftTokens[0] || '';
-  const rightFirst = rightTokens[0] || '';
-  return leftFirst === rightFirst
-    || leftFirst[0] === rightFirst[0]
-    || rightFirst.startsWith(leftFirst)
-    || leftFirst.startsWith(rightFirst);
 }
 
 function createRng(seed) {

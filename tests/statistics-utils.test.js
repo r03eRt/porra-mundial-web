@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   normalize,
+  normalizePlayerName,
   parseRankingTable,
   parseScore,
+  playerNamesMatch,
   signFromScore,
   slugLabel,
   statsCountryFlag,
@@ -30,6 +32,16 @@ describe('statistics utils', () => {
 
   it('creates a human label from a slug', () => {
     expect(slugLabel('goles-encajados')).toBe('Goles Encajados');
+  });
+
+  it('normalizes player aliases for Messi and Lamine Yamal', () => {
+    expect(normalizePlayerName('Messi')).toBe('LIONEL MESSI');
+    expect(normalizePlayerName('Leo Messi')).toBe('LIONEL MESSI');
+    expect(normalizePlayerName('Yamal')).toBe('LAMINE YAMAL');
+    expect(normalizePlayerName('Lamin')).toBe('LAMINE YAMAL');
+    expect(playerNamesMatch('Lionel Messi', 'Messi')).toBe(true);
+    expect(playerNamesMatch('Lamine Yamal', 'Yamal')).toBe(true);
+    expect(playerNamesMatch('Lamine Yamal', 'Lamine')).toBe(true);
   });
 
   it('parses a ranking table from html', () => {

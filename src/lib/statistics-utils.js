@@ -97,6 +97,45 @@ export function slugLabel(slug) {
     .join(' ');
 }
 
+export function normalizePlayerName(value) {
+  const normalized = normalize(value)
+    .replace(/[^A-Z0-9 ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const aliases = {
+    MESSI: 'LIONEL MESSI',
+    'LEO MESSI': 'LIONEL MESSI',
+    'L MESSI': 'LIONEL MESSI',
+    'LIONEL ANDRES MESSI': 'LIONEL MESSI',
+    LAMINE: 'LAMINE YAMAL',
+    YAMAL: 'LAMINE YAMAL',
+    'L YAMAL': 'LAMINE YAMAL',
+    LAMIN: 'LAMINE YAMAL',
+    'YAMINE LAMAL': 'LAMINE YAMAL'
+  };
+
+  return aliases[normalized] || normalized;
+}
+
+export function playerNamesMatch(left, right) {
+  const first = normalizePlayerName(left);
+  const second = normalizePlayerName(right);
+  if (!first || !second) return false;
+  if (first === second || first.includes(second) || second.includes(first)) return true;
+
+  const firstTokens = first.split(' ');
+  const secondTokens = second.split(' ');
+  if (firstTokens.at(-1) !== secondTokens.at(-1)) return false;
+
+  const firstName = firstTokens[0] || '';
+  const secondName = secondTokens[0] || '';
+  return firstName === secondName
+    || firstName[0] === secondName[0]
+    || secondName.startsWith(firstName)
+    || firstName.startsWith(secondName);
+}
+
 export function parseRankingTable(html) {
   const table = html.match(/<table[\s\S]*?<\/table>/i)?.[0] || '';
   if (!table) return { headers: [], rows: [] };

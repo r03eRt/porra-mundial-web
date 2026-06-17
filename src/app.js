@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { KNOCKOUT_STAGES, buildPlayerKnockoutBracket } from './lib/knockout-bracket.js';
-import { normalize, parseScore, signFromScore, statsCountryFlag, statsCountryLabel } from './lib/statistics-utils.js';
+import { normalize, parseScore, playerNamesMatch, signFromScore, statsCountryFlag, statsCountryLabel } from './lib/statistics-utils.js';
 import { TEAM_DETAIL_METRICS, calculateTeamStats, getTournamentTeams } from './lib/team-stats.js';
 import { buildFinalNotification, buildGoalNotification, collectLiveAlertEvents } from './lib/live-alerts.js';
 import { simulateProbabilities } from './lib/probabilities.js';
@@ -97,7 +97,8 @@ const state = {
   probabilities: null,
   probabilitiesKey: '',
   probabilitiesError: '',
-  probabilitiesExpanded: { players: false, teams: false, mini: false }
+  probabilitiesExpanded: { players: false, teams: false, mini: false },
+  groupStandingsView: 'actual'
 };
 let apiRefreshInProgress = false;
 let dismissedVersion = null;
@@ -620,7 +621,7 @@ function scoreMiniAnswer(question, answer, result) {
   } else if (fieldType === 'team') {
     correct = acceptedAnswers.map(normalizeTeam).includes(normalizeTeam(answer));
   } else {
-    correct = acceptedAnswers.map(normalize).includes(normalize(answer));
+    correct = acceptedAnswers.some(value => playerNamesMatch(answer, value));
   }
 
   return { points: correct ? question.points : 0, correct };
@@ -1100,7 +1101,12 @@ function renderTeams() {
     : '<div class="team-empty">No hay equipos disponibles.</div>';
 }
 
-function calculateGroupStandings(group) {
+function resultFromPrediction(prediction) {
+  const parsed = parseScore(prediction?.score);
+  return parsed ? { home: parsed[0], away: parsed[1] } : null;
+}
+
+function calculateGroupStandings(group, getStandingsResult = getResult) {
   const matches = DATA.matches.filter(match => match.group === group);
   const teams = [...new Set(matches.flatMap(match => [match.team1, match.team2]))];
   const standings = teams.map((team, originalIndex) => ({
@@ -1114,7 +1120,7 @@ function calculateGroupStandings(group) {
   const byTeam = Object.fromEntries(standings.map(team => [team.team, team]));
 
   for (const match of matches) {
-    const result = getResult(match);
+    const result = getStandingsResult(match);
     if (!result) continue;
 
     const home = byTeam[match.team1];
@@ -1147,9 +1153,28 @@ function calculateGroupStandings(group) {
 }
 
 function renderGroupStandings() {
+  const select = document.getElementById('groupStandingsView');
+  const hint = document.getElementById('groupStandingsHint');
+  if (!select.dataset.loaded) {
+    select.innerHTML = `<option value="actual">Actual</option>${DATA.players.map(player => `<option value="${player.id}">${escapeHtml(player.name)}</option>`).join('')}`;
+    select.dataset.loaded = '1';
+  }
+  if (![...select.options].some(option => option.value === state.groupStandingsView)) {
+    state.groupStandingsView = 'actual';
+  }
+  if (select.value !== state.groupStandingsView) select.value = state.groupStandingsView;
+
+  const selectedPlayer = DATA.players.find(player => player.id === state.groupStandingsView) || null;
+  const getStandingsResult = selectedPlayer
+    ? match => resultFromPrediction(match.predictions[selectedPlayer.id])
+    : getResult;
+  hint.textContent = selectedPlayer
+    ? `Clasificación proyectada según cómo ${selectedPlayer.name} ha puesto los resultados de la fase de grupos.`
+    : 'Actualizada automáticamente con los resultados disponibles.';
+
   const groups = [...new Set(DATA.matches.map(match => match.group))].sort();
   document.getElementById('groupStandingsList').innerHTML = groups.map(group => {
-    const standings = calculateGroupStandings(group);
+    const standings = calculateGroupStandings(group, getStandingsResult);
     return html`
       <section class="group-standing">
         <h3>Grupo ${group}</h3>
@@ -2148,6 +2173,10 @@ document.getElementById('miniRankingSearch').addEventListener('input', renderMin
 document.getElementById('groupFilter').addEventListener('change', renderMatches);
 document.getElementById('teamFilter').addEventListener('change', renderMatches);
 document.getElementById('statusFilter').addEventListener('change', renderMatches);
+document.getElementById('groupStandingsView').addEventListener('change', e => {
+  state.groupStandingsView = e.target.value;
+  renderGroupStandings();
+});
 document.getElementById('teamsSearch').addEventListener('input', renderTeams);
 document.getElementById('teamsSelect').addEventListener('change', e => {
   state.selectedTeam = e.target.value;

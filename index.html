@@ -162,7 +162,12 @@
       <div class="panel-head">
         <div>
           <h2>Clasificación por grupos</h2>
-          <p class="hint">Actualizada automáticamente con los resultados disponibles.</p>
+          <p id="groupStandingsHint" class="hint">Actualizada automáticamente con los resultados disponibles.</p>
+        </div>
+        <div class="filters">
+          <select id="groupStandingsView" aria-label="Vista de clasificación por grupos">
+            <option value="actual">Actual</option>
+          </select>
         </div>
       </div>
       <div id="groupStandingsList" class="group-standings-grid"></div>
