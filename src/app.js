@@ -7,9 +7,10 @@ import { simulateProbabilities } from './lib/probabilities.js';
 
 const DATA = window.PORRA_DATA;
 const DEFAULT_API_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
-const API_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+const API_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const LIVE_ALERTS_POLL_INTERVAL_MS = 60 * 1000;
+const API_RESUME_REFRESH_THRESHOLD_MS = 2 * 60 * 1000;
 const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw';
 const adminParam = new URLSearchParams(window.location.search).get('admin');
@@ -108,6 +109,7 @@ let deferredInstallPrompt = null;
 let liveAlertsPollTimer = null;
 let liveAlertsRefreshInFlight = false;
 let appToastTimer = null;
+let lastApiRefreshAt = 0;
 const INSTALL_BANNER_DISMISS_MS = 3 * 24 * 60 * 60 * 1000;
 const LIVE_ALERTS_CACHE_KIND = 'worldcup-2026';
 const LIVE_ALERTS_TABLE = 'football_live_cache';
@@ -2005,6 +2007,7 @@ async function refreshFromApi(options = {}) {
       const found = resultByKey[keyForTeams(m.team1, m.team2)];
       if (found) state.apiResults[m.id] = found;
     }
+    lastApiRefreshAt = Date.now();
     localStorage.setItem(LS_KEYS.lastUpdate, new Date().toLocaleString('es-ES'));
     renderAll();
   } catch (err) {
@@ -2014,6 +2017,13 @@ async function refreshFromApi(options = {}) {
     apiRefreshInProgress = false;
     btn.disabled = false;
     btn.textContent = 'Actualizar datos';
+  }
+}
+
+function maybeRefreshFromApiOnResume() {
+  if (apiRefreshInProgress || !navigator.onLine) return;
+  if (!lastApiRefreshAt || (Date.now() - lastApiRefreshAt) >= API_RESUME_REFRESH_THRESHOLD_MS) {
+    refreshFromApi({ silent: true });
   }
 }
 
@@ -2333,10 +2343,13 @@ refreshLiveAlerts({ baseline: true });
 setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);
 setInterval(checkForAppUpdate, VERSION_CHECK_INTERVAL_MS);
 window.addEventListener('focus', checkForAppUpdate);
+window.addEventListener('focus', maybeRefreshFromApiOnResume);
+window.addEventListener('online', maybeRefreshFromApiOnResume);
 window.addEventListener('focus', () => refreshLiveAlerts().catch(() => {}));
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     checkForAppUpdate();
+    maybeRefreshFromApiOnResume();
     refreshLiveAlerts().catch(() => {});
   }
 });
