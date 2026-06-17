@@ -98,7 +98,8 @@ const state = {
   probabilitiesKey: '',
   probabilitiesError: '',
   probabilitiesExpanded: { players: false, teams: false, mini: false },
-  groupStandingsView: 'actual'
+  groupStandingsView: 'actual',
+  matchGoalsExpanded: {}
 };
 let apiRefreshInProgress = false;
 let dismissedVersion = null;
@@ -937,12 +938,20 @@ function getMatchdaySortKey(matchday) {
 
 function renderMatchCard(match) {
   const result = getResult(match);
+  const goalsExpanded = Boolean(state.matchGoalsExpanded[match.id]);
   return html`<article class="match-card" role="button" tabindex="0" data-match-id="${match.id}" aria-label="Ver predicciones de ${escapeHtml(match.team1)} contra ${escapeHtml(match.team2)}">
     <span class="pill">Grupo ${match.group} · ${match.id}</span>
     <h3 class="teams"><span>${teamLabel(match.team1)}</span><span class="versus">-</span><span>${teamLabel(match.team2)}</span></h3>
     <div class="match-schedule">${escapeHtml(formatMatchSchedule(match))}</div>
     <div class="match-score ${result ? '' : 'pending'}">${result ? `${result.home} - ${result.away}` : 'Pendiente'}</div>
-    ${result ? renderGoalBreakdown(match) : ''}
+    ${result ? html`
+      <div class="match-card-actions">
+        <button type="button" class="match-link-button" data-toggle-goals="${match.id}" aria-expanded="${goalsExpanded}">
+          ${goalsExpanded ? 'Ocultar goleadores' : 'Ver goleadores'}
+        </button>
+      </div>
+      ${goalsExpanded ? renderGoalBreakdown(match) : ''}
+    ` : ''}
     <div class="source">${result ? 'Resultado actualizado automáticamente' : 'Sin resultado disponible en la API'} · Ver predicciones</div>
   </article>`;
 }
@@ -2072,6 +2081,14 @@ document.addEventListener('click', e => {
     return;
   }
 
+  const toggleGoalsButton = e.target.closest('[data-toggle-goals]');
+  if (toggleGoalsButton) {
+    e.stopPropagation();
+    const matchId = toggleGoalsButton.dataset.toggleGoals;
+    state.matchGoalsExpanded[matchId] = !state.matchGoalsExpanded[matchId];
+    renderMatches();
+    return;
+  }
   const matchCard = e.target.closest('[data-match-id]');
   if (matchCard) {
     openMatchPredictions(matchCard.dataset.matchId);
