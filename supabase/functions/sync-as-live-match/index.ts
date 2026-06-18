@@ -87,27 +87,173 @@ function buildDirectUrl(stageSlug: string, matchId: string) {
   return `https://as.com/resultados/futbol/mundial/2026/directo/${stageSlug}_${matchId}/`;
 }
 
-function parseScorerSummary(block: string) {
-  const scorerLines = [...block.matchAll(/<div class="a_sc_gs(?:\s+a_sc_gs-r)?">([\s\S]*?)<\/div>/g)]
-    .map(match => stripTags(match[1] || ''))
+function normalizeEventMinute(text: string) {
+  const minute = String(text || '').trim().match(/(\d{1,3}(?:\+\d{1,2})?)['’]?$/)?.[1] || '';
+  return minute;
+}
+
+function parseMinuteNumber(value: string) {
+  const minute = normalizeEventMinute(value);
+  if (!minute) return null;
+  const parsed = Number(minute.split('+')[0]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function expandScorerText(text: string) {
+  const value = String(text || '').trim().replace(/,+\s*$/, '');
+  if (!value) return [];
+
+  const parts = value.match(/^(.+?)\s+((?:\d{1,3}(?:\+\d{1,2})?['’]?(?:,\s*)?)+)$/);
+  if (!parts) return [value];
+
+  const player = parts[1].trim();
+  const minutes = parts[2]
+    .split(',')
+    .map(part => normalizeEventMinute(part))
     .filter(Boolean);
-  return scorerLines.join(' · ');
+
+  if (!player || !minutes.length) return [value];
+  return minutes.map(minute => `${player} ${minute}’`);
+}
+
+function isPenaltyText(text: string) {
+  const normalized = String(text || '').toLowerCase();
+  return normalized.includes('penalti')
+    || normalized.includes('penalty')
+    || normalized.includes('de penalti')
+    || normalized.includes('desde los once metros')
+    || normalized.includes('penal');
+}
+
+function parseScrHdrLiveSection(block: string) {
+  const section = block.match(/<section[^>]*class="scr-hdr__scr[^"]*"[\s\S]*?<\/section>/)?.[0] || '';
+  if (!section) return null;
+
+  const homeTeam = decodeHtml(section.match(/data-team-home-name="([^"]+)"/)?.[1] || '');
+  const awayTeam = decodeHtml(section.match(/data-team-away-name="([^"]+)"/)?.[1] || '');
+  const matchId = section.match(/data-id="([^"]+)"/)?.[1] || '';
+  const kickoffAt = section.match(/data-datetime="([^"]+)"/)?.[1] || '';
+  const status = stripTags(section.match(/<abbr class="scr-hdr__status-txt"[^>]*>([\s\S]*?)<\/abbr>/)?.[1] || '') || 'En juego';
+  const minuteLabel = stripTags(section.match(/<span class="scr-hdr__status-val">([\s\S]*?)<\/span>/)?.[1] || '');
+  const homeScore = Number(stripTags(section.match(/<div class="scr-hdr__team is-local">[\s\S]*?<span class="scr-hdr__score">([\s\S]*?)<\/span>/)?.[1] || ''));
+  const awayScore = Number(stripTags(section.match(/<div class="scr-hdr__team is-visitor">[\s\S]*?<span class="scr-hdr__score">([\s\S]*?)<\/span>/)?.[1] || ''));
+
+  const homeStart = section.indexOf('<div class="scr-hdr__team is-local">');
+  const awayStart = section.indexOf('<div class="scr-hdr__team is-visitor">');
+  const infoStart = section.indexOf('<div class="scr-hdr__info">');
+  const homeBlock = homeStart >= 0 && awayStart > homeStart ? section.slice(homeStart, awayStart) : '';
+  const awayBlock = awayStart >= 0 && infoStart > awayStart ? section.slice(awayStart, infoStart) : '';
+
+  const parseTeamEvents = (team: string, html: string) => {
+    if (!team || !html) return [];
+    const scorerBlocks = [...html.matchAll(/<div class="scr-hdr__scorers">([\s\S]*?)<\/div>/g)];
+
+    return scorerBlocks.flatMap(block => {
+      const spans = [...(block[1] || '').matchAll(/<span([^>]*)>([\s\S]*?)<\/span>/g)]
+        .map(span => ({
+          className: span[1] || '',
+          text: stripTags(span[2] || '')
+        }))
+        .filter(item => item.text);
+
+      return spans.flatMap(item => {
+        const kind = /red-card/.test(item.className)
+          ? 'red-card'
+          : (isPenaltyText(item.text) ? 'goal-penalty' : 'goal');
+        const expanded = kind === 'red-card'
+          ? [String(item.text || '').trim().replace(/,+\s*$/, '')]
+          : expandScorerText(item.text);
+
+        return expanded.map(text => {
+          const minute = normalizeEventMinute(text);
+          return {
+            text,
+            kind,
+            team,
+            minute,
+            minuteLabel: minute
+          };
+        }).filter(event => event.text);
+      });
+    });
+  };
+
+  const events = [
+    ...parseTeamEvents(homeTeam, homeBlock),
+    ...parseTeamEvents(awayTeam, awayBlock)
+  ];
+
+  if (!homeTeam || !awayTeam || !matchId || !Number.isFinite(homeScore) || !Number.isFinite(awayScore)) {
+    return null;
+  }
+
+  return {
+    id: matchId,
+    kickoffAt,
+    homeTeam,
+    awayTeam,
+    homeScore,
+    awayScore,
+    status,
+    minute: parseMinuteNumber(minuteLabel),
+    minuteLabel,
+    scorerSummary: events.map(item => item.text).join(' · '),
+    events
+  };
+}
+
+function parseScorerSummary(block: string) {
+  const scorerItems: Array<{ text: string; kind: 'goal' | 'red-card'; minute: string; minuteLabel: string }> = [];
+  const scrHdr = parseScrHdrLiveSection(block);
+  if (scrHdr?.events?.length) {
+    return {
+      summary: scrHdr.scorerSummary,
+      events: scrHdr.events
+    };
+  }
+
+  const rowMatches = [...block.matchAll(/<div class="a_gs_it">([\s\S]*?)<\/div>\s*<\/div>/g)];
+
+  for (const rowMatch of rowMatches) {
+    const row = rowMatch[1] || '';
+    const text = stripTags(row.match(/<span>([\s\S]*?)<\/span>/)?.[1] || '');
+    if (!text) continue;
+
+    const iconClass = row.match(/<div class="a_gs_ic[^"]*\b(a_gs_ic-gl|a_gs_ic-pn)\b[^"]*"/)?.[1];
+    if (!iconClass) continue;
+
+    const kind = iconClass === 'a_gs_ic-pn' ? 'red-card' : 'goal';
+    const minute = normalizeEventMinute(text);
+
+    scorerItems.push({
+      text,
+      kind,
+      minute,
+      minuteLabel: minute
+    });
+  }
+
+  return {
+    summary: scorerItems.map(item => item.text).join(' · '),
+    events: scorerItems
+  };
 }
 
 function parseLiveMatchFromBlock(block: string, stageSlug: string) {
+  const scrHdr = parseScrHdrLiveSection(block);
   const matchId = block.match(/data-id="([^"]+)"/)?.[1] || '';
-  const homeTeam = decodeHtml(block.match(/data-team-home-name="([^"]+)"/)?.[1] || '');
-  const awayTeam = decodeHtml(block.match(/data-team-away-name="([^"]+)"/)?.[1] || '');
-  const kickoffAt = block.match(/data-datetime="([^"]+)"/)?.[1] || '';
+  const homeTeam = scrHdr?.homeTeam || decodeHtml(block.match(/data-team-home-name="([^"]+)"/)?.[1] || '');
+  const awayTeam = scrHdr?.awayTeam || decodeHtml(block.match(/data-team-away-name="([^"]+)"/)?.[1] || '');
+  const kickoffAt = scrHdr?.kickoffAt || block.match(/data-datetime="([^"]+)"/)?.[1] || '';
   const group = stripTags(block.match(/<div class="a_sc_gp">([\s\S]*?)<\/div>/)?.[1] || '');
-  const status = stripTags(block.match(/<div class="a_sc_st">([\s\S]*?)<\/div>/)?.[1] || '') || 'En juego';
+  const status = scrHdr?.status || stripTags(block.match(/<div class="a_sc_st">([\s\S]*?)<\/div>/)?.[1] || '') || 'En juego';
   const score = parseScore(block.match(/<div class="a_sc_gl">([\s\S]*?)<\/div>/)?.[1] || '');
   const articleUrl = decodeHtml(
     block.match(/<div class="a_sc_vc"><a[^>]+href="([^"]+)"/)?.[1]
       || block.match(/<div class="a_sc_gl"><a[^>]+href="([^"]+)"/)?.[1]
       || ''
   );
-  const scorerSummary = parseScorerSummary(block);
+  const scorerInfo = parseScorerSummary(block);
 
   if (!matchId || !homeTeam || !awayTeam || !score) {
     throw new Error('No se pudo parsear el partido en juego desde la jornada de AS.');
@@ -124,7 +270,10 @@ function parseLiveMatchFromBlock(block: string, stageSlug: string) {
     awayScore: score.away,
     articleUrl,
     directUrl: buildDirectUrl(stageSlug, matchId),
-    scorerSummary
+    minute: scrHdr?.minute ?? null,
+    minuteLabel: scrHdr?.minuteLabel || '',
+    scorerSummary: scorerInfo.summary,
+    events: scorerInfo.events
   };
 }
 
@@ -164,6 +313,60 @@ function parseLiveMinuteFromLiveArticleMarkdown(markdown: string) {
     minute: null,
     minuteLabel: ''
   };
+}
+
+function parseLiveEventsFromLiveArticleMarkdown(markdown: string) {
+  const content = markdown.split('Markdown Content:').pop() || markdown;
+  const lines = content
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  const events: Array<{ minute: number | null; minuteLabel: string; kind: string; text: string }> = [];
+  let pendingMinute: string | null = null;
+
+  const flush = (text: string) => {
+    const minuteData = pendingMinute ? parseMinuteLine(pendingMinute) : null;
+    pendingMinute = null;
+    if (!text) return;
+
+    const normalized = text.toLowerCase();
+    let kind = '';
+    if (normalized.includes('tarjeta roja') || normalized.includes('roja') || normalized.includes('expuls')) {
+      kind = 'red-card';
+    } else if (normalized.includes('gol') || normalized.includes('marca') || normalized.includes('anota') || normalized.includes('empata') || normalized.includes('adelanta')) {
+      kind = 'goal';
+    } else if (normalized.includes('descanso')) {
+      kind = 'half-time';
+    }
+
+    if (!kind) return;
+
+    events.push({
+      minute: minuteData?.minute ?? null,
+      minuteLabel: minuteData?.minuteLabel || '',
+      kind,
+      text
+    });
+  };
+
+  for (const line of lines.slice(0, 180)) {
+    if (/^\d{1,3}(?:\+\d{1,2})?(?:['’])?$/.test(line)) {
+      pendingMinute = line;
+      continue;
+    }
+
+    if (/^asistencias$/i.test(line) || /^posesión$/i.test(line) || /^recuperaciones de posesión$/i.test(line) || /^disparos$/i.test(line)) {
+      break;
+    }
+
+    if (pendingMinute) {
+      flush(line);
+      continue;
+    }
+  }
+
+  return events.slice(0, 8);
 }
 
 function parseDirectTitle(markdown: string) {
@@ -242,13 +445,14 @@ async function fetchLiveArticleDetails(articleUrl: string) {
 
   const proxyUrl = `https://r.jina.ai/http://${articleUrl.replace(/^https?:\/\//, '')}`;
   const markdown = await fetchText(proxyUrl, 'text/plain');
-  const liveMinute = parseLiveMinuteFromLiveArticleMarkdown(markdown);
-  return {
-    minute: liveMinute.minute,
-    minuteLabel: liveMinute.minuteLabel,
-    directTitle: parseDirectTitle(markdown),
-    status: detectMatchStatusFromMarkdown(markdown)
-  };
+    const liveMinute = parseLiveMinuteFromLiveArticleMarkdown(markdown);
+    return {
+      minute: liveMinute.minute,
+      minuteLabel: liveMinute.minuteLabel,
+      directTitle: parseDirectTitle(markdown),
+      status: detectMatchStatusFromMarkdown(markdown),
+      events: parseLiveEventsFromLiveArticleMarkdown(markdown)
+    };
 }
 
 function refreshIntervalFor(payload: any) {
@@ -383,6 +587,15 @@ Deno.serve(async req => {
       const resolvedHeadline = headline
         || (liveArticleDetails.directTitle && liveArticleDetails.directTitle !== 'as.com' ? liveArticleDetails.directTitle : '')
         || `${liveMatch.homeTeam} - ${liveMatch.awayTeam}`;
+      const resolvedEvents = [...(Array.isArray(liveMatch.events) ? liveMatch.events : []), ...(Array.isArray(liveArticleDetails.events) ? liveArticleDetails.events : [])]
+        .filter(event => event?.text)
+        .map(event => ({
+          minute: Number.isFinite(event.minute) ? event.minute : null,
+          minuteLabel: event.minuteLabel || '',
+          kind: event.kind || 'event',
+          text: event.text
+        }))
+        .filter((event, index, array) => index === array.findIndex(other => other.kind === event.kind && other.text === event.text));
 
       payload = {
         kind: CACHE_KIND,
@@ -398,7 +611,8 @@ Deno.serve(async req => {
           headline: resolvedHeadline,
           status: finalResolvedStatus,
           minute: resolvedMinute,
-          minuteLabel: resolvedMinuteLabel
+          minuteLabel: resolvedMinuteLabel,
+          events: resolvedEvents
         }
       };
     }

@@ -1050,6 +1050,28 @@ function getAsLiveMatchBadge(payload) {
   return minuteLabel ? `${minuteLabel}'` : (status || 'En juego');
 }
 
+function formatAsLiveEvent(event) {
+  if (!event?.text) return '';
+  const minute = event.minuteLabel ? `${escapeHtml(event.minuteLabel)}'` : '';
+  const parsedText = String(event.text || '').trim();
+  const parsedMinute = parsedText.match(/(\d{1,3}(?:\+\d{1,2})?)['’]?$/)?.[1] || '';
+  const player = parsedMinute
+    ? parsedText.replace(new RegExp(`\\s*${parsedMinute}['’]?$`), '').trim()
+    : parsedText;
+  const icon = event.kind === 'red-card'
+    ? '🟥'
+    : (event.kind === 'goal-penalty' ? '🎯' : '⚽');
+  const flag = event.team ? TEAM_FLAGS[normalizeTeam(event.team)] || TEAM_FLAGS[event.team] || '🏳️' : '';
+
+  return `<span class="live-event-chip ${escapeHtml(event.kind || '')}"><span class="live-event-icon">${icon}</span><span class="live-event-player">${escapeHtml(player)}</span>${flag ? `<span class="live-event-flag">${flag}</span>` : ''}${minute ? `<span class="live-event-minute">${minute}</span>` : ''}</span>`;
+}
+
+function formatAsLiveScorerChip(text) {
+  const value = String(text || '').trim();
+  if (!value) return '';
+  return `<span class="live-event-chip goal"><span class="live-event-icon">⚽</span><span class="live-event-player">${escapeHtml(value)}</span></span>`;
+}
+
 function isAsLiveMatchVisible(payload) {
   if (!payload?.match) return false;
   if (payload.live) return true;
@@ -1106,8 +1128,13 @@ function renderAsLiveMatchCard() {
   }
 
   const liveBadge = isLive ? getAsLiveMatchBadge(payload) : 'Final';
-  const summaryLine = match.scorerSummary || 'Abrir directo en AS';
   const headline = match.headline || `${match.homeTeam} - ${match.awayTeam}`;
+  const liveEvents = Array.isArray(match.events) ? match.events : [];
+  const goalChips = !liveEvents.length && match.scorerSummary
+    ? match.scorerSummary.split(/\s*[·•]\s*/).filter(Boolean).map(formatAsLiveScorerChip)
+    : [];
+  const showSummaryLine = !liveEvents.length && !goalChips.length;
+  const matchMinuteLabel = Number.isFinite(match.minute) ? `${match.minute}'` : (match.minuteLabel ? `${match.minuteLabel}'` : '');
   const cardAttributes = localMatch
     ? `role="button" tabindex="0" data-match-id="${localMatch.id}" aria-label="Ver predicciones de ${escapeHtml(localMatch.team1)} contra ${escapeHtml(localMatch.team2)}"`
     : (articleUrl ? `role="button" tabindex="0" data-external-url="${escapeHtml(articleUrl)}" aria-label="Abrir directo de AS de ${escapeHtml(match.homeTeam)} contra ${escapeHtml(match.awayTeam)}"` : '');
@@ -1127,11 +1154,12 @@ function renderAsLiveMatchCard() {
         <span>${escapeHtml(match.awayTeam)}</span>
       </div>
       <div class="live-match-meta">
-        <span class="live-match-minute">${escapeHtml(liveBadge)}</span>
+        <span class="live-match-minute">${escapeHtml(matchMinuteLabel || liveBadge)}</span>
         <span>${escapeHtml(freshLabel)}</span>
       </div>
       <b>${escapeHtml(headline)}</b>
-      <span>${escapeHtml(summaryLine)}</span>
+      ${showSummaryLine ? `<span>${escapeHtml(match.scorerSummary || 'Abrir directo en AS')}</span>` : ''}
+      ${(liveEvents.length || goalChips.length) ? `<div class="live-event-list">${[...liveEvents.map(formatAsLiveEvent), ...goalChips].join('')}</div>` : ''}
       <span class="card-detail">
         ${localMatch ? 'Toca para ver todas las predicciones' : 'Actualizacion automatica desde AS'}
         ${isFinal ? ` · visible 5 min tras el final` : ''}
