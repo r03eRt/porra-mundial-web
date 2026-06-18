@@ -173,6 +173,9 @@ const LOCAL_MATCH_BY_FIXTURE_KEY = new Map(DATA.matches
   .map(match => [keyForTeams(match.team1, match.team2), match]));
 const MATCH_ORDER_INDEX = new Map(DATA.matches
   .map((match, index) => [match.id, index]));
+const CHAMPION_PREDICTIONS_BY_PLAYER = DATA.knockoutPredictions
+  .filter(prediction => prediction.stage === '1º')
+  .reduce((acc, prediction) => Object.assign(acc, prediction.predictions || {}), {});
 const KNOCKOUT_SCORING = {
   DIECISEISAVOS: { label: 'Dieciseisavos', apiRound: 'Round of 32', previousRound: null, points: 3, expected: 32 },
   OCTAVOS: { label: 'Octavos', apiRound: 'Round of 16', previousRound: 'Round of 32', points: 5, expected: 16 },
@@ -184,6 +187,14 @@ const KNOCKOUT_SCORING = {
 
 function teamLabel(team) {
   return `${TEAM_FLAGS[team] || '🏳️'} ${team}`;
+}
+
+function championPredictionFor(playerId) {
+  return CHAMPION_PREDICTIONS_BY_PLAYER[playerId] || '';
+}
+
+function teamFlag(team) {
+  return TEAM_FLAGS[team] || '🏳️';
 }
 
 const MINI_FIELD_TYPES = {
@@ -911,12 +922,12 @@ function sortRows(rows, sort) {
   });
 }
 
-function sortableHeader(table, key, label, sort) {
+function sortableHeader(table, key, label, sort, className = '') {
   const active = sort.key === key;
   const indicator = active ? (sort.direction === 'asc' ? '▲' : '▼') : '';
   const ariaSort = active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none';
   const directionClass = active ? sort.direction : '';
-  return `<th aria-sort="${ariaSort}"><button type="button" class="sort-button ${active ? 'active' : ''} ${directionClass}" data-sort-table="${table}" data-sort-key="${key}"><span>${indicator}</span>${label}</button></th>`;
+  return `<th class="${className}" aria-sort="${ariaSort}"><button type="button" class="sort-button ${className} ${active ? 'active' : ''} ${directionClass}" data-sort-table="${table}" data-sort-key="${key}"><span>${indicator}</span>${label}</button></th>`;
 }
 
 function applyAdminMode() {
@@ -1146,31 +1157,38 @@ function renderRanking() {
   const historySnapshots = buildHistoricalSnapshots();
   const previousSnapshot = historySnapshots.length > 1 ? historySnapshots[historySnapshots.length - 2] : null;
   const rows = sortRows(ranking
-    .map((player, index) => ({ ...player, position: index + 1, hits: player.signs + player.exacts }))
+    .map((player, index) => ({
+      ...player,
+      position: index + 1,
+      hits: player.signs + player.exacts,
+      championPick: championPredictionFor(player.id)
+    }))
     .filter(player => normalize(player.name).includes(q)), state.rankingSort);
   document.getElementById('rankingTable').innerHTML = html`
     <thead><tr>
-      ${sortableHeader('ranking', 'position', '#', state.rankingSort)}
-      <th>Mov.</th>
+      ${sortableHeader('ranking', 'position', '#', state.rankingSort, 'table-center')}
+      <th class="table-center">Mov.</th>
       <th>Participante</th>
-      ${sortableHeader('ranking', 'total', 'Total', state.rankingSort)}
-      ${sortableHeader('ranking', 'groupPoints', '1ª fase', state.rankingSort)}
-      ${sortableHeader('ranking', 'exacts', 'Exactos', state.rankingSort)}
-      ${sortableHeader('ranking', 'hits', 'Aciertos', state.rankingSort)}
-      ${sortableHeader('ranking', 'knockoutPoints', 'Cruces', state.rankingSort)}
+      ${sortableHeader('ranking', 'total', 'Total', state.rankingSort, 'table-center')}
+      ${sortableHeader('ranking', 'groupPoints', '1ª fase', state.rankingSort, 'table-center')}
+      ${sortableHeader('ranking', 'exacts', 'Exactos', state.rankingSort, 'table-center')}
+      ${sortableHeader('ranking', 'hits', 'Aciertos', state.rankingSort, 'table-center')}
+      ${sortableHeader('ranking', 'knockoutPoints', 'Cruces', state.rankingSort, 'table-center')}
+      ${sortableHeader('ranking', 'championPick', 'Campeón', state.rankingSort, 'table-center')}
     </tr></thead>
     <tbody>${rows.map(player => {
       const movement = historyPositionChange(player, previousSnapshot);
       return html`
       <tr class="${player.position <= 3 ? `rank-${player.position}` : ''}">
         <td class="ranking-position">${medals[player.position - 1] || (player.position === ranking.length ? '💩' : player.position)}</td>
-        <td class="${movement.className}" title="${movement.label}">${movement.symbol}${movement.delta ? ` ${movement.delta}` : ''}</td>
+        <td class="table-center ${movement.className}" title="${movement.label}">${movement.symbol}${movement.delta ? ` ${movement.delta}` : ''}</td>
         <td>${player.name}</td>
-        <td class="points">${player.total}</td>
-        <td>${player.groupPoints}</td>
-        <td>${player.exacts}</td>
-        <td>${player.signs + player.exacts}</td>
-        <td>${player.knockoutPoints}</td>
+        <td class="table-center points">${player.total}</td>
+        <td class="table-center">${player.groupPoints}</td>
+        <td class="table-center">${player.exacts}</td>
+        <td class="table-center">${player.signs + player.exacts}</td>
+        <td class="table-center">${player.knockoutPoints}</td>
+        <td class="table-center" title="${player.championPick ? escapeHtml(player.championPick) : 'Sin campeón'}">${player.championPick ? escapeHtml(teamFlag(player.championPick)) : '-'}</td>
       </tr>`;
     }).join('')}</tbody>
   `;
