@@ -802,6 +802,25 @@ function calculateBestCurrentStreak() {
   return streaks[0]?.streak > 0 ? streaks[0] : null;
 }
 
+function calculateMostChosenPrediction(match) {
+  if (!match?.predictions) return null;
+
+  const counts = new Map();
+  for (const player of DATA.players) {
+    const prediction = match.predictions[player.id];
+    const score = String(prediction?.score || '').trim();
+    if (!score) continue;
+    counts.set(score, (counts.get(score) || 0) + 1);
+  }
+
+  const entries = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'));
+
+  if (!entries.length) return null;
+  const [score, votes] = entries[0];
+  return { score, votes };
+}
+
 function renderSummary() {
   const played = DATA.matches.filter(getResult).length;
   const ranking = calculateRanking();
@@ -810,8 +829,8 @@ function renderSummary() {
     .filter(match => !getResult(match))
     .sort((a, b) => getMatchScheduleTimestamp(a) - getMatchScheduleTimestamp(b))[0] || null;
   const bestStreak = calculateBestCurrentStreak();
+  const mostChosenPrediction = nextMatch ? calculateMostChosenPrediction(nextMatch) : null;
   document.getElementById('summaryCards').innerHTML = html`
-    <article class="card"><b>${DATA.players.length}</b><span>participantes</span></article>
     <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
     <article class="card"><b>${ranking[0] ? `⭐ ${ranking[0].name}` : '-'}</b><span>líder actual</span></article>
     <article class="card"><b>${ranking[0]?.total || 0}</b><span>puntos del líder</span></article>
@@ -820,6 +839,7 @@ function renderSummary() {
       <b>${nextMatch ? `${TEAM_FLAGS[nextMatch.team1] || '🏳️'} ${nextMatch.team1}<span class="next-match-separator">-</span>${TEAM_FLAGS[nextMatch.team2] || '🏳️'} ${nextMatch.team2}` : '-'}</b>
       <span>${nextMatch ? 'siguiente partido' : 'sin partidos pendientes'}</span>
       <span class="card-detail">${nextMatch ? formatMatchSchedule(nextMatch) : ''}</span>
+      <span class="card-detail">${mostChosenPrediction ? `Pronóstico más elegido: ${mostChosenPrediction.score} · ${mostChosenPrediction.votes} voto${mostChosenPrediction.votes === 1 ? '' : 's'}` : ''}</span>
     </article>
     <article class="card">
       <b>${bestStreak ? `🔥 ${bestStreak.player.name}` : '-'}</b>
