@@ -16,6 +16,12 @@ const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw';
 const WORLDCUP_RESULTS_TABLE = 'worldcup_results_cache';
 const WORLDCUP_RESULTS_KIND = 'openfootball-2026';
+const AS_LIVE_MATCH_TABLE = 'as_live_match_cache';
+const AS_LIVE_MATCH_KIND = 'worldcup-2026';
+const AS_LIVE_MATCH_ACTIVE_REFRESH_MS = 45 * 1000;
+const AS_LIVE_MATCH_IDLE_REFRESH_MS = 15 * 60 * 1000;
+const AS_LIVE_MATCH_FETCH_TIMEOUT_MS = 15000;
+const AS_LIVE_MATCH_FINAL_GRACE_MS = 5 * 60 * 1000;
 const adminParam = new URLSearchParams(window.location.search).get('admin');
 const ADMIN_REQUESTED = new URLSearchParams(window.location.search).has('admin')
   && !['0', 'false', 'no'].includes(String(adminParam).toLowerCase());
@@ -111,14 +117,19 @@ const state = {
   compareMatchId: '',
   comparePlayers: [],
   historyCheckpointId: ''
+  ,
+  asLiveMatch: null
 };
 let apiRefreshInProgress = false;
+let asLiveMatchRefreshInProgress = false;
 let dismissedVersion = null;
 let serviceWorkerRegistration = null;
 let deferredInstallPrompt = null;
 let appToastTimer = null;
 let appToastQueueTimer = null;
+let asLiveMatchRefreshTimer = null;
 let lastApiRefreshAt = Number(localStorage.getItem(LS_KEYS.apiRefreshAt) || 0);
+let lastAsLiveMatchRefreshAt = 0;
 let lastVersionCheckAt = 0;
 let lastResumeRefreshAt = 0;
 const INSTALL_BANNER_DISMISS_MS = 3 * 24 * 60 * 60 * 1000;
@@ -771,11 +782,98 @@ function renderHeaderSyncStatus() {
   `;
 }
 
+function getAsLiveMatchRefreshIntervalMs() {
+  return isAsLiveMatchVisible(state.asLiveMatch) ? AS_LIVE_MATCH_ACTIVE_REFRESH_MS : AS_LIVE_MATCH_IDLE_REFRESH_MS;
+}
+
+function isAsLiveMatchVisible(payload) {
+  if (!payload?.match) return false;
+  if (payload.live) return true;
+  if (!payload.showUntil) return false;
+  const showUntilTs = new Date(payload.showUntil).getTime();
+  return Number.isFinite(showUntilTs) && showUntilTs > Date.now();
+}
+
+function findLocalMatchForAsLiveMatch(match) {
+  if (!match?.homeTeam || !match?.awayTeam) return null;
+
+  const normalizedHome = normalizeTeam(match.homeTeam);
+  const normalizedAway = normalizeTeam(match.awayTeam);
+
+  return DATA.matches.find(item => (
+    normalizeTeam(item.team1) === normalizedHome
+    && normalizeTeam(item.team2) === normalizedAway
+  )) || null;
+}
+
+function renderAsLiveMatchCard() {
+  const payload = state.asLiveMatch;
+  const match = payload?.match || null;
+  const articleUrl = match?.articleUrl || '';
+  const localMatch = findLocalMatchForAsLiveMatch(match);
+  const isVisible = isAsLiveMatchVisible(payload);
+  const isLive = Boolean(payload?.live && match);
+  const isFinal = Boolean(match && isVisible && !isLive);
+  const freshLabel = payload?.updatedAt
+    ? formatRelativeUpdateTime(new Date(payload.updatedAt).getTime())
+    : 'sin actualizar';
+
+  if (!match || !isVisible) {
+    return html`
+      <article class="card live-match-card">
+        <div class="live-match-top">
+          <span class="live-match-chip">AS · Mundial</span>
+          <span class="live-match-chip">Sin directo</span>
+        </div>
+        <b>Sin partido en juego</b>
+        <span>AS no marca ahora mismo ningun partido del Mundial como "En juego".</span>
+        <span class="card-detail">${escapeHtml(freshLabel)} · Cache de Supabase</span>
+      </article>
+    `;
+  }
+
+  const liveBadge = isLive ? (match.minute ? `${match.minute}'` : (match.status || 'En juego')) : 'Final';
+  const summaryLine = match.scorerSummary || 'Abrir directo en AS';
+  const headline = match.headline || `${match.homeTeam} - ${match.awayTeam}`;
+  const cardAttributes = localMatch
+    ? `role="button" tabindex="0" data-match-id="${localMatch.id}" aria-label="Ver predicciones de ${escapeHtml(localMatch.team1)} contra ${escapeHtml(localMatch.team2)}"`
+    : (articleUrl ? `role="button" tabindex="0" data-external-url="${escapeHtml(articleUrl)}" aria-label="Abrir directo de AS de ${escapeHtml(match.homeTeam)} contra ${escapeHtml(match.awayTeam)}"` : '');
+
+  return html`
+    <article
+      class="card live-match-card ${localMatch ? 'summary-match-card' : (articleUrl ? 'summary-external-card' : '')}"
+      ${cardAttributes}
+    >
+      <div class="live-match-top">
+        <span class="live-match-chip ${isLive ? 'is-live' : ''}">${isLive ? '<span class="live-match-dot" aria-hidden="true"></span>En directo' : 'Resultado final'}</span>
+        <span class="live-match-chip">AS · ${escapeHtml(match.group || 'Mundial')}</span>
+      </div>
+      <div class="live-match-scoreline">
+        <span>${escapeHtml(match.homeTeam)}</span>
+        <strong>${match.homeScore} - ${match.awayScore}</strong>
+        <span>${escapeHtml(match.awayTeam)}</span>
+      </div>
+      <div class="live-match-meta">
+        <span class="live-match-minute">${escapeHtml(liveBadge)}</span>
+        <span>${escapeHtml(freshLabel)}</span>
+      </div>
+      <b>${escapeHtml(headline)}</b>
+      <span>${escapeHtml(summaryLine)}</span>
+      <span class="card-detail">
+        ${localMatch ? 'Toca para ver todas las predicciones' : 'Actualizacion automatica desde AS'}
+        ${isFinal ? ` · visible 5 min tras el final` : ''}
+        ${articleUrl ? ` · <button type="button" class="match-link-button" data-external-url="${escapeHtml(articleUrl)}" aria-label="Abrir directo de AS">Abrir AS</button>` : ''}
+      </span>
+    </article>
+  `;
+}
+
 function renderSummary() {
   const played = DATA.matches.filter(getResult).length;
   const ranking = calculateRanking();
   const lastUpdate = localStorage.getItem(LS_KEYS.lastUpdate) || 'sin actualizar';
   const nextMatch = pickNextPendingMatch(DATA.matches, getResult, getMatchScheduleTimestamp);
+  const hasLiveMatch = isAsLiveMatchVisible(state.asLiveMatch);
   const bestStreak = calculateBestCurrentStreak(
     DATA.players,
     DATA.matches.filter(match => getResult(match)).sort(compareMatchesForDisplay),
@@ -785,16 +883,19 @@ function renderSummary() {
   );
   const mostChosenPrediction = nextMatch ? calculateMostChosenPrediction(nextMatch, DATA.players) : null;
   document.getElementById('summaryCards').innerHTML = html`
+    ${renderAsLiveMatchCard()}
     <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
     <article class="card"><b>${ranking[0] ? `⭐ ${ranking[0].name}` : '-'}</b><span>líder actual</span></article>
     <article class="card"><b>${ranking[0]?.total || 0}</b><span>puntos del líder</span></article>
     <article class="card"><b>${ranking.length ? `💩 ${ranking[ranking.length - 1].name}` : '-'}</b><span>el purria</span></article>
-    <article class="card next-match-card ${nextMatch ? 'summary-match-card' : ''}" ${nextMatch ? `role="button" tabindex="0" data-match-id="${nextMatch.id}" aria-label="Ver predicciones de ${escapeHtml(nextMatch.team1)} contra ${escapeHtml(nextMatch.team2)}"` : ''}>
-      <b>${nextMatch ? `${TEAM_FLAGS[nextMatch.team1] || '🏳️'} ${nextMatch.team1}<span class="next-match-separator">-</span>${TEAM_FLAGS[nextMatch.team2] || '🏳️'} ${nextMatch.team2}` : '-'}</b>
-      <span>${nextMatch ? 'siguiente partido' : 'sin partidos pendientes'}</span>
-      <span class="card-detail">${nextMatch ? formatMatchSchedule(nextMatch) : ''}</span>
-      <span class="card-detail">${mostChosenPrediction ? `Pronóstico más elegido: ${mostChosenPrediction.score} · ${mostChosenPrediction.votes} voto${mostChosenPrediction.votes === 1 ? '' : 's'}` : ''}</span>
-    </article>
+    ${hasLiveMatch ? '' : html`
+      <article class="card next-match-card ${nextMatch ? 'summary-match-card' : ''}" ${nextMatch ? `role="button" tabindex="0" data-match-id="${nextMatch.id}" aria-label="Ver predicciones de ${escapeHtml(nextMatch.team1)} contra ${escapeHtml(nextMatch.team2)}"` : ''}>
+        <b>${nextMatch ? `${TEAM_FLAGS[nextMatch.team1] || '🏳️'} ${nextMatch.team1}<span class="next-match-separator">-</span>${TEAM_FLAGS[nextMatch.team2] || '🏳️'} ${nextMatch.team2}` : '-'}</b>
+        <span>${nextMatch ? 'siguiente partido' : 'sin partidos pendientes'}</span>
+        <span class="card-detail">${nextMatch ? formatMatchSchedule(nextMatch) : ''}</span>
+        <span class="card-detail">${mostChosenPrediction ? `Pronóstico más elegido: ${mostChosenPrediction.score} · ${mostChosenPrediction.votes} voto${mostChosenPrediction.votes === 1 ? '' : 's'}` : ''}</span>
+      </article>
+    `}
     <article class="card">
       <b>${bestStreak ? `🔥 ${bestStreak.player.name}` : '-'}</b>
       <span>${bestStreak ? 'mejor racha actual' : 'sin rachas activas'}</span>
@@ -2430,6 +2531,78 @@ async function loadWorldcupResultsCache() {
   return true;
 }
 
+function applyAsLiveMatchPayload(payload, { updatedAt } = {}) {
+  state.asLiveMatch = payload
+    ? {
+      ...payload,
+      updatedAt: updatedAt || payload.scrapedAt || null
+    }
+    : null;
+  lastAsLiveMatchRefreshAt = state.asLiveMatch?.updatedAt
+    ? (new Date(state.asLiveMatch.updatedAt).getTime() || Date.now())
+    : 0;
+}
+
+async function loadAsLiveMatchCache() {
+  const { data, error } = await supabase
+    .from(AS_LIVE_MATCH_TABLE)
+    .select('kind,payload,updated_at')
+    .eq('kind', AS_LIVE_MATCH_KIND)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data?.payload) {
+    applyAsLiveMatchPayload(null);
+    return false;
+  }
+
+  applyAsLiveMatchPayload(data.payload, { updatedAt: data.updated_at || data.payload.scrapedAt });
+  return true;
+}
+
+function scheduleAsLiveMatchRefresh() {
+  if (asLiveMatchRefreshTimer) {
+    clearTimeout(asLiveMatchRefreshTimer);
+  }
+
+  asLiveMatchRefreshTimer = setTimeout(() => {
+    refreshAsLiveMatch({ silent: true });
+  }, getAsLiveMatchRefreshIntervalMs());
+}
+
+async function refreshAsLiveMatch(options = {}) {
+  const silent = options?.silent === true;
+  if (asLiveMatchRefreshInProgress) return;
+  asLiveMatchRefreshInProgress = true;
+
+  try {
+    const response = await fetchJsonWithTimeout(`${SUPABASE_URL}/functions/v1/sync-as-live-match`, {
+      method: 'GET',
+      cache: 'no-store'
+    }, AS_LIVE_MATCH_FETCH_TIMEOUT_MS);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const payload = await response.json();
+    if (payload.ok === false) {
+      throw new Error(payload.error || 'No se pudo sincronizar el directo de AS.');
+    }
+
+    await loadAsLiveMatchCache();
+    renderSummary();
+  } catch (error) {
+    console.warn('No se pudo actualizar el directo de AS:', error);
+    if (!silent) {
+      showAppToast('No se pudo actualizar el directo de AS.');
+    }
+  } finally {
+    asLiveMatchRefreshInProgress = false;
+    scheduleAsLiveMatchRefresh();
+  }
+}
+
 async function refreshStatsRankings() {
   const button = document.getElementById('statsRefreshBtn');
   const originalLabel = button.textContent;
@@ -2541,6 +2714,15 @@ function maybeRefreshFromApiOnResume() {
   }
 }
 
+function maybeRefreshAsLiveMatchOnResume() {
+  if (asLiveMatchRefreshInProgress || !navigator.onLine) return;
+  if (!lastAsLiveMatchRefreshAt || (Date.now() - lastAsLiveMatchRefreshAt) >= getAsLiveMatchRefreshIntervalMs()) {
+    refreshAsLiveMatch({ silent: true });
+  } else {
+    scheduleAsLiveMatchRefresh();
+  }
+}
+
 async function saveMiniResult(id) {
   if (!isAdmin()) return;
   const result = document.querySelector(`[data-mini-result="${id}"]`).value.trim();
@@ -2622,6 +2804,11 @@ document.addEventListener('click', e => {
     renderCompare();
     return;
   }
+  const externalCard = e.target.closest('[data-external-url]');
+  if (externalCard) {
+    window.open(externalCard.dataset.externalUrl, '_blank', 'noopener');
+    return;
+  }
   const matchCard = e.target.closest('[data-match-id]');
   if (matchCard) {
     openMatchPredictions(matchCard.dataset.matchId);
@@ -2661,6 +2848,12 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('keydown', e => {
+  const externalCard = e.target.closest?.('[data-external-url]');
+  if (externalCard && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    window.open(externalCard.dataset.externalUrl, '_blank', 'noopener');
+    return;
+  }
   const matchCard = e.target.closest?.('[data-match-id]');
   if (matchCard && (e.key === 'Enter' || e.key === ' ')) {
     e.preventDefault();
@@ -2810,10 +3003,26 @@ async function initializeResultsFlow() {
   }
 }
 
+async function initializeAsLiveMatchFlow() {
+  try {
+    const loaded = await loadAsLiveMatchCache();
+    renderSummary();
+    if (!loaded || !lastAsLiveMatchRefreshAt || (Date.now() - lastAsLiveMatchRefreshAt) >= getAsLiveMatchRefreshIntervalMs()) {
+      refreshAsLiveMatch({ silent: true });
+      return;
+    }
+  } catch (error) {
+    console.warn('No se pudo cargar el cache del directo de AS:', error);
+  }
+
+  scheduleAsLiveMatchRefresh();
+}
+
 applyTheme(document.documentElement.dataset.theme);
 applyAdminMode();
 renderAll();
 initializeResultsFlow();
+initializeAsLiveMatchFlow();
 loadMiniResultsFromSupabase();
 loadStatsRankings();
 initializeAuth();
@@ -2824,12 +3033,15 @@ checkForAppUpdate();
 setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);
 setInterval(checkForAppUpdate, VERSION_CHECK_INTERVAL_MS);
 window.addEventListener('online', maybeRefreshFromApiOnResume);
+window.addEventListener('online', maybeRefreshAsLiveMatchOnResume);
 window.addEventListener('pageshow', event => {
   if (!event.persisted) return;
   maybeRefreshFromApiOnResume();
+  maybeRefreshAsLiveMatchOnResume();
 });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     maybeRefreshFromApiOnResume();
+    maybeRefreshAsLiveMatchOnResume();
   }
 });

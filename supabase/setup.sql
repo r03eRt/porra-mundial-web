@@ -18,9 +18,17 @@ create table if not exists public.worldcup_results_cache (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.as_live_match_cache (
+  kind text primary key,
+  payload jsonb not null,
+  source text not null default 'as.com',
+  updated_at timestamptz not null default now()
+);
+
 alter table public.mini_results enable row level security;
 alter table public.as_rankings_cache enable row level security;
 alter table public.worldcup_results_cache enable row level security;
+alter table public.as_live_match_cache enable row level security;
 
 revoke all on table public.mini_results from anon, authenticated;
 grant select on table public.mini_results to anon, authenticated;
@@ -31,6 +39,9 @@ grant select on table public.as_rankings_cache to anon, authenticated;
 
 revoke all on table public.worldcup_results_cache from anon, authenticated;
 grant select on table public.worldcup_results_cache to anon, authenticated;
+
+revoke all on table public.as_live_match_cache from anon, authenticated;
+grant select on table public.as_live_match_cache to anon, authenticated;
 
 drop policy if exists "Mini results are public" on public.mini_results;
 create policy "Mini results are public"
@@ -71,6 +82,13 @@ create policy "AS rankings cache is public"
 drop policy if exists "World Cup results cache is public" on public.worldcup_results_cache;
 create policy "World Cup results cache is public"
   on public.worldcup_results_cache
+  for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "AS live match cache is public" on public.as_live_match_cache;
+create policy "AS live match cache is public"
+  on public.as_live_match_cache
   for select
   to anon, authenticated
   using (true);

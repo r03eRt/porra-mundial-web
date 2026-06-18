@@ -3,3 +3,6 @@ verify_jwt = false
 
 [functions.sync-worldcup-results]
 verify_jwt = false
+
+[functions.sync-as-live-match]
+verify_jwt = false
