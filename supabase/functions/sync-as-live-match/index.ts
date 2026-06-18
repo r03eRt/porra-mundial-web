@@ -190,6 +190,7 @@ Deno.serve(async req => {
   }
 
   try {
+    const force = ['1', 'true', 'yes'].includes(new URL(req.url).searchParams.get('force')?.toLowerCase() || '');
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false }
     });
@@ -207,14 +208,15 @@ Deno.serve(async req => {
       ? now - new Date(cachedRow.updated_at).getTime()
       : Number.POSITIVE_INFINITY;
 
-    if (cachedRow?.payload && cacheAgeMs < refreshIntervalFor(cachedRow.payload)) {
+    if (!force && cachedRow?.payload && cacheAgeMs < refreshIntervalFor(cachedRow.payload)) {
       return jsonResponse({
         ok: true,
         skipped: true,
         source: 'supabase-cache',
         updatedAt: cachedRow.updated_at,
         refreshIntervalMs: refreshIntervalFor(cachedRow.payload),
-        live: Boolean(cachedRow.payload?.live)
+        live: Boolean(cachedRow.payload?.live),
+        forced: false
       });
     }
 
@@ -306,7 +308,8 @@ Deno.serve(async req => {
       skipped: false,
       updatedAt: scrapedAt,
       live: Boolean(payload.live),
-      refreshIntervalMs: refreshIntervalFor(payload)
+      refreshIntervalMs: refreshIntervalFor(payload),
+      forced: force
     });
   } catch (error) {
     console.error('sync-as-live-match failed:', error);

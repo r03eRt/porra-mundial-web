@@ -2793,11 +2793,14 @@ function scheduleAsLiveMatchRefresh() {
 
 async function refreshAsLiveMatch(options = {}) {
   const silent = options?.silent === true;
+  const force = options?.force === true;
   if (asLiveMatchRefreshInProgress) return;
   asLiveMatchRefreshInProgress = true;
 
   try {
-    const response = await fetchJsonWithTimeout(`${SUPABASE_URL}/functions/v1/sync-as-live-match`, {
+    const syncUrl = new URL(`${SUPABASE_URL}/functions/v1/sync-as-live-match`);
+    if (force) syncUrl.searchParams.set('force', '1');
+    const response = await fetchJsonWithTimeout(syncUrl, {
       method: 'GET',
       cache: 'no-store'
     }, AS_LIVE_MATCH_FETCH_TIMEOUT_MS);
@@ -2813,19 +2816,24 @@ async function refreshAsLiveMatch(options = {}) {
 
     await loadAsLiveMatchCache();
     renderSummary();
+    return true;
   } catch (error) {
     console.warn('No se pudo actualizar el directo de AS:', error);
     if (!silent) {
       showAppToast('No se pudo actualizar el directo de AS.');
     }
+    return false;
   } finally {
     asLiveMatchRefreshInProgress = false;
     scheduleAsLiveMatchRefresh();
   }
 }
 
-async function refreshStatsRankings() {
-  const button = document.getElementById('statsRefreshBtn');
+async function refreshStatsRankings(options = {}) {
+  const buttonId = options?.buttonId || 'statsRefreshBtn';
+  const notifyWithAlert = options?.notifyWithAlert !== false;
+  const button = document.getElementById(buttonId);
+  if (!button) return false;
   const originalLabel = button.textContent;
   button.disabled = true;
   button.textContent = 'Actualizando...';
@@ -2846,10 +2854,12 @@ async function refreshStatsRankings() {
     }
 
     await loadStatsRankings();
-    alert('Estadísticas actualizadas.');
+    if (notifyWithAlert) alert('Estadísticas actualizadas.');
+    return true;
   } catch (error) {
     console.error('No se pudo forzar el refresco de estadísticas:', error);
-    alert('No se pudo forzar el refresco de estadísticas: ' + error.message);
+    if (notifyWithAlert) alert('No se pudo forzar el refresco de estadísticas: ' + error.message);
+    return false;
   } finally {
     button.disabled = false;
     button.textContent = originalLabel;
@@ -2872,6 +2882,7 @@ async function initializeAuth() {
 
 async function refreshFromApi(options = {}) {
   const silent = options?.silent === true;
+  const force = options?.force === true;
   if (apiRefreshInProgress) return;
   apiRefreshInProgress = true;
   renderHeaderSyncStatus();
@@ -2880,7 +2891,9 @@ async function refreshFromApi(options = {}) {
   const btn = document.getElementById('refreshApiBtn');
   btn.disabled = true; btn.textContent = 'Actualizando...';
   try {
-    const syncResponse = await fetchJsonWithTimeout(`${SUPABASE_URL}/functions/v1/sync-worldcup-results`, {
+    const syncUrl = new URL(`${SUPABASE_URL}/functions/v1/sync-worldcup-results`);
+    if (force) syncUrl.searchParams.set('force', '1');
+    const syncResponse = await fetchJsonWithTimeout(syncUrl, {
       method: 'GET',
       cache: 'no-store'
     });
@@ -2900,6 +2913,7 @@ async function refreshFromApi(options = {}) {
     state.rankingLoading = false;
     localStorage.setItem(LS_KEYS.lastUpdate, new Date().toLocaleString('es-ES'));
     renderAll();
+    return true;
   } catch (err) {
     console.warn('Fallo leyendo resultados desde Supabase cacheado. Intentando fallback directo...', err);
     try {
@@ -2911,17 +2925,40 @@ async function refreshFromApi(options = {}) {
       state.rankingLoading = false;
       localStorage.setItem(LS_KEYS.lastUpdate, new Date().toLocaleString('es-ES'));
       renderAll();
+      return true;
     } catch (fallbackError) {
       state.rankingLoading = false;
       renderRanking();
       if (!silent) alert('No se pudieron actualizar los resultados automáticos. Error: ' + fallbackError.message);
       console.error('Error al actualizar los resultados automáticos:', fallbackError);
+      return false;
     }
   } finally {
     apiRefreshInProgress = false;
     btn.disabled = false;
     btn.textContent = 'Actualizar datos';
     renderHeaderSyncStatus();
+  }
+}
+
+async function runAdminManualSync(buttonId, busyLabel, task, successMessage, errorMessage) {
+  if (!isAdmin()) return;
+  const button = document.getElementById(buttonId);
+  if (!button) return;
+
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = busyLabel;
+
+  try {
+    const ok = await task();
+    showAppToast(ok ? successMessage : errorMessage, ok ? 2400 : 3600);
+  } catch (error) {
+    console.error(errorMessage, error);
+    showAppToast(errorMessage, 3600);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
   }
 }
 
@@ -3184,6 +3221,33 @@ document.getElementById('statsToggleRows').addEventListener('click', () => {
 document.getElementById('statsRefreshBtn').addEventListener('click', () => {
   if (!isAdmin()) return;
   refreshStatsRankings();
+});
+document.getElementById('forceResultsSyncBtn').addEventListener('click', () => {
+  runAdminManualSync(
+    'forceResultsSyncBtn',
+    'Refrescando...',
+    () => refreshFromApi({ silent: true, force: true }),
+    'Caché de resultados refrescada.',
+    'No se pudo refrescar la caché de resultados.'
+  );
+});
+document.getElementById('forceLiveMatchSyncBtn').addEventListener('click', () => {
+  runAdminManualSync(
+    'forceLiveMatchSyncBtn',
+    'Refrescando...',
+    () => refreshAsLiveMatch({ silent: true, force: true }),
+    'Caché del directo AS refrescada.',
+    'No se pudo refrescar la caché del directo AS.'
+  );
+});
+document.getElementById('forceRankingsSyncBtn').addEventListener('click', () => {
+  runAdminManualSync(
+    'forceRankingsSyncBtn',
+    'Refrescando...',
+    () => refreshStatsRankings({ buttonId: 'forceRankingsSyncBtn', notifyWithAlert: false }),
+    'Caché de rankings AS refrescada.',
+    'No se pudo refrescar la caché de rankings AS.'
+  );
 });
 document.getElementById('saveApiUrlBtn').addEventListener('click', () => {
   if (!isAdmin()) return;

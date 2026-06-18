@@ -84,6 +84,7 @@ Deno.serve(async req => {
   }
 
   try {
+    const force = ['1', 'true', 'yes'].includes(new URL(req.url).searchParams.get('force')?.toLowerCase() || '');
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false }
     });
@@ -101,7 +102,7 @@ Deno.serve(async req => {
     const refreshIntervalMs = matchWindowActive ? MATCH_WINDOW_REFRESH_MS : NORMAL_REFRESH_MS;
     const cacheAgeMs = cachedRow?.updated_at ? now - new Date(cachedRow.updated_at).getTime() : Number.POSITIVE_INFINITY;
 
-    if (cachedRow?.payload && Number.isFinite(cacheAgeMs) && cacheAgeMs < refreshIntervalMs) {
+    if (!force && cachedRow?.payload && Number.isFinite(cacheAgeMs) && cacheAgeMs < refreshIntervalMs) {
       return jsonResponse({
         ok: true,
         skipped: true,
@@ -110,6 +111,7 @@ Deno.serve(async req => {
         count: cachedMatches.length,
         refreshIntervalMs,
         matchWindowActive,
+        forced: false,
         madridNow: formatMadrid(new Date(now))
       });
     }
@@ -150,6 +152,7 @@ Deno.serve(async req => {
       count: Array.isArray(payload.matches) ? payload.matches.length : 0,
       refreshIntervalMs,
       matchWindowActive,
+      forced: force,
       madridNow: formatMadrid(new Date(now))
     });
   } catch (error) {
