@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { KNOCKOUT_STAGES, buildPlayerKnockoutBracket } from './lib/knockout-bracket.js';
-import { normalize, parseScore, playerNamesMatch, signFromScore, statsCountryFlag, statsCountryLabel } from './lib/statistics-utils.js';
+import { calculateBestCurrentStreak, calculateMostChosenPrediction, historyPositionChange, pickNextPendingMatch, scorePrediction } from './lib/porra-core.js';
+import { normalize, parseScore, playerNamesMatch, statsCountryFlag, statsCountryLabel } from './lib/statistics-utils.js';
 import { TEAM_DETAIL_METRICS, calculateTeamStats, getTournamentTeams } from './lib/team-stats.js';
 import { simulateProbabilities } from './lib/probabilities.js';
 
@@ -504,15 +505,6 @@ function getResultFromMap(match, resultsMap = {}) {
   return null;
 }
 
-function scorePrediction(prediction, result) {
-  if (!result) return { points: 0, exact: false, sign: false };
-  const p = parseScore(prediction.score);
-  if (!p) return { points: 0, exact: false, sign: false };
-  const exact = p[0] === result.home && p[1] === result.away;
-  const sign = signFromScore(p) === signFromScore([result.home, result.away]);
-  return { points: exact ? DATA.meta.scoring.groupExact : (sign ? DATA.meta.scoring.groupSign : 0), exact, sign };
-}
-
 function isTournamentTeam(team) {
   return TOURNAMENT_TEAM_KEYS.has(teamKey(team));
 }
@@ -590,7 +582,7 @@ function calculateRankingFromData(resultsMap = state.apiResults, fixtures = stat
   return DATA.players.map(player => {
     const group = DATA.matches.reduce((acc, match) => {
       const result = getResultFromMap(match, resultsMap);
-      const sc = scorePrediction(match.predictions[player.id], result);
+      const sc = scorePrediction(match.predictions[player.id], result, DATA.meta.scoring);
       acc.points += sc.points;
       acc.exacts += sc.exact ? 1 : 0;
       acc.signs += (!sc.exact && sc.sign) ? 1 : 0;
@@ -779,57 +771,19 @@ function renderHeaderSyncStatus() {
   `;
 }
 
-function calculateBestCurrentStreak() {
-  const playedMatches = DATA.matches
-    .filter(match => getResult(match))
-    .sort(compareMatchesForDisplay);
-
-  if (!playedMatches.length) return null;
-
-  const streaks = DATA.players.map(player => {
-    let streak = 0;
-    for (let index = playedMatches.length - 1; index >= 0; index -= 1) {
-      const score = scorePrediction(playedMatches[index].predictions[player.id], getResult(playedMatches[index]));
-      if (score.points > 0) {
-        streak += 1;
-      } else {
-        break;
-      }
-    }
-    return { player, streak };
-  }).sort((a, b) => b.streak - a.streak || a.player.name.localeCompare(b.player.name, 'es'));
-
-  return streaks[0]?.streak > 0 ? streaks[0] : null;
-}
-
-function calculateMostChosenPrediction(match) {
-  if (!match?.predictions) return null;
-
-  const counts = new Map();
-  for (const player of DATA.players) {
-    const prediction = match.predictions[player.id];
-    const score = String(prediction?.score || '').trim();
-    if (!score) continue;
-    counts.set(score, (counts.get(score) || 0) + 1);
-  }
-
-  const entries = [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'));
-
-  if (!entries.length) return null;
-  const [score, votes] = entries[0];
-  return { score, votes };
-}
-
 function renderSummary() {
   const played = DATA.matches.filter(getResult).length;
   const ranking = calculateRanking();
   const lastUpdate = localStorage.getItem(LS_KEYS.lastUpdate) || 'sin actualizar';
-  const nextMatch = DATA.matches
-    .filter(match => !getResult(match))
-    .sort((a, b) => getMatchScheduleTimestamp(a) - getMatchScheduleTimestamp(b))[0] || null;
-  const bestStreak = calculateBestCurrentStreak();
-  const mostChosenPrediction = nextMatch ? calculateMostChosenPrediction(nextMatch) : null;
+  const nextMatch = pickNextPendingMatch(DATA.matches, getResult, getMatchScheduleTimestamp);
+  const bestStreak = calculateBestCurrentStreak(
+    DATA.players,
+    DATA.matches.filter(match => getResult(match)).sort(compareMatchesForDisplay),
+    (match, player) => match.predictions[player.id],
+    match => getResult(match),
+    DATA.meta.scoring
+  );
+  const mostChosenPrediction = nextMatch ? calculateMostChosenPrediction(nextMatch, DATA.players) : null;
   document.getElementById('summaryCards').innerHTML = html`
     <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
     <article class="card"><b>${ranking[0] ? `⭐ ${ranking[0].name}` : '-'}</b><span>líder actual</span></article>
@@ -953,17 +907,6 @@ function buildHistoricalSnapshots() {
 
 function historyCheckpointLabel(snapshot) {
   return `${snapshot.order}. ${snapshot.match.team1} ${snapshot.result.home}-${snapshot.result.away} ${snapshot.match.team2}`;
-}
-
-function historyPositionChange(player, previousSnapshot) {
-  if (!previousSnapshot) return { symbol: '•', delta: 0, className: 'muted', label: 'Primera foto' };
-  const previous = previousSnapshot.ranking.find(item => item.id === player.id);
-  if (!previous) return { symbol: '•', delta: 0, className: 'muted', label: 'Sin referencia' };
-
-  const delta = previous.position - player.position;
-  if (delta > 0) return { symbol: '↑', delta, className: 'ok', label: `Sube ${delta}` };
-  if (delta < 0) return { symbol: '↓', delta: Math.abs(delta), className: 'bad', label: `Baja ${Math.abs(delta)}` };
-  return { symbol: '→', delta: 0, className: 'muted', label: 'Se mantiene' };
 }
 
 function historyLineColor(index) {
@@ -1157,7 +1100,7 @@ function compareStatus(score) {
 }
 
 function comparePlayerCard(player, prediction, result, index) {
-  const score = scorePrediction(prediction, result);
+  const score = scorePrediction(prediction, result, DATA.meta.scoring);
   const status = result ? compareStatus(score) : { label: 'Pendiente', className: 'muted' };
   return html`
     <article class="compare-card">
@@ -1500,7 +1443,7 @@ function openMatchPredictions(matchId) {
         <thead><tr><th>Participante</th><th>Predicción</th><th>Quiniela</th><th>Puntos</th></tr></thead>
         <tbody>${DATA.players.map(player => {
           const prediction = match.predictions[player.id];
-          const score = scorePrediction(prediction, result);
+          const score = scorePrediction(prediction, result, DATA.meta.scoring);
           return html`
             <tr>
               <td>${escapeHtml(player.name)}</td>
@@ -2002,7 +1945,7 @@ function renderPlayerDetail() {
   document.getElementById('playerGroups').innerHTML = groups.map(group => {
     const matches = DATA.matches.filter(match => match.group === group);
     const groupPoints = matches.reduce((total, match) => {
-      return total + scorePrediction(match.predictions[playerId], getResult(match)).points;
+      return total + scorePrediction(match.predictions[playerId], getResult(match), DATA.meta.scoring).points;
     }, 0);
 
     return html`
@@ -2017,7 +1960,7 @@ function renderPlayerDetail() {
             <tbody>${matches.map(match => {
               const result = getResult(match);
               const prediction = match.predictions[playerId];
-              const score = scorePrediction(prediction, result);
+              const score = scorePrediction(prediction, result, DATA.meta.scoring);
               return html`
                 <tr>
                   <td>${teamLabel(match.team1)} - ${teamLabel(match.team2)}</td>
