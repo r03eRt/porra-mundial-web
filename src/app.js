@@ -18,7 +18,7 @@ const WORLDCUP_RESULTS_TABLE = 'worldcup_results_cache';
 const WORLDCUP_RESULTS_KIND = 'openfootball-2026';
 const AS_LIVE_MATCH_TABLE = 'as_live_match_cache';
 const AS_LIVE_MATCH_KIND = 'worldcup-2026';
-const AS_LIVE_MATCH_ACTIVE_REFRESH_MS = 45 * 1000;
+const AS_LIVE_MATCH_ACTIVE_REFRESH_MS = 90 * 1000;
 const AS_LIVE_MATCH_IDLE_REFRESH_MS = 15 * 60 * 1000;
 const AS_LIVE_MATCH_FETCH_TIMEOUT_MS = 15000;
 const AS_LIVE_MATCH_FINAL_GRACE_MS = 5 * 60 * 1000;
@@ -35,6 +35,8 @@ const LS_KEYS = {
   lastUpdate: 'porra.lastUpdate.v1',
   softAlertsSnapshot: 'porra.softAlerts.snapshot.v1',
   softAlertsSeen: 'porra.softAlerts.seen.v1',
+  goalAlertSnapshot: 'porra.goalAlertSnapshot.v1',
+  liveNotificationsEnabled: 'porra.liveNotifications.enabled.v1',
   theme: 'porra.theme.v1',
   installDismissedUntil: 'porra.installBanner.dismissedUntil.v1'
 };
@@ -127,6 +129,7 @@ let serviceWorkerRegistration = null;
 let deferredInstallPrompt = null;
 let appToastTimer = null;
 let appToastQueueTimer = null;
+let liveEventToastQueueTimer = null;
 let asLiveMatchRefreshTimer = null;
 let lastApiRefreshAt = Number(localStorage.getItem(LS_KEYS.apiRefreshAt) || 0);
 let lastAsLiveMatchRefreshAt = 0;
@@ -350,6 +353,213 @@ function showAppToast(message, duration = 2400) {
     toast.hidden = true;
     appToastTimer = null;
   }, duration);
+}
+
+function canUseGoalNotifications() {
+  return typeof window !== 'undefined' && 'Notification' in window;
+}
+
+function areLiveNotificationsEnabled() {
+  return localStorage.getItem(LS_KEYS.liveNotificationsEnabled) === '1';
+}
+
+function setLiveNotificationsEnabled(enabled) {
+  localStorage.setItem(LS_KEYS.liveNotificationsEnabled, enabled ? '1' : '0');
+}
+
+function updateGoalNotificationsButton() {
+  const button = document.getElementById('goalNotificationsBtn');
+  if (!button) return;
+  if (!canUseGoalNotifications()) {
+    button.hidden = true;
+    return;
+  }
+
+  button.hidden = false;
+  const permission = Notification.permission;
+  const enabled = areLiveNotificationsEnabled();
+  if (permission === 'granted') {
+    button.textContent = `Avisos partido: ${enabled ? 'ON' : 'OFF'}`;
+    button.title = enabled ? 'Desactivar notificaciones del directo' : 'Activar notificaciones del directo';
+    button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+  } else if (permission === 'denied') {
+    button.textContent = 'Avisos partido: bloqueados';
+    button.title = 'El navegador ha bloqueado las notificaciones';
+    button.setAttribute('aria-pressed', 'false');
+  } else {
+    button.textContent = 'Activar avisos partido';
+    button.title = 'Permitir notificaciones de inicio, goles y final';
+    button.setAttribute('aria-pressed', 'false');
+  }
+}
+
+async function requestGoalNotificationsPermission() {
+  if (!canUseGoalNotifications()) {
+    showAppToast('Este navegador no soporta notificaciones.');
+    return;
+  }
+
+  if (Notification.permission === 'granted') {
+    const enabled = !areLiveNotificationsEnabled();
+    setLiveNotificationsEnabled(enabled);
+    showAppToast(enabled ? 'Avisos del partido activados.' : 'Avisos del partido desactivados.');
+    updateGoalNotificationsButton();
+    return;
+  }
+
+  if (Notification.permission === 'denied') {
+    showAppToast('Las notificaciones están bloqueadas en el navegador.');
+    updateGoalNotificationsButton();
+    return;
+  }
+
+  const permission = await Notification.requestPermission();
+  if (permission === 'granted') {
+    setLiveNotificationsEnabled(true);
+  }
+  updateGoalNotificationsButton();
+  showAppToast(permission === 'granted' ? 'Avisos del partido activados.' : 'No se activaron los avisos del partido.');
+}
+
+function buildGoalAlertSnapshot(payload) {
+  const match = payload?.match;
+  if (!match || !Number.isFinite(match.homeScore) || !Number.isFinite(match.awayScore)) return null;
+
+  return {
+    matchId: match.id || '',
+    homeTeam: match.homeTeam || '',
+    awayTeam: match.awayTeam || '',
+    homeScore: Number(match.homeScore),
+    awayScore: Number(match.awayScore),
+    live: Boolean(payload?.live),
+    scorerSummary: match.scorerSummary || '',
+    status: match.status || '',
+    headline: match.headline || ''
+  };
+}
+
+function isHalftimeStatus(status) {
+  const normalizedStatus = String(status || '').toLowerCase();
+  return normalizedStatus.includes('descanso') || normalizedStatus.includes('intermedio');
+}
+
+function loadGoalAlertSnapshot() {
+  return loadStoredJson(LS_KEYS.goalAlertSnapshot, null);
+}
+
+function saveGoalAlertSnapshot(snapshot) {
+  if (!snapshot) {
+    localStorage.removeItem(LS_KEYS.goalAlertSnapshot);
+    return;
+  }
+  localStorage.setItem(LS_KEYS.goalAlertSnapshot, JSON.stringify(snapshot));
+}
+
+function buildGoalAlertEvents(previousSnapshot, nextSnapshot) {
+  if (!previousSnapshot || !nextSnapshot) return [];
+
+  const events = [];
+  const sameMatch = previousSnapshot.matchId && previousSnapshot.matchId === nextSnapshot.matchId;
+
+  if (!previousSnapshot.live && nextSnapshot.live) {
+    events.push({
+      title: 'Empieza el partido',
+      message: `${nextSnapshot.homeTeam} - ${nextSnapshot.awayTeam} ya está en juego.`,
+      detail: nextSnapshot.headline || ''
+    });
+  }
+
+  if (sameMatch) {
+    if (
+      previousSnapshot.live
+      && nextSnapshot.live
+      && !isHalftimeStatus(previousSnapshot.status)
+      && isHalftimeStatus(nextSnapshot.status)
+    ) {
+      events.push({
+        title: 'Descanso',
+        message: `Descanso en ${nextSnapshot.homeTeam} - ${nextSnapshot.awayTeam}: ${nextSnapshot.homeScore}-${nextSnapshot.awayScore}.`,
+        detail: nextSnapshot.headline || ''
+      });
+    }
+
+    const homeDelta = nextSnapshot.homeScore - previousSnapshot.homeScore;
+    const awayDelta = nextSnapshot.awayScore - previousSnapshot.awayScore;
+    const totalDelta = homeDelta + awayDelta;
+
+    if (homeDelta >= 0 && awayDelta >= 0 && totalDelta > 0) {
+      const teamLabel = homeDelta > 0 && awayDelta > 0
+        ? `${nextSnapshot.homeTeam} y ${nextSnapshot.awayTeam}`
+        : (homeDelta > 0 ? nextSnapshot.homeTeam : nextSnapshot.awayTeam);
+      const prefix = totalDelta > 1 ? 'Goles' : 'Gol';
+      events.push({
+        title: prefix,
+        message: `${prefix} de ${teamLabel}: ${nextSnapshot.homeTeam} ${nextSnapshot.homeScore}-${nextSnapshot.awayScore} ${nextSnapshot.awayTeam}.`,
+        detail: nextSnapshot.scorerSummary || ''
+      });
+    }
+
+    if (previousSnapshot.live && !nextSnapshot.live) {
+      events.push({
+        title: 'Final del partido',
+        message: `${nextSnapshot.homeTeam} ${nextSnapshot.homeScore}-${nextSnapshot.awayScore} ${nextSnapshot.awayTeam}.`,
+        detail: nextSnapshot.headline || ''
+      });
+    }
+  }
+
+  return events;
+}
+
+function notifyGoalAlert(event) {
+  if (!event?.message) return;
+
+  if (!areLiveNotificationsEnabled()) return;
+
+  showAppToast(event.message, 4200);
+
+  if (!canUseGoalNotifications() || Notification.permission !== 'granted') return;
+  if (document.visibilityState === 'visible' && document.hasFocus()) return;
+
+  try {
+    const notification = new Notification(event.title || 'Aviso del partido', {
+      body: event.detail ? `${event.message} ${event.detail}` : event.message,
+      tag: `goal-alert:${Date.now()}`,
+      silent: false
+    });
+    notification.onclick = () => window.focus();
+  } catch (error) {
+    console.warn('No se pudo mostrar la notificación de gol:', error);
+  }
+}
+
+function enqueueLiveEventNotifications(events) {
+  if (!events.length) return;
+
+  if (liveEventToastQueueTimer) {
+    clearTimeout(liveEventToastQueueTimer);
+    liveEventToastQueueTimer = null;
+  }
+
+  const queue = events.slice(0, 3);
+  const showNext = index => {
+    if (index >= queue.length) {
+      liveEventToastQueueTimer = null;
+      return;
+    }
+    notifyGoalAlert(queue[index]);
+    liveEventToastQueueTimer = setTimeout(() => showNext(index + 1), 3000);
+  };
+
+  showNext(0);
+}
+
+function processGoalAlertPayload(payload) {
+  const nextSnapshot = buildGoalAlertSnapshot(payload);
+  const previousSnapshot = loadGoalAlertSnapshot();
+  const events = buildGoalAlertEvents(previousSnapshot, nextSnapshot);
+  enqueueLiveEventNotifications(events);
+  saveGoalAlertSnapshot(nextSnapshot);
 }
 
 function loadSoftAlertSnapshot() {
@@ -2541,12 +2751,14 @@ async function loadWorldcupResultsCache() {
 }
 
 function applyAsLiveMatchPayload(payload, { updatedAt } = {}) {
-  state.asLiveMatch = payload
+  const nextPayload = payload
     ? {
       ...payload,
       updatedAt: updatedAt || payload.scrapedAt || null
     }
     : null;
+  processGoalAlertPayload(nextPayload);
+  state.asLiveMatch = nextPayload;
   lastAsLiveMatchRefreshAt = state.asLiveMatch?.updatedAt
     ? (new Date(state.asLiveMatch.updatedAt).getTime() || Date.now())
     : 0;
@@ -2896,6 +3108,7 @@ document.addEventListener('submit', async e => {
 
 document.getElementById('refreshApiBtn').addEventListener('click', refreshFromApi);
 document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+document.getElementById('goalNotificationsBtn').addEventListener('click', requestGoalNotificationsPermission);
 document.getElementById('installBtn').addEventListener('click', async () => {
   if (!deferredInstallPrompt) return;
   deferredInstallPrompt.prompt();
@@ -3029,6 +3242,7 @@ async function initializeAsLiveMatchFlow() {
 
 applyTheme(document.documentElement.dataset.theme);
 applyAdminMode();
+updateGoalNotificationsButton();
 renderAll();
 initializeResultsFlow();
 initializeAsLiveMatchFlow();

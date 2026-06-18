@@ -4,7 +4,7 @@ const JORNADA_URL = 'https://as.com/resultados/futbol/mundial/2026/jornada/';
 const NEWS_PROXY_URL = 'https://r.jina.ai/http://as.com/noticias/mundial-futbol/';
 const CACHE_TABLE = 'as_live_match_cache';
 const CACHE_KIND = 'worldcup-2026';
-const LIVE_REFRESH_MS = 45 * 1000;
+const LIVE_REFRESH_MS = 90 * 1000;
 const IDLE_REFRESH_MS = 15 * 60 * 1000;
 const FINAL_GRACE_MS = 5 * 60 * 1000;
 
