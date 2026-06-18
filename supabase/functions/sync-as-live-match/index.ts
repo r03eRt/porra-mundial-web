@@ -98,6 +98,7 @@ function parseLiveMatchFromBlock(block: string, stageSlug: string) {
   const matchId = block.match(/data-id="([^"]+)"/)?.[1] || '';
   const homeTeam = decodeHtml(block.match(/data-team-home-name="([^"]+)"/)?.[1] || '');
   const awayTeam = decodeHtml(block.match(/data-team-away-name="([^"]+)"/)?.[1] || '');
+  const kickoffAt = block.match(/data-datetime="([^"]+)"/)?.[1] || '';
   const group = stripTags(block.match(/<div class="a_sc_gp">([\s\S]*?)<\/div>/)?.[1] || '');
   const status = stripTags(block.match(/<div class="a_sc_st">([\s\S]*?)<\/div>/)?.[1] || '') || 'En juego';
   const score = parseScore(block.match(/<div class="a_sc_gl">([\s\S]*?)<\/div>/)?.[1] || '');
@@ -116,6 +117,7 @@ function parseLiveMatchFromBlock(block: string, stageSlug: string) {
     id: matchId,
     group,
     status,
+    kickoffAt,
     homeTeam,
     awayTeam,
     homeScore: score.home,
@@ -126,14 +128,62 @@ function parseLiveMatchFromBlock(block: string, stageSlug: string) {
   };
 }
 
-function parseMinuteFromLiveArticleMarkdown(markdown: string) {
-  const afterHeading = markdown.match(/## [^\n]+\n\n([\s\S]+)/)?.[1] || markdown;
-  const minuteMatch = afterHeading.match(/^\s*(\d{1,3})\s*$/m);
-  return minuteMatch ? Number(minuteMatch[1]) : null;
+function parseMinuteLine(line: string) {
+  const match = String(line || '').trim().match(/^(\d{1,3})(?:\+(\d{1,2}))?(?:\s*['’])?$/);
+  if (!match) return null;
+
+  const minute = Number(match[1]);
+  if (!Number.isFinite(minute) || minute < 0 || minute > 130) {
+    return null;
+  }
+
+  return {
+    minute,
+    minuteLabel: match[2] ? `${match[1]}+${match[2]}` : match[1]
+  };
+}
+
+function parseLiveMinuteFromLiveArticleMarkdown(markdown: string) {
+  const content = markdown.split('Markdown Content:').pop() || markdown;
+  const lines = content
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  for (const line of lines.slice(0, 40)) {
+    const parsed = parseMinuteLine(line);
+    if (parsed) return parsed;
+  }
+
+  const inlineMatch = content.match(/(?:^|\n)\s*(\d{1,3}(?:\+\d{1,2})?)\s*(?:['’])?\s*(?:\n|$)/);
+  if (inlineMatch?.[1]) {
+    return parseMinuteLine(inlineMatch[1]);
+  }
+
+  return {
+    minute: null,
+    minuteLabel: ''
+  };
 }
 
 function parseDirectTitle(markdown: string) {
   return markdown.match(/^Title:\s*(.+)$/m)?.[1]?.trim() || '';
+}
+
+function estimateMinuteFromKickoff(kickoffAt: string, scrapedAt: string) {
+  if (!kickoffAt || !scrapedAt) return null;
+  const kickoffMs = new Date(kickoffAt).getTime();
+  const scrapedMs = new Date(scrapedAt).getTime();
+  if (!Number.isFinite(kickoffMs) || !Number.isFinite(scrapedMs) || scrapedMs <= kickoffMs) {
+    return null;
+  }
+
+  const elapsedMinutes = Math.floor((scrapedMs - kickoffMs) / 60000);
+  if (elapsedMinutes < 0 || elapsedMinutes > 140) {
+    return null;
+  }
+
+  return elapsedMinutes;
 }
 
 function parseHeadlineFromNewsMarkdown(markdown: string, articleUrl: string) {
@@ -152,14 +202,17 @@ async function fetchLiveArticleDetails(articleUrl: string) {
   if (!articleUrl) {
     return {
       minute: null,
+      minuteLabel: '',
       directTitle: ''
     };
   }
 
   const proxyUrl = `https://r.jina.ai/http://${articleUrl.replace(/^https?:\/\//, '')}`;
   const markdown = await fetchText(proxyUrl, 'text/plain');
+  const liveMinute = parseLiveMinuteFromLiveArticleMarkdown(markdown);
   return {
-    minute: parseMinuteFromLiveArticleMarkdown(markdown),
+    minute: liveMinute.minute,
+    minuteLabel: liveMinute.minuteLabel,
     directTitle: parseDirectTitle(markdown)
   };
 }
@@ -259,6 +312,7 @@ Deno.serve(async req => {
           match: {
             ...finalMatch,
             minute: null,
+            minuteLabel: '',
             status: 'Finalizado'
           }
         }
@@ -276,6 +330,19 @@ Deno.serve(async req => {
         fetchHeadline(liveMatch.articleUrl),
         fetchLiveArticleDetails(liveMatch.articleUrl)
       ]);
+      const estimatedMinute = estimateMinuteFromKickoff(liveMatch.kickoffAt, scrapedAt);
+      const articleMinute = Number.isFinite(liveArticleDetails.minute) ? Number(liveArticleDetails.minute) : null;
+      const shouldUseEstimatedMinute = estimatedMinute !== null && (
+        articleMinute === null
+        || estimatedMinute >= articleMinute + 5
+      );
+      const resolvedMinute = shouldUseEstimatedMinute ? estimatedMinute : articleMinute;
+      const resolvedMinuteLabel = shouldUseEstimatedMinute
+        ? String(estimatedMinute)
+        : liveArticleDetails.minuteLabel;
+      const resolvedHeadline = headline
+        || (liveArticleDetails.directTitle && liveArticleDetails.directTitle !== 'as.com' ? liveArticleDetails.directTitle : '')
+        || `${liveMatch.homeTeam} - ${liveMatch.awayTeam}`;
 
       payload = {
         kind: CACHE_KIND,
@@ -288,8 +355,9 @@ Deno.serve(async req => {
         showUntil: null,
         match: {
           ...liveMatch,
-          headline: headline || liveArticleDetails.directTitle || '',
-          minute: liveArticleDetails.minute
+          headline: resolvedHeadline,
+          minute: resolvedMinute,
+          minuteLabel: resolvedMinuteLabel
         }
       };
     }

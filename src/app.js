@@ -22,6 +22,7 @@ const AS_LIVE_MATCH_ACTIVE_REFRESH_MS = 90 * 1000;
 const AS_LIVE_MATCH_IDLE_REFRESH_MS = 15 * 60 * 1000;
 const AS_LIVE_MATCH_FETCH_TIMEOUT_MS = 15000;
 const AS_LIVE_MATCH_FINAL_GRACE_MS = 5 * 60 * 1000;
+const AS_LIVE_MATCH_UI_TICK_MS = 30 * 1000;
 const adminParam = new URLSearchParams(window.location.search).get('admin');
 const ADMIN_REQUESTED = new URLSearchParams(window.location.search).has('admin')
   && !['0', 'false', 'no'].includes(String(adminParam).toLowerCase());
@@ -277,7 +278,7 @@ async function fetchJsonWithTimeout(url, options = {}, timeoutMs = API_FETCH_TIM
 }
 
 function isAdmin() {
-  return ADMIN_REQUESTED && Boolean(state.adminUser);
+  return Boolean(state.adminUser);
 }
 
 function applyTheme(theme) {
@@ -949,8 +950,9 @@ function applyAdminMode() {
 
 function renderAdminAccess() {
   const container = document.getElementById('adminAccess');
-  container.hidden = !ADMIN_REQUESTED;
-  if (!ADMIN_REQUESTED) return;
+  const shouldShowAdminAccess = ADMIN_REQUESTED || Boolean(state.adminUser);
+  container.hidden = !shouldShowAdminAccess;
+  if (!shouldShowAdminAccess) return;
 
   container.innerHTML = state.adminUser
     ? html`
@@ -1005,6 +1007,28 @@ function renderHeaderSyncStatus() {
 
 function getAsLiveMatchRefreshIntervalMs() {
   return isAsLiveMatchVisible(state.asLiveMatch) ? AS_LIVE_MATCH_ACTIVE_REFRESH_MS : AS_LIVE_MATCH_IDLE_REFRESH_MS;
+}
+
+function getAsLiveMinuteBadge(payload) {
+  const match = payload?.match;
+  if (!payload?.live || !match) {
+    return match?.minuteLabel || (Number.isFinite(match?.minute) ? String(match.minute) : '');
+  }
+
+  const baseMinute = Number.isFinite(match?.minute) ? Number(match.minute) : null;
+  const baseLabel = match?.minuteLabel || (baseMinute !== null ? String(baseMinute) : '');
+  if (baseMinute === null) {
+    return baseLabel;
+  }
+
+  const updatedAtMs = payload?.updatedAt ? new Date(payload.updatedAt).getTime() : NaN;
+  if (!Number.isFinite(updatedAtMs)) {
+    return baseLabel;
+  }
+
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - updatedAtMs) / 60000));
+  const liveMinute = Math.min(130, baseMinute + elapsedMinutes);
+  return String(liveMinute);
 }
 
 function isAsLiveMatchVisible(payload) {
@@ -1062,7 +1086,8 @@ function renderAsLiveMatchCard() {
     return '';
   }
 
-  const liveBadge = isLive ? (match.minute ? `${match.minute}'` : (match.status || 'En juego')) : 'Final';
+  const liveMinuteLabel = getAsLiveMinuteBadge(payload);
+  const liveBadge = isLive ? (liveMinuteLabel ? `${liveMinuteLabel}'` : (match.status || 'En juego')) : 'Final';
   const summaryLine = match.scorerSummary || 'Abrir directo en AS';
   const headline = match.headline || `${match.homeTeam} - ${match.awayTeam}`;
   const cardAttributes = localMatch
@@ -3337,6 +3362,10 @@ setupInstallPrompt();
 checkForAppUpdate();
 setInterval(() => refreshFromApi({ silent: true }), API_REFRESH_INTERVAL_MS);
 setInterval(checkForAppUpdate, VERSION_CHECK_INTERVAL_MS);
+setInterval(() => {
+  if (!isAsLiveMatchVisible(state.asLiveMatch)) return;
+  renderSummary();
+}, AS_LIVE_MATCH_UI_TICK_MS);
 window.addEventListener('online', maybeRefreshFromApiOnResume);
 window.addEventListener('online', maybeRefreshAsLiveMatchOnResume);
 window.addEventListener('pageshow', event => {
