@@ -806,6 +806,25 @@ function findLocalMatchForAsLiveMatch(match) {
   )) || null;
 }
 
+function getAsLiveMatchFallbackResult(match) {
+  const payload = state.asLiveMatch;
+  if (!payload?.match || payload.live) return null;
+
+  const localMatch = findLocalMatchForAsLiveMatch(payload.match);
+  if (!localMatch || localMatch.id !== match?.id) return null;
+  if (!Number.isFinite(payload.match.homeScore) || !Number.isFinite(payload.match.awayScore)) return null;
+
+  return {
+    home: Number(payload.match.homeScore),
+    away: Number(payload.match.awayScore),
+    source: 'as-live-fallback'
+  };
+}
+
+function getResultForNextMatchFallback(match) {
+  return getResult(match) || getAsLiveMatchFallbackResult(match);
+}
+
 function renderAsLiveMatchCard() {
   const payload = state.asLiveMatch;
   const match = payload?.match || null;
@@ -819,17 +838,7 @@ function renderAsLiveMatchCard() {
     : 'sin actualizar';
 
   if (!match || !isVisible) {
-    return html`
-      <article class="card live-match-card">
-        <div class="live-match-top">
-          <span class="live-match-chip">AS · Mundial</span>
-          <span class="live-match-chip">Sin directo</span>
-        </div>
-        <b>Sin partido en juego</b>
-        <span>AS no marca ahora mismo ningun partido del Mundial como "En juego".</span>
-        <span class="card-detail">${escapeHtml(freshLabel)} · Cache de Supabase</span>
-      </article>
-    `;
+    return '';
   }
 
   const liveBadge = isLive ? (match.minute ? `${match.minute}'` : (match.status || 'En juego')) : 'Final';
@@ -872,7 +881,7 @@ function renderSummary() {
   const played = DATA.matches.filter(getResult).length;
   const ranking = calculateRanking();
   const lastUpdate = localStorage.getItem(LS_KEYS.lastUpdate) || 'sin actualizar';
-  const nextMatch = pickNextPendingMatch(DATA.matches, getResult, getMatchScheduleTimestamp);
+  const nextMatch = pickNextPendingMatch(DATA.matches, getResultForNextMatchFallback, getMatchScheduleTimestamp);
   const hasLiveMatch = isAsLiveMatchVisible(state.asLiveMatch);
   const bestStreak = calculateBestCurrentStreak(
     DATA.players,
@@ -884,10 +893,6 @@ function renderSummary() {
   const mostChosenPrediction = nextMatch ? calculateMostChosenPrediction(nextMatch, DATA.players) : null;
   document.getElementById('summaryCards').innerHTML = html`
     ${renderAsLiveMatchCard()}
-    <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
-    <article class="card"><b>${ranking[0] ? `⭐ ${ranking[0].name}` : '-'}</b><span>líder actual</span></article>
-    <article class="card"><b>${ranking[0]?.total || 0}</b><span>puntos del líder</span></article>
-    <article class="card"><b>${ranking.length ? `💩 ${ranking[ranking.length - 1].name}` : '-'}</b><span>el purria</span></article>
     ${hasLiveMatch ? '' : html`
       <article class="card next-match-card ${nextMatch ? 'summary-match-card' : ''}" ${nextMatch ? `role="button" tabindex="0" data-match-id="${nextMatch.id}" aria-label="Ver predicciones de ${escapeHtml(nextMatch.team1)} contra ${escapeHtml(nextMatch.team2)}"` : ''}>
         <b>${nextMatch ? `${TEAM_FLAGS[nextMatch.team1] || '🏳️'} ${nextMatch.team1}<span class="next-match-separator">-</span>${TEAM_FLAGS[nextMatch.team2] || '🏳️'} ${nextMatch.team2}` : '-'}</b>
@@ -896,6 +901,10 @@ function renderSummary() {
         <span class="card-detail">${mostChosenPrediction ? `Pronóstico más elegido: ${mostChosenPrediction.score} · ${mostChosenPrediction.votes} voto${mostChosenPrediction.votes === 1 ? '' : 's'}` : ''}</span>
       </article>
     `}
+    <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
+    <article class="card"><b>${ranking[0] ? `⭐ ${ranking[0].name}` : '-'}</b><span>líder actual</span></article>
+    <article class="card"><b>${ranking[0]?.total || 0}</b><span>puntos del líder</span></article>
+    <article class="card"><b>${ranking.length ? `💩 ${ranking[ranking.length - 1].name}` : '-'}</b><span>el purria</span></article>
     <article class="card">
       <b>${bestStreak ? `🔥 ${bestStreak.player.name}` : '-'}</b>
       <span>${bestStreak ? 'mejor racha actual' : 'sin rachas activas'}</span>

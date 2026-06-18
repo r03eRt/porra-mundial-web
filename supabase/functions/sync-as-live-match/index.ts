@@ -87,6 +87,13 @@ function buildDirectUrl(stageSlug: string, matchId: string) {
   return `https://as.com/resultados/futbol/mundial/2026/directo/${stageSlug}_${matchId}/`;
 }
 
+function parseScorerSummary(block: string) {
+  const scorerLines = [...block.matchAll(/<div class="a_sc_gs(?:\s+a_sc_gs-r)?">([\s\S]*?)<\/div>/g)]
+    .map(match => stripTags(match[1] || ''))
+    .filter(Boolean);
+  return scorerLines.join(' · ');
+}
+
 function parseLiveMatchFromBlock(block: string, stageSlug: string) {
   const matchId = block.match(/data-id="([^"]+)"/)?.[1] || '';
   const homeTeam = decodeHtml(block.match(/data-team-home-name="([^"]+)"/)?.[1] || '');
@@ -99,7 +106,7 @@ function parseLiveMatchFromBlock(block: string, stageSlug: string) {
       || block.match(/<div class="a_sc_gl"><a[^>]+href="([^"]+)"/)?.[1]
       || ''
   );
-  const scorerSummary = stripTags(block.match(/<div class="a_sc_gs(?:\s+a_sc_gs-r)?">([\s\S]*?)<\/div>/)?.[1] || '');
+  const scorerSummary = parseScorerSummary(block);
 
   if (!matchId || !homeTeam || !awayTeam || !score) {
     throw new Error('No se pudo parsear el partido en juego desde la jornada de AS.');
