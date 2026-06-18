@@ -170,6 +170,39 @@ function parseDirectTitle(markdown: string) {
   return markdown.match(/^Title:\s*(.+)$/m)?.[1]?.trim() || '';
 }
 
+function detectMatchStatusFromMarkdown(markdown: string) {
+  const content = markdown.split('Markdown Content:').pop() || markdown;
+  const lines = content
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .slice(0, 120);
+
+  for (const line of lines) {
+    const normalized = line.toLowerCase();
+    if (normalized.includes('final del partido') || normalized.includes('partido finalizado') || normalized.includes('finaliza el partido')) {
+      return 'Finalizado';
+    }
+    if (normalized.includes('descanso') || normalized.includes('intermedio') || normalized.includes('medio tiempo')) {
+      return 'Descanso';
+    }
+    if (
+      normalized.includes('2ª parte')
+      || normalized.includes('segunda parte')
+      || normalized.includes('segundo tiempo')
+      || normalized.includes('vuelve a rodar el balón')
+      || normalized.includes('reanud')
+    ) {
+      return '2ª parte';
+    }
+    if (normalized.includes('1ª parte') || normalized.includes('primer tiempo')) {
+      return '1ª parte';
+    }
+  }
+
+  return '';
+}
+
 function estimateMinuteFromKickoff(kickoffAt: string, scrapedAt: string) {
   if (!kickoffAt || !scrapedAt) return null;
   const kickoffMs = new Date(kickoffAt).getTime();
@@ -213,7 +246,8 @@ async function fetchLiveArticleDetails(articleUrl: string) {
   return {
     minute: liveMinute.minute,
     minuteLabel: liveMinute.minuteLabel,
-    directTitle: parseDirectTitle(markdown)
+    directTitle: parseDirectTitle(markdown),
+    status: detectMatchStatusFromMarkdown(markdown)
   };
 }
 
@@ -332,6 +366,7 @@ Deno.serve(async req => {
       ]);
       const estimatedMinute = estimateMinuteFromKickoff(liveMatch.kickoffAt, scrapedAt);
       const articleMinute = Number.isFinite(liveArticleDetails.minute) ? Number(liveArticleDetails.minute) : null;
+      const resolvedStatus = liveArticleDetails.status || liveMatch.status || 'En juego';
       const shouldUseEstimatedMinute = estimatedMinute !== null && (
         articleMinute === null
         || estimatedMinute >= articleMinute + 5
@@ -356,6 +391,7 @@ Deno.serve(async req => {
         match: {
           ...liveMatch,
           headline: resolvedHeadline,
+          status: resolvedStatus,
           minute: resolvedMinute,
           minuteLabel: resolvedMinuteLabel
         }

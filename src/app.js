@@ -1031,6 +1031,25 @@ function getAsLiveMinuteBadge(payload) {
   return String(liveMinute);
 }
 
+function getAsLiveMatchBadge(payload) {
+  const match = payload?.match;
+  const status = String(match?.status || '').trim();
+  const normalizedStatus = status.toLowerCase();
+  if (
+    normalizedStatus.includes('descanso')
+    || normalizedStatus.includes('intermedio')
+    || normalizedStatus.includes('segunda parte')
+    || normalizedStatus.includes('2ª parte')
+    || normalizedStatus.includes('finalizado')
+    || normalizedStatus.includes('final')
+  ) {
+    return status || 'En directo';
+  }
+
+  const minuteLabel = getAsLiveMinuteBadge(payload);
+  return minuteLabel ? `${minuteLabel}'` : (status || 'En juego');
+}
+
 function isAsLiveMatchVisible(payload) {
   if (!payload?.match) return false;
   if (payload.live) return true;
@@ -1086,8 +1105,7 @@ function renderAsLiveMatchCard() {
     return '';
   }
 
-  const liveMinuteLabel = getAsLiveMinuteBadge(payload);
-  const liveBadge = isLive ? (liveMinuteLabel ? `${liveMinuteLabel}'` : (match.status || 'En juego')) : 'Final';
+  const liveBadge = isLive ? getAsLiveMatchBadge(payload) : 'Final';
   const summaryLine = match.scorerSummary || 'Abrir directo en AS';
   const headline = match.headline || `${match.homeTeam} - ${match.awayTeam}`;
   const cardAttributes = localMatch
