@@ -367,14 +367,19 @@ Deno.serve(async req => {
       const estimatedMinute = estimateMinuteFromKickoff(liveMatch.kickoffAt, scrapedAt);
       const articleMinute = Number.isFinite(liveArticleDetails.minute) ? Number(liveArticleDetails.minute) : null;
       const resolvedStatus = liveArticleDetails.status || liveMatch.status || 'En juego';
-      const shouldUseEstimatedMinute = estimatedMinute !== null && (
+      const isHalftime = /descanso|intermedio|medio tiempo/i.test(resolvedStatus);
+      const isFinished = /finalizado|final del partido|finaliza/i.test(resolvedStatus);
+      const isSecondHalf = /2ª parte|segunda parte|segundo tiempo|reanud|vuelve a rodar/i.test(resolvedStatus);
+      const forceHalftime = !isHalftime && !isFinished && !isSecondHalf && estimatedMinute !== null && estimatedMinute >= 45 && (articleMinute === null || articleMinute < 45);
+      const shouldUseEstimatedMinute = !isHalftime && !isFinished && estimatedMinute !== null && (
         articleMinute === null
         || estimatedMinute >= articleMinute + 5
       );
-      const resolvedMinute = shouldUseEstimatedMinute ? estimatedMinute : articleMinute;
-      const resolvedMinuteLabel = shouldUseEstimatedMinute
-        ? String(estimatedMinute)
-        : liveArticleDetails.minuteLabel;
+      const resolvedMinute = isHalftime || forceHalftime ? null : (shouldUseEstimatedMinute ? estimatedMinute : articleMinute);
+      const resolvedMinuteLabel = isHalftime || forceHalftime
+        ? 'Descanso'
+        : (shouldUseEstimatedMinute ? String(estimatedMinute) : liveArticleDetails.minuteLabel);
+      const finalResolvedStatus = forceHalftime ? 'Descanso' : resolvedStatus;
       const resolvedHeadline = headline
         || (liveArticleDetails.directTitle && liveArticleDetails.directTitle !== 'as.com' ? liveArticleDetails.directTitle : '')
         || `${liveMatch.homeTeam} - ${liveMatch.awayTeam}`;
@@ -391,7 +396,7 @@ Deno.serve(async req => {
         match: {
           ...liveMatch,
           headline: resolvedHeadline,
-          status: resolvedStatus,
+          status: finalResolvedStatus,
           minute: resolvedMinute,
           minuteLabel: resolvedMinuteLabel
         }
