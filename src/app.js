@@ -1381,6 +1381,7 @@ function renderSummary() {
   const leaderPoints = ranking[0]?.total || 0;
   document.getElementById('summaryCards').innerHTML = html`
     ${renderAsLiveMatchCard()}
+    ${renderLastPlayedMatchCard(lastPlayedMatch)}
     ${hasLiveMatch ? '' : html`
       <article class="card next-match-card ${nextMatch ? 'summary-match-card' : ''}" ${nextMatch ? `role="button" tabindex="0" data-match-id="${nextMatch.id}" aria-label="Ver predicciones de ${escapeHtml(nextMatch.team1)} contra ${escapeHtml(nextMatch.team2)}"` : ''}>
         <b>${nextMatch ? `${TEAM_FLAGS[nextMatch.team1] || '🏳️'} ${nextMatch.team1}<span class="next-match-separator">-</span>${TEAM_FLAGS[nextMatch.team2] || '🏳️'} ${nextMatch.team2}` : '-'}</b>
@@ -1391,7 +1392,6 @@ function renderSummary() {
     `}
     <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
     <article class="card"><b>${ranking[0] ? `⭐ ${ranking[0].name}` : '-'}</b><span>líder actual</span><span class="card-detail">${leaderPoints} puntos</span></article>
-    ${renderLastPlayedMatchCard(lastPlayedMatch)}
     <article class="card"><b>${ranking.length ? `💩 ${ranking[ranking.length - 1].name}` : '-'}</b><span>el purria</span></article>
     <article class="card">
       <b>${bestStreak ? `🔥 ${bestStreak.player.name}` : '-'}</b>
