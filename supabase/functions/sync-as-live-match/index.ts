@@ -6,7 +6,7 @@ const CACHE_TABLE = 'as_live_match_cache';
 const CACHE_KIND = 'worldcup-2026';
 const LIVE_REFRESH_MS = 90 * 1000;
 const IDLE_REFRESH_MS = 15 * 60 * 1000;
-const FINAL_GRACE_MS = 5 * 60 * 1000;
+const FINAL_GRACE_MS = 15 * 60 * 1000;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

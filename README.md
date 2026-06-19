@@ -70,6 +70,27 @@ La idea es:
 - `mini_results`: respuestas editables de la mini-porra.
 - `as_rankings_cache`: caché de estadísticas de jugadores y selecciones.
 - `worldcup_results_cache`: caché central de resultados y partidos del Mundial 2026.
+- `as_live_match_cache`: tarjeta del partido en directo de AS que aparece en portada.
+- `prediction_overrides`: correcciones manuales del admin sobre fase de grupos, mini-porra y cruces.
+
+## Fuente de verdad por pantalla
+
+La app mezcla datos embebidos en el frontend con caches de Supabase. El reparto actual es este:
+
+- `Resumen`, `Ranking`, `Historial`, `Comparador`, `Partidos`, `Equipos`, `Detalle de jugador` y `Cruces` leen de `worldcup_results_cache` para los resultados del Mundial.
+- `Estadísticas` lee de `as_rankings_cache`.
+- La tarjeta de directo de AS en portada lee de `as_live_match_cache`.
+- La `mini-porra` lee y guarda en `mini_results`.
+- El `Admin porra` lee y guarda en `prediction_overrides`.
+- La base de la porra sigue viniendo de `window.PORRA_DATA` dentro del bundle, con Supabase encima como cache y capa de overrides.
+
+## Qué sigue siendo local
+
+Aunque la app ya usa Supabase como capa principal de datos vivos, todavía hay piezas locales:
+
+- `window.PORRA_DATA` contiene la porra base generada desde el Excel.
+- `localStorage` guarda preferencias, sesión auxiliar, avisos y cache temporal del navegador.
+- Los JSON `data/as-player-rankings.json` y `data/as-team-rankings.json` siguen como fallback si falla el cache de estadísticas.
 
 ## Cómo está montado el refresco
 
@@ -114,6 +135,36 @@ Cuando un admin cambia un valor:
 1. se guarda en Supabase
 2. se actualiza la interfaz
 3. se muestra confirmación visual
+
+### 4. Tarjeta de directo de AS
+
+La tarjeta del partido en directo se alimenta desde:
+
+- Edge Function: `sync-as-live-match`
+- Tabla: `as_live_match_cache`
+
+Flujo:
+
+1. El cron llama a `sync-as-live-match`.
+2. La función lee la portada y la página del directo de AS.
+3. Guarda el partido actual en `as_live_match_cache`.
+4. El frontend lee esa tabla y pinta el bloque de directo.
+
+La tarjeta solo intenta refrescar con frecuencia alta cuando hay un directo visible; si no, el intervalo baja para evitar peticiones innecesarias.
+
+### 5. Correcciones manuales del admin
+
+Las correcciones del admin se guardan en:
+
+- `prediction_overrides`
+
+Eso permite corregir sin tocar la porra base:
+
+- resultados de fase de grupos
+- respuestas de mini-porra
+- selecciones de cruces
+
+La app aplica esas correcciones encima de `window.PORRA_DATA` en tiempo de ejecución, así que una corrección afecta a toda la interfaz sin reescribir el dataset base.
 
 ## Tiempos de refresco y por qué están así
 

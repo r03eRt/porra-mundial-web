@@ -6,6 +6,7 @@ import { TEAM_DETAIL_METRICS, calculateTeamStats, getTournamentTeams } from './l
 import { simulateProbabilities } from './lib/probabilities.js';
 
 const DATA = window.PORRA_DATA;
+const BASE_DATA = JSON.parse(JSON.stringify(window.PORRA_DATA));
 const DEFAULT_API_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
 const API_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 const API_FETCH_TIMEOUT_MS = 10000;
@@ -18,10 +19,11 @@ const WORLDCUP_RESULTS_TABLE = 'worldcup_results_cache';
 const WORLDCUP_RESULTS_KIND = 'openfootball-2026';
 const AS_LIVE_MATCH_TABLE = 'as_live_match_cache';
 const AS_LIVE_MATCH_KIND = 'worldcup-2026';
+const PREDICTION_OVERRIDES_TABLE = 'prediction_overrides';
 const AS_LIVE_MATCH_ACTIVE_REFRESH_MS = 90 * 1000;
 const AS_LIVE_MATCH_IDLE_REFRESH_MS = 15 * 60 * 1000;
 const AS_LIVE_MATCH_FETCH_TIMEOUT_MS = 15000;
-const AS_LIVE_MATCH_FINAL_GRACE_MS = 5 * 60 * 1000;
+const AS_LIVE_MATCH_FINAL_GRACE_MS = 15 * 60 * 1000;
 const AS_LIVE_MATCH_UI_TICK_MS = 30 * 1000;
 const adminParam = new URLSearchParams(window.location.search).get('admin');
 const ADMIN_REQUESTED = new URLSearchParams(window.location.search).has('admin')
@@ -119,8 +121,11 @@ const state = {
   matchGoalsExpanded: {},
   compareMatchId: '',
   comparePlayers: [],
-  historyCheckpointId: ''
-  ,
+  historyCheckpointId: '',
+  predictionOverrides: [],
+  adminDashboard: { playerId: '', scope: 'group_match' },
+  adminSyncStatus: { type: '', message: '', at: 0, inFlight: false },
+  adminRowSyncStatus: {},
   asLiveMatch: null
 };
 let apiRefreshInProgress = false;
@@ -136,6 +141,7 @@ let lastApiRefreshAt = Number(localStorage.getItem(LS_KEYS.apiRefreshAt) || 0);
 let lastAsLiveMatchRefreshAt = 0;
 let lastVersionCheckAt = 0;
 let lastResumeRefreshAt = 0;
+const adminRowSyncTimers = new Map();
 const INSTALL_BANNER_DISMISS_MS = 3 * 24 * 60 * 60 * 1000;
 
 function apiNameFor(team) {
@@ -196,6 +202,93 @@ function championPredictionFor(playerId) {
 
 function teamFlag(team) {
   return TEAM_FLAGS[team] || '🏳️';
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function predictionOverrideKey(playerId, scope, entityId) {
+  return `${playerId}::${scope}::${entityId}`;
+}
+
+function normalizeOverrideRows(rows) {
+  return Array.isArray(rows)
+    ? rows.filter(row => row?.player_id && row?.scope && row?.entity_id)
+    : [];
+}
+
+function overrideSignFromScore(score) {
+  const parsed = parseScore(score);
+  if (!parsed) return '';
+  if (parsed[0] > parsed[1]) return '1';
+  if (parsed[0] < parsed[1]) return '2';
+  return 'X';
+}
+
+function resetPorraDataPredictions() {
+  DATA.matches.forEach(match => {
+    const baseMatch = BASE_DATA.matches.find(item => item.id === match.id);
+    if (baseMatch) match.predictions = cloneJson(baseMatch.predictions || {});
+  });
+  DATA.miniQuestions.forEach(question => {
+    const baseQuestion = BASE_DATA.miniQuestions.find(item => item.id === question.id);
+    if (baseQuestion) question.answers = cloneJson(baseQuestion.answers || {});
+  });
+  DATA.knockoutPredictions.forEach(prediction => {
+    const basePrediction = BASE_DATA.knockoutPredictions.find(item => item.stage === prediction.stage && item.slot === prediction.slot);
+    if (basePrediction) prediction.predictions = cloneJson(basePrediction.predictions || {});
+  });
+}
+
+function applyPredictionOverrides() {
+  resetPorraDataPredictions();
+  for (const row of state.predictionOverrides) {
+    const value = row.value || {};
+    if (row.scope === 'group_match') {
+      const match = DATA.matches.find(item => item.id === row.entity_id);
+      if (!match?.predictions?.[row.player_id]) continue;
+      const score = String(value.score || '').trim();
+      match.predictions[row.player_id] = {
+        ...match.predictions[row.player_id],
+        score,
+        sign: value.sign || overrideSignFromScore(score)
+      };
+    }
+    if (row.scope === 'mini') {
+      const question = DATA.miniQuestions.find(item => item.id === row.entity_id);
+      if (question?.answers) question.answers[row.player_id] = String(value.answer || '').trim();
+    }
+    if (row.scope === 'knockout') {
+      const [stage, slot] = String(row.entity_id || '').split(':');
+      const prediction = DATA.knockoutPredictions.find(item => item.stage === stage && String(item.slot) === slot);
+      if (prediction?.predictions) prediction.predictions[row.player_id] = String(value.team || '').trim();
+    }
+  }
+}
+
+function getPredictionOverride(playerId, scope, entityId) {
+  return state.predictionOverrides.find(row => (
+    row.player_id === playerId
+    && row.scope === scope
+    && row.entity_id === entityId
+  )) || null;
+}
+
+function getBaseGroupPrediction(matchId, playerId) {
+  const match = BASE_DATA.matches.find(item => item.id === matchId);
+  return match?.predictions?.[playerId] || { score: '', sign: '' };
+}
+
+function getBaseMiniAnswer(questionId, playerId) {
+  const question = BASE_DATA.miniQuestions.find(item => item.id === questionId);
+  return question?.answers?.[playerId] || '';
+}
+
+function getBaseKnockoutPick(entityId, playerId) {
+  const [stage, slot] = String(entityId || '').split(':');
+  const prediction = BASE_DATA.knockoutPredictions.find(item => item.stage === stage && String(item.slot) === slot);
+  return prediction?.predictions?.[playerId] || '';
 }
 
 const MINI_FIELD_TYPES = {
@@ -365,6 +458,60 @@ function showAppToast(message, duration = 2400) {
     toast.hidden = true;
     appToastTimer = null;
   }, duration);
+}
+
+function setAdminSyncStatus(type, message, { inFlight = false } = {}) {
+  state.adminSyncStatus = {
+    type,
+    message,
+    at: Date.now(),
+    inFlight
+  };
+  renderAdminDashboard();
+}
+
+function adminRowSyncKey(playerId, scope, entityId) {
+  return predictionOverrideKey(playerId, scope, entityId);
+}
+
+function setAdminRowSyncStatus(playerId, scope, entityId, type, message, { inFlight = false, clearAfterMs = 0 } = {}) {
+  const key = adminRowSyncKey(playerId, scope, entityId);
+  const next = {
+    type,
+    message,
+    at: Date.now(),
+    inFlight
+  };
+  state.adminRowSyncStatus = {
+    ...state.adminRowSyncStatus,
+    [key]: next
+  };
+
+  if (adminRowSyncTimers.has(key)) {
+    clearTimeout(adminRowSyncTimers.get(key));
+    adminRowSyncTimers.delete(key);
+  }
+
+  if (clearAfterMs > 0) {
+    const timer = setTimeout(() => {
+      const { [key]: _, ...rest } = state.adminRowSyncStatus;
+      state.adminRowSyncStatus = rest;
+      adminRowSyncTimers.delete(key);
+      renderAdminDashboard();
+    }, clearAfterMs);
+    adminRowSyncTimers.set(key, timer);
+  }
+
+  renderAdminDashboard();
+}
+
+function getAdminRowSyncStatus(playerId, scope, entityId) {
+  return state.adminRowSyncStatus[adminRowSyncKey(playerId, scope, entityId)] || null;
+}
+
+function renderAdminRowSyncBadge(status) {
+  if (!status) return '';
+  return html`<span class="admin-row-sync ${status.type || ''} ${status.inFlight ? 'pending' : ''}">${escapeHtml(status.inFlight ? 'guardando...' : status.message || '')}</span>`;
 }
 
 function canUseGoalNotifications() {
@@ -1072,6 +1219,36 @@ function formatAsLiveScorerChip(text) {
   return `<span class="live-event-chip goal"><span class="live-event-icon">⚽</span><span class="live-event-player">${escapeHtml(value)}</span></span>`;
 }
 
+function formatGoalAsLiveEvent(goal, team) {
+  if (!goal?.name) return '';
+  return formatAsLiveEvent({
+    kind: goal.penalty ? 'goal-penalty' : 'goal',
+    text: `${goal.name}${goal.minute ? ` ${goal.minute}'` : ''}`,
+    minuteLabel: goal.minute || '',
+    team
+  });
+}
+
+function getLastPlayedMatchEvents(match) {
+  const asMatch = state.asLiveMatch?.match;
+  const matchesAsCachedFinal = asMatch
+    && normalizeTeam(asMatch.homeTeam) === normalizeTeam(match.team1)
+    && normalizeTeam(asMatch.awayTeam) === normalizeTeam(match.team2)
+    && Array.isArray(asMatch.events)
+    && asMatch.events.length;
+
+  if (matchesAsCachedFinal) {
+    return asMatch.events.map(formatAsLiveEvent).filter(Boolean);
+  }
+
+  const goals = getMatchGoalBreakdown(match);
+  if (!goals) return [];
+  return [
+    ...goals.team1.map(goal => formatGoalAsLiveEvent(goal, match.team1)),
+    ...goals.team2.map(goal => formatGoalAsLiveEvent(goal, match.team2))
+  ].filter(Boolean);
+}
+
 function isAsLiveMatchVisible(payload) {
   if (!payload?.match) return false;
   if (payload.live) return true;
@@ -1109,6 +1286,23 @@ function getAsLiveMatchFallbackResult(match) {
 
 function getResultForNextMatchFallback(match) {
   return getResult(match) || getAsLiveMatchFallbackResult(match);
+}
+
+function renderLastPlayedMatchCard(match) {
+  const result = match ? getResult(match) : null;
+  if (!match || !result) {
+    return html`<article class="card next-match-card"><b>-</b><span>último partido</span></article>`;
+  }
+
+  const events = getLastPlayedMatchEvents(match);
+  return html`
+    <article class="card next-match-card last-match-card summary-match-card" role="button" tabindex="0" data-match-id="${match.id}" aria-label="Ver predicciones de ${escapeHtml(match.team1)} contra ${escapeHtml(match.team2)}">
+      <b>${TEAM_FLAGS[match.team1] || '🏳️'} ${match.team1}<span class="next-match-separator">-</span>${TEAM_FLAGS[match.team2] || '🏳️'} ${match.team2}</b>
+      <strong class="last-match-score">${result.home} - ${result.away}</strong>
+      <span>último partido</span>
+      ${events.length ? `<div class="live-event-list last-match-events">${events.join('')}</div>` : ''}
+    </article>
+  `;
 }
 
 function renderAsLiveMatchCard() {
@@ -1162,7 +1356,7 @@ function renderAsLiveMatchCard() {
       ${(liveEvents.length || goalChips.length) ? `<div class="live-event-list">${[...liveEvents.map(formatAsLiveEvent), ...goalChips].join('')}</div>` : ''}
       <span class="card-detail">
         ${localMatch ? 'Toca para ver todas las predicciones' : 'Actualizacion automatica desde AS'}
-        ${isFinal ? ` · visible 5 min tras el final` : ''}
+        ${isFinal ? ` · visible 15 min tras el final` : ''}
         ${articleUrl ? ` · <button type="button" class="match-link-button" data-external-url="${escapeHtml(articleUrl)}" aria-label="Abrir directo de AS">Abrir AS</button>` : ''}
       </span>
     </article>
@@ -1183,6 +1377,8 @@ function renderSummary() {
     DATA.meta.scoring
   );
   const mostChosenPrediction = nextMatch ? calculateMostChosenPrediction(nextMatch, DATA.players) : null;
+  const lastPlayedMatch = getLastPlayedMatchFromFixtures() || [...DATA.matches].filter(match => getResult(match)).sort(compareMatchesForDisplay).at(-1) || null;
+  const leaderPoints = ranking[0]?.total || 0;
   document.getElementById('summaryCards').innerHTML = html`
     ${renderAsLiveMatchCard()}
     ${hasLiveMatch ? '' : html`
@@ -1194,8 +1390,8 @@ function renderSummary() {
       </article>
     `}
     <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
-    <article class="card"><b>${ranking[0] ? `⭐ ${ranking[0].name}` : '-'}</b><span>líder actual</span></article>
-    <article class="card"><b>${ranking[0]?.total || 0}</b><span>puntos del líder</span></article>
+    <article class="card"><b>${ranking[0] ? `⭐ ${ranking[0].name}` : '-'}</b><span>líder actual</span><span class="card-detail">${leaderPoints} puntos</span></article>
+    ${renderLastPlayedMatchCard(lastPlayedMatch)}
     <article class="card"><b>${ranking.length ? `💩 ${ranking[ranking.length - 1].name}` : '-'}</b><span>el purria</span></article>
     <article class="card">
       <b>${bestStreak ? `🔥 ${bestStreak.player.name}` : '-'}</b>
@@ -1312,6 +1508,28 @@ function buildHistoricalSnapshots() {
       playedMatches: index + 1
     };
   });
+}
+
+function getLastPlayedMatchFromFixtures() {
+  const playedEntries = state.apiFixtures
+    .map(fixture => {
+      if (!Array.isArray(fixture?.score?.ft) || fixture.score.ft.length < 2) return null;
+      const match = LOCAL_MATCH_BY_FIXTURE_KEY.get(keyForTeams(fixture.team1, fixture.team2));
+      if (!match) return null;
+
+      return {
+        match,
+        timestamp: parseApiFixtureDateTime(fixture)?.getTime() || Number.POSITIVE_INFINITY
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const timeDiff = a.timestamp - b.timestamp;
+      if (timeDiff) return timeDiff;
+      return (MATCH_ORDER_INDEX.get(a.match.id) || 0) - (MATCH_ORDER_INDEX.get(b.match.id) || 0);
+    });
+
+  return playedEntries.at(-1)?.match || null;
 }
 
 function historyCheckpointLabel(snapshot) {
@@ -1785,6 +2003,15 @@ function formatMatchSchedule(match) {
     ? { dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23', timeZone: 'Europe/Madrid' }
     : { dateStyle: 'medium', timeZone: 'Europe/Madrid' }
   ).format(date);
+}
+
+function formatLastPlayedMatch(match) {
+  const result = getResult(match);
+  if (!match || !result) return '-';
+
+  const homeFlag = TEAM_FLAGS[match.team1] || '🏳️';
+  const awayFlag = TEAM_FLAGS[match.team2] || '🏳️';
+  return `${homeFlag} ${match.team1}<span class="next-match-separator">-</span>${match.team2} ${awayFlag} · ${result.home}-${result.away}`;
 }
 
 function getMatchScheduleTimestamp(match) {
@@ -2588,6 +2815,7 @@ function getProbabilitiesKey() {
   return JSON.stringify({
     apiResults: state.apiResults,
     miniResults: state.miniResults,
+    predictionOverrides: state.predictionOverrides,
     playerRankings: state.playerRankings?.scrapedAt || state.playerRankings?.source || '',
     teamRankings: state.teamRankings?.scrapedAt || state.teamRankings?.source || ''
   });
@@ -2721,7 +2949,243 @@ function renderSettings() {
   document.getElementById('apiUrlInput').value = state.apiUrl;
 }
 
-function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderHistory(); renderProbabilities(); renderCompare(); renderMatches(); renderTeams(); renderStatistics(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); }
+function adminOverrideStatus(playerId, scope, entityId) {
+  return getPredictionOverride(playerId, scope, entityId)
+    ? '<span class="pill ok">corregido</span>'
+    : '<span class="muted">base</span>';
+}
+
+function renderAdminGroupEditor(playerId) {
+  return html`
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Grupo</th><th>Partido</th><th>Original</th><th>Valor activo</th><th>Nuevo valor</th><th>Estado</th><th>Acciones</th></tr></thead>
+        <tbody>${DATA.matches.map(match => {
+          const base = getBaseGroupPrediction(match.id, playerId);
+          const active = match.predictions[playerId] || base;
+          const syncStatus = getAdminRowSyncStatus(playerId, 'group_match', match.id);
+          return html`
+            <tr data-admin-override-row data-player-id="${playerId}" data-scope="group_match" data-entity-id="${match.id}">
+              <td>${match.group}</td>
+              <td>${teamLabel(match.team1)} - ${teamLabel(match.team2)}</td>
+              <td>${escapeHtml(base.score || '')}</td>
+              <td>${escapeHtml(active.score || '')}</td>
+              <td><input data-admin-override-value value="${escapeHtml(active.score || '')}" placeholder="1-0" inputmode="numeric" /></td>
+              <td>${adminOverrideStatus(playerId, 'group_match', match.id)} ${renderAdminRowSyncBadge(syncStatus)}</td>
+              <td class="admin-actions"><button type="button" data-save-prediction-override>Guardar</button><button type="button" data-clear-prediction-override>Quitar</button></td>
+            </tr>
+          `;
+        }).join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderAdminMiniEditor(playerId) {
+  return html`
+    <div class="mini-results admin-mini-results">
+      ${DATA.miniQuestions.map(question => {
+        const base = getBaseMiniAnswer(question.id, playerId);
+        const active = question.answers[playerId] || '';
+        const fieldType = MINI_FIELD_TYPES[question.id];
+        const list = fieldType === 'team' ? ' list="teamOptions"' : '';
+        const inputType = fieldType === 'number' ? 'number' : 'text';
+        const syncStatus = getAdminRowSyncStatus(playerId, 'mini', question.id);
+        return html`
+          <article class="mini-result-card" data-admin-override-row data-player-id="${playerId}" data-scope="mini" data-entity-id="${question.id}">
+            <div>
+              <span class="pill">${question.id} · ${question.points} puntos</span>
+              <h4>${escapeHtml(question.question)}</h4>
+              <span class="field-type">Original: ${escapeHtml(base || '-')} · Activo: ${escapeHtml(active || '-')}</span>
+              <span class="field-type">${adminOverrideStatus(playerId, 'mini', question.id)} ${renderAdminRowSyncBadge(syncStatus)}</span>
+            </div>
+            <div class="mini-result-actions">
+              <input data-admin-override-value type="${inputType}"${list} value="${escapeHtml(active)}" />
+              <button type="button" data-save-prediction-override>Guardar</button>
+              <button type="button" data-clear-prediction-override>Quitar</button>
+            </div>
+          </article>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function getAdminKnockoutItems(stage, playerId) {
+  return DATA.knockoutPredictions
+    .filter(prediction => prediction.stage === stage)
+    .sort((a, b) => a.slot - b.slot)
+    .map(prediction => {
+      const entityId = `${prediction.stage}:${prediction.slot}`;
+      return {
+        stage,
+        slot: prediction.slot,
+        entityId,
+        base: getBaseKnockoutPick(entityId, playerId),
+        active: prediction.predictions[playerId] || ''
+      };
+    });
+}
+
+function getAdminKnockoutItem(stage, slot, playerId) {
+  return getAdminKnockoutItems(stage, playerId).find(item => item.slot === slot) || {
+    stage,
+    slot,
+    entityId: `${stage}:${slot}`,
+    base: '',
+    active: ''
+  };
+}
+
+function renderAdminKnockoutPick(item, playerId) {
+  const flag = TEAM_FLAGS[item.active] || '🏳️';
+  const syncStatus = getAdminRowSyncStatus(playerId, 'knockout', item.entityId);
+  return html`
+    <div class="bracket-team admin-bracket-team" data-admin-override-row data-player-id="${playerId}" data-scope="knockout" data-entity-id="${item.entityId}">
+      <span class="bracket-flag">${flag}</span>
+      <input data-admin-override-value list="teamOptions" value="${escapeHtml(item.active)}" placeholder="Selección" />
+      <span class="admin-bracket-meta">
+        <span class="admin-bracket-base">Base: ${escapeHtml(item.base || '-')}</span>
+        <span class="admin-bracket-status">${adminOverrideStatus(playerId, 'knockout', item.entityId)} ${renderAdminRowSyncBadge(syncStatus)}</span>
+      </span>
+      <span class="admin-actions">
+        <button type="button" data-save-prediction-override>Guardar</button>
+        <button type="button" data-clear-prediction-override>Quitar</button>
+      </span>
+    </div>
+  `;
+}
+
+function renderAdminKnockoutRound(stage, teams, playerId, { matchOffset = 0, slotOffset = 0, side = 'left' } = {}) {
+  const stageConfig = KNOCKOUT_SCORING[stage];
+  const matches = [];
+  for (let index = 0; index < teams.length; index += 2) {
+    const firstSlot = slotOffset + index + 1;
+    const secondSlot = slotOffset + index + 2;
+    matches.push(html`
+      <article class="bracket-match ${side === 'right' ? 'right-side' : ''}">
+        <span class="bracket-match-number">Cruce ${matchOffset + index / 2 + 1}</span>
+        ${renderAdminKnockoutPick(getAdminKnockoutItem(stage, firstSlot, playerId), playerId)}
+        ${teams[index + 1] ? renderAdminKnockoutPick(getAdminKnockoutItem(stage, secondSlot, playerId), playerId) : ''}
+      </article>
+    `);
+  }
+
+  return html`
+    <section class="bracket-round admin-bracket-round ${side === 'right' ? 'right-bracket-round' : ''}" style="--matches:${Math.max(matches.length, 1)}">
+      <div class="bracket-round-head">
+        <h3>${escapeHtml(stageConfig?.label || stage)}</h3>
+        <span>${teams.length} selecciones</span>
+        <small>Edición manual de clasificados</small>
+      </div>
+      <div class="bracket-matches">${matches.join('')}</div>
+    </section>
+  `;
+}
+
+function renderAdminKnockoutFinal(bracket, playerId) {
+  const champion = DATA.knockoutPredictions.find(prediction => prediction.stage === '1º')?.predictions[playerId] || '';
+  const championItem = getAdminKnockoutItems('1º', playerId)[0] || {
+    entityId: '1º:1',
+    base: '',
+    active: champion
+  };
+
+  return html`
+    <section class="bracket-round bracket-final-round admin-bracket-round">
+      <div class="bracket-round-head">
+        <h3>Final</h3>
+        <span>2 finalistas + campeón</span>
+        <small>Edición manual de clasificados</small>
+      </div>
+      <div class="bracket-matches">
+        <article class="bracket-match">
+          <span class="bracket-match-number">Final</span>
+          ${renderAdminKnockoutPick(getAdminKnockoutItem('FINAL', 1, playerId), playerId)}
+          ${renderAdminKnockoutPick(getAdminKnockoutItem('FINAL', 2, playerId), playerId)}
+        </article>
+        <article class="bracket-match champion-card">
+          <span class="trophy" aria-hidden="true">★</span>
+          ${renderAdminKnockoutPick(championItem, playerId)}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderAdminKnockoutEditor(playerId) {
+  const bracket = buildPlayerKnockoutBracket(DATA.knockoutPredictions, playerId, teamKey);
+  const halfRounds = KNOCKOUT_STAGES.slice(0, -1);
+  const leftRounds = halfRounds.map(stage => ({
+    stage,
+    teams: bracket[stage].slice(0, bracket[stage].length / 2),
+    matchOffset: 0,
+    slotOffset: 0
+  }));
+  const rightRounds = halfRounds.map(stage => ({
+    stage,
+    teams: bracket[stage].slice(bracket[stage].length / 2),
+    matchOffset: bracket[stage].length / 4,
+    slotOffset: bracket[stage].length / 2
+  })).reverse();
+
+  return html`
+    <div class="bracket-wrap admin-bracket-wrap">
+      <div class="bracket-title">
+        <span>Editando cruces de</span>
+        <strong>${escapeHtml(DATA.players.find(player => player.id === playerId)?.name || '')}</strong>
+      </div>
+      <div class="bracket admin-bracket">
+        ${leftRounds.map(({ stage, teams, matchOffset, slotOffset }) => renderAdminKnockoutRound(stage, teams, playerId, { matchOffset, slotOffset })).join('')}
+        ${renderAdminKnockoutFinal(bracket, playerId)}
+        ${rightRounds.map(({ stage, teams, matchOffset, slotOffset }) => renderAdminKnockoutRound(stage, teams, playerId, { matchOffset, slotOffset, side: 'right' })).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminDashboard() {
+  const playerSelect = document.getElementById('adminPlayerSelect');
+  const scopeSelect = document.getElementById('adminScopeSelect');
+  if (!playerSelect || !scopeSelect) return;
+
+  if (!state.adminDashboard.playerId || !DATA.players.some(player => player.id === state.adminDashboard.playerId)) {
+    state.adminDashboard.playerId = DATA.players[0]?.id || '';
+  }
+
+  playerSelect.innerHTML = DATA.players.map(player => `<option value="${player.id}">${escapeHtml(player.name)}</option>`).join('');
+  playerSelect.value = state.adminDashboard.playerId;
+  scopeSelect.value = state.adminDashboard.scope;
+
+  const player = DATA.players.find(item => item.id === state.adminDashboard.playerId);
+  const playerOverrides = state.predictionOverrides.filter(row => row.player_id === state.adminDashboard.playerId);
+  const adminStatus = state.adminSyncStatus;
+  const adminStatusLabel = adminStatus.message
+    ? `${adminStatus.message}${adminStatus.at ? ` · ${formatRelativeUpdateTime(adminStatus.at)}` : ''}`
+    : 'Sin operaciones recientes';
+  document.getElementById('adminDashboardSummary').innerHTML = html`
+    <article class="card"><b>${player?.name || '-'}</b><span>jugador seleccionado</span></article>
+    <article class="card"><b>${playerOverrides.length}</b><span>correcciones activas</span></article>
+    <article class="card"><b>${playerOverrides.filter(row => row.scope === 'group_match').length}</b><span>fase de grupos</span></article>
+    <article class="card"><b>${playerOverrides.filter(row => row.scope === 'knockout').length}</b><span>cruces</span></article>
+    <article class="card"><b>${playerOverrides.filter(row => row.scope === 'mini').length}</b><span>mini-porra</span></article>
+    <article class="card admin-sync-card ${adminStatus.type || ''} ${adminStatus.inFlight ? 'pending' : ''}">
+      <b>${adminStatus.inFlight ? 'Enviando cambios' : (adminStatus.type === 'error' ? 'Error de envío' : 'Estado del envío')}</b>
+      <span>${escapeHtml(adminStatusLabel)}</span>
+    </article>
+  `;
+
+  const content = document.getElementById('adminDashboardContent');
+  if (state.adminDashboard.scope === 'mini') {
+    content.innerHTML = renderAdminMiniEditor(state.adminDashboard.playerId);
+  } else if (state.adminDashboard.scope === 'knockout') {
+    content.innerHTML = renderAdminKnockoutEditor(state.adminDashboard.playerId);
+  } else {
+    content.innerHTML = renderAdminGroupEditor(state.adminDashboard.playerId);
+  }
+}
+
+function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderHistory(); renderProbabilities(); renderCompare(); renderMatches(); renderTeams(); renderStatistics(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); renderAdminDashboard(); }
 
 async function loadMiniResultsFromSupabase() {
   const { data, error } = await supabase
@@ -2736,6 +3200,112 @@ async function loadMiniResultsFromSupabase() {
   state.miniResults = Object.fromEntries(data.map(row => [row.question_id, row.value]));
   localStorage.setItem(LS_KEYS.mini, JSON.stringify(state.miniResults));
   renderMini();
+}
+
+async function loadPredictionOverridesFromSupabase() {
+  const { data, error } = await supabase
+    .from(PREDICTION_OVERRIDES_TABLE)
+    .select('player_id,scope,entity_id,value,updated_at');
+
+  if (error) {
+    console.error('No se pudieron cargar las correcciones de pronósticos desde Supabase:', error);
+    return;
+  }
+
+  state.predictionOverrides = normalizeOverrideRows(data);
+  applyPredictionOverrides();
+  renderAll();
+}
+
+function valueFromAdminOverrideRow(row) {
+  const scope = row.dataset.scope;
+  const rawValue = row.querySelector('[data-admin-override-value]')?.value?.trim() || '';
+  if (scope === 'group_match') {
+    return {
+      score: rawValue,
+      sign: overrideSignFromScore(rawValue)
+    };
+  }
+  if (scope === 'knockout') {
+    return { team: rawValue };
+  }
+  return { answer: rawValue };
+}
+
+function isEmptyOverrideValue(value) {
+  return !String(value?.score || value?.team || value?.answer || '').trim();
+}
+
+async function savePredictionOverrideFromRow(row) {
+  if (!isAdmin() || !row) return;
+  const playerId = row.dataset.playerId;
+  const scope = row.dataset.scope;
+  const entityId = row.dataset.entityId;
+
+  const payload = {
+    player_id: playerId,
+    scope,
+    entity_id: entityId,
+    value: valueFromAdminOverrideRow(row),
+    updated_by: state.adminUser?.id || null,
+    updated_at: new Date().toISOString()
+  };
+
+  if (isEmptyOverrideValue(payload.value)) {
+    await clearPredictionOverrideFromRow(row);
+    return;
+  }
+
+  setAdminSyncStatus('info', 'Guardando corrección…', { inFlight: true });
+  setAdminRowSyncStatus(playerId, scope, entityId, 'info', 'guardando...', { inFlight: true });
+
+  const { error } = await supabase
+    .from(PREDICTION_OVERRIDES_TABLE)
+    .upsert(payload, { onConflict: 'player_id,scope,entity_id' });
+  if (error) {
+    setAdminSyncStatus('error', `No se pudo guardar: ${error.message}`);
+    setAdminRowSyncStatus(playerId, scope, entityId, 'error', `error · ${error.message}`, { clearAfterMs: 8000 });
+    return alert('No se pudo guardar la corrección: ' + error.message);
+  }
+
+  const key = predictionOverrideKey(payload.player_id, payload.scope, payload.entity_id);
+  state.predictionOverrides = [
+    ...state.predictionOverrides.filter(item => predictionOverrideKey(item.player_id, item.scope, item.entity_id) !== key),
+    payload
+  ];
+  applyPredictionOverrides();
+  renderAll();
+  setAdminSyncStatus('success', `Corrección guardada en ${payload.scope} (${payload.entity_id})`);
+  setAdminRowSyncStatus(playerId, scope, entityId, 'success', 'ok', { clearAfterMs: 4000 });
+  showAppToast('Corrección guardada.');
+}
+
+async function clearPredictionOverrideFromRow(row) {
+  if (!isAdmin() || !row) return;
+  const { playerId, scope, entityId } = row.dataset;
+
+  setAdminSyncStatus('info', 'Quitando corrección…', { inFlight: true });
+  setAdminRowSyncStatus(playerId, scope, entityId, 'info', 'quitando...', { inFlight: true });
+
+  const { error } = await supabase
+    .from(PREDICTION_OVERRIDES_TABLE)
+    .delete()
+    .eq('player_id', playerId)
+    .eq('scope', scope)
+    .eq('entity_id', entityId);
+  if (error) {
+    setAdminSyncStatus('error', `No se pudo quitar: ${error.message}`);
+    setAdminRowSyncStatus(playerId, scope, entityId, 'error', `error · ${error.message}`, { clearAfterMs: 8000 });
+    return alert('No se pudo quitar la corrección: ' + error.message);
+  }
+
+  const key = predictionOverrideKey(playerId, scope, entityId);
+  state.predictionOverrides = state.predictionOverrides.filter(item => predictionOverrideKey(item.player_id, item.scope, item.entity_id) !== key);
+  applyPredictionOverrides();
+  renderAll();
+  setAdminSyncStatus('success', `Corrección eliminada de ${scope} (${entityId})`);
+  setAdminRowSyncStatus(playerId, scope, entityId, 'success', 'ok', { clearAfterMs: 4000 });
+  showAppToast('Corrección eliminada.');
 }
 
 async function bootstrapWorldcupResultsCache() {
@@ -3191,6 +3761,16 @@ document.addEventListener('click', e => {
   }
   const saveMini = e.target.dataset.saveMini; if (saveMini) saveMiniResult(saveMini);
   const clearMini = e.target.dataset.clearMini; if (clearMini) clearMiniResult(clearMini);
+  const saveOverrideButton = e.target.closest('[data-save-prediction-override]');
+  if (saveOverrideButton) {
+    savePredictionOverrideFromRow(saveOverrideButton.closest('[data-admin-override-row]'));
+    return;
+  }
+  const clearOverrideButton = e.target.closest('[data-clear-prediction-override]');
+  if (clearOverrideButton) {
+    clearPredictionOverrideFromRow(clearOverrideButton.closest('[data-admin-override-row]'));
+    return;
+  }
   if (e.target.matches('[data-admin-logout]')) supabase.auth.signOut();
 });
 
@@ -3281,6 +3861,16 @@ document.getElementById('groupStandingsView').addEventListener('change', e => {
 });
 document.getElementById('teamsSearch').addEventListener('input', renderTeams);
 document.addEventListener('change', e => {
+  if (e.target.id === 'adminPlayerSelect') {
+    state.adminDashboard.playerId = e.target.value;
+    renderAdminDashboard();
+    return;
+  }
+  if (e.target.id === 'adminScopeSelect') {
+    state.adminDashboard.scope = e.target.value;
+    renderAdminDashboard();
+    return;
+  }
   const comparePlayerSelect = e.target.closest('[data-compare-player-select]');
   if (!comparePlayerSelect) return;
   if (comparePlayerSelect.value && !state.comparePlayers.includes(comparePlayerSelect.value)) {
@@ -3400,6 +3990,7 @@ renderAll();
 initializeResultsFlow();
 initializeAsLiveMatchFlow();
 loadMiniResultsFromSupabase();
+loadPredictionOverridesFromSupabase();
 loadStatsRankings();
 initializeAuth();
 disablePwa();

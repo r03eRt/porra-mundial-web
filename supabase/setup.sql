@@ -25,10 +25,21 @@ create table if not exists public.as_live_match_cache (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.prediction_overrides (
+  player_id text not null,
+  scope text not null,
+  entity_id text not null,
+  value jsonb not null,
+  updated_by uuid references auth.users(id),
+  updated_at timestamptz not null default now(),
+  primary key (player_id, scope, entity_id)
+);
+
 alter table public.mini_results enable row level security;
 alter table public.as_rankings_cache enable row level security;
 alter table public.worldcup_results_cache enable row level security;
 alter table public.as_live_match_cache enable row level security;
+alter table public.prediction_overrides enable row level security;
 
 revoke all on table public.mini_results from anon, authenticated;
 grant select on table public.mini_results to anon, authenticated;
@@ -42,6 +53,10 @@ grant select on table public.worldcup_results_cache to anon, authenticated;
 
 revoke all on table public.as_live_match_cache from anon, authenticated;
 grant select on table public.as_live_match_cache to anon, authenticated;
+
+revoke all on table public.prediction_overrides from anon, authenticated;
+grant select on table public.prediction_overrides to anon, authenticated;
+grant insert, update, delete on table public.prediction_overrides to authenticated;
 
 drop policy if exists "Mini results are public" on public.mini_results;
 create policy "Mini results are public"
@@ -91,4 +106,33 @@ create policy "AS live match cache is public"
   on public.as_live_match_cache
   for select
   to anon, authenticated
+  using (true);
+
+drop policy if exists "Prediction overrides are public" on public.prediction_overrides;
+create policy "Prediction overrides are public"
+  on public.prediction_overrides
+  for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "Authenticated admins can insert prediction overrides" on public.prediction_overrides;
+create policy "Authenticated admins can insert prediction overrides"
+  on public.prediction_overrides
+  for insert
+  to authenticated
+  with check (true);
+
+drop policy if exists "Authenticated admins can update prediction overrides" on public.prediction_overrides;
+create policy "Authenticated admins can update prediction overrides"
+  on public.prediction_overrides
+  for update
+  to authenticated
+  using (true)
+  with check (true);
+
+drop policy if exists "Authenticated admins can delete prediction overrides" on public.prediction_overrides;
+create policy "Authenticated admins can delete prediction overrides"
+  on public.prediction_overrides
+  for delete
+  to authenticated
   using (true);

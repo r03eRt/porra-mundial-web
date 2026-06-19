@@ -74,6 +74,7 @@
       <button class="tab" data-tab="probabilities">Probabilidades</button>
       <button class="tab" data-tab="statistics">Estadísticas</button>
       <button class="tab" data-tab="compare">Comparador</button>
+      <button class="tab" data-tab="adminDashboard" data-admin-only>Admin porra</button>
       <button class="tab" data-tab="settings" data-admin-only>Datos/API</button>
     </nav>
 
@@ -347,6 +348,25 @@
           </div>
         </article>
       </div>
+    </section>
+
+    <section id="adminDashboard" class="panel" data-admin-only>
+      <div class="panel-head">
+        <div>
+          <h2>Admin porra</h2>
+          <p class="hint">Correcciones manuales sobre los valores originales del Excel.</p>
+        </div>
+        <div class="filters">
+          <select id="adminPlayerSelect" aria-label="Jugador"></select>
+          <select id="adminScopeSelect" aria-label="Tipo de pronóstico">
+            <option value="group_match">Fase de grupos</option>
+            <option value="knockout">Cruces</option>
+            <option value="mini">Mini-porra</option>
+          </select>
+        </div>
+      </div>
+      <div id="adminDashboardSummary" class="cards"></div>
+      <div id="adminDashboardContent"></div>
     </section>
   </main>
 
