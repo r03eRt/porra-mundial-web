@@ -26,9 +26,6 @@ const AS_LIVE_MATCH_IDLE_REFRESH_MS = 15 * 60 * 1000;
 const AS_LIVE_MATCH_FETCH_TIMEOUT_MS = 15000;
 const AS_LIVE_MATCH_FINAL_GRACE_MS = 15 * 60 * 1000;
 const AS_LIVE_MATCH_UI_TICK_MS = 30 * 1000;
-const adminParam = new URLSearchParams(window.location.search).get('admin');
-const ADMIN_REQUESTED = new URLSearchParams(window.location.search).has('admin')
-  && !['0', 'false', 'no'].includes(String(adminParam).toLowerCase());
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 const LS_KEYS = {
   mini: 'porra.miniResults.v1',
@@ -44,8 +41,6 @@ const LS_KEYS = {
   theme: 'porra.theme.v1',
   installDismissedUntil: 'porra.installBanner.dismissedUntil.v1'
 };
-
-const PLAYER_REQUESTED = new URLSearchParams(window.location.search).has('player');
 
 const TEAM_FLAGS = {
   'A. SAUDÍ': '🇸🇦',
@@ -1176,19 +1171,17 @@ function applyAdminMode() {
   renderPlayerAccess();
 }
 
+// Acceso unificado en portada: un único login para todos. Tras entrar, el rol
+// (admin o jugador) se decide solo según la cuenta.
 function renderPlayerAccess() {
   const container = document.getElementById('playerAccess');
   if (!container) return;
 
-  // Si hay admin logueado, el acceso de jugador no se muestra (el admin manda).
-  const playing = isPlayerSession();
-  const shouldShow = !isAdmin() && (PLAYER_REQUESTED || playing);
-  container.hidden = !shouldShow;
-  if (!shouldShow) return;
-
-  if (playing) {
+  // Si hay sesión, muestra quién es + salir. Si no, muestra el formulario único.
+  if (isPlayerSession()) {
     const playerId = currentPlayerId();
     const player = DATA.players.find(item => item.id === playerId);
+    container.hidden = false;
     container.innerHTML = html`
       <div class="admin-session-row">
         <span class="admin-session">Tu porra · ${escapeHtml(player?.name || state.adminUser?.email || playerId)}</span>
@@ -1198,37 +1191,44 @@ function renderPlayerAccess() {
     return;
   }
 
+  if (isAdmin()) {
+    // La sesión de admin la muestra renderAdminAccess; aquí no duplicamos.
+    container.hidden = true;
+    container.innerHTML = '';
+    return;
+  }
+
+  // Nadie logueado: formulario único de acceso, siempre visible en portada.
+  container.hidden = false;
   container.innerHTML = html`
     <form id="playerLoginForm" class="admin-login">
       <input name="email" type="email" autocomplete="username" placeholder="Email" required />
       <input name="password" type="password" autocomplete="current-password" placeholder="Contraseña" required />
-      <button type="submit">Editar mi porra</button>
+      <button type="submit">Entrar</button>
     </form>
     <span class="admin-login-error" role="alert">${escapeHtml(state.playerLoginError || '')}</span>
   `;
 }
 
+// El widget de admin ahora solo muestra la sesión activa de admin (no un segundo
+// formulario; el login es único y vive en renderPlayerAccess).
 function renderAdminAccess() {
   const container = document.getElementById('adminAccess');
-  const shouldShowAdminAccess = ADMIN_REQUESTED || Boolean(state.adminUser);
-  container.hidden = !shouldShowAdminAccess;
-  if (!shouldShowAdminAccess) return;
+  if (!container) return;
 
-  container.innerHTML = state.adminUser
-    ? html`
+  if (isAdmin()) {
+    container.hidden = false;
+    container.innerHTML = html`
       <div class="admin-session-row">
         <span class="admin-session">${escapeHtml(state.adminUser.email)}</span>
         <button type="button" data-admin-logout>Cerrar sesión</button>
       </div>
-    `
-    : html`
-      <form id="adminLoginForm" class="admin-login">
-        <input name="email" type="email" autocomplete="username" placeholder="Email admin" required />
-        <input name="password" type="password" autocomplete="current-password" placeholder="Contraseña" required />
-        <button type="submit">Entrar</button>
-      </form>
-      <span id="adminLoginError" class="admin-login-error" role="alert"></span>
     `;
+    return;
+  }
+
+  container.hidden = true;
+  container.innerHTML = '';
 }
 
 function formatRelativeUpdateTime(timestamp) {
@@ -4065,51 +4065,33 @@ document.getElementById('matchPredictionsDialog').addEventListener('click', e =>
   if (e.target === e.currentTarget) e.currentTarget.close();
 });
 
+// Login único en portada. Tras entrar, el rol decide el destino:
+// admin -> panel Administrar; jugador -> Editar mi porra.
 document.addEventListener('submit', async e => {
-  if (e.target.id === 'playerLoginForm') {
-    e.preventDefault();
-    const submitButton = e.target.querySelector('button[type="submit"]');
-    const formData = new FormData(e.target);
-    submitButton.disabled = true;
-    state.playerLoginError = '';
-    renderPlayerAccess();
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email: String(formData.get('email') || ''),
-      password: String(formData.get('password') || '')
-    });
-
-    if (error) {
-      state.playerLoginError = 'Email o contraseña incorrectos.';
-      submitButton.disabled = false;
-      renderPlayerAccess();
-      return;
-    }
-
-    // onAuthStateChange actualizará state.adminUser; al ser cuenta de jugador,
-    // isPlayerSession() pasará a true. Abrimos su porra.
-    state.playerLoginError = '';
-    activatePanel('myPorra');
-    return;
-  }
-
-  if (e.target.id !== 'adminLoginForm') return;
+  if (e.target.id !== 'playerLoginForm' && e.target.id !== 'adminLoginForm') return;
   e.preventDefault();
   const submitButton = e.target.querySelector('button[type="submit"]');
-  const errorElement = document.getElementById('adminLoginError');
   const formData = new FormData(e.target);
   submitButton.disabled = true;
-  errorElement.textContent = '';
+  state.playerLoginError = '';
+  renderPlayerAccess();
 
-  const { error } = await supabase.auth.signInWithPassword({
-    email: formData.get('email'),
-    password: formData.get('password')
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: String(formData.get('email') || ''),
+    password: String(formData.get('password') || '')
   });
 
   if (error) {
-    errorElement.textContent = 'Email o contraseña incorrectos.';
+    state.playerLoginError = 'Email o contraseña incorrectos.';
     submitButton.disabled = false;
+    renderPlayerAccess();
+    return;
   }
+
+  // Decide el destino según el rol de la cuenta autenticada.
+  state.playerLoginError = '';
+  const playerId = data?.user?.user_metadata?.player_id || '';
+  activatePanel(playerId ? 'myPorra' : 'adminDashboard');
 });
 
 document.getElementById('refreshApiBtn').addEventListener('click', refreshFromApi);
