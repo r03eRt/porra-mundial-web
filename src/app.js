@@ -1333,11 +1333,14 @@ function getAsLiveMatchBadge(payload) {
 function formatAsLiveEvent(event) {
   if (!event?.text) return '';
   const minute = event.minuteLabel ? `${escapeHtml(event.minuteLabel)}'` : '';
-  const parsedText = String(event.text || '').trim();
+  // Quita el markdown (**negrita**) y normaliza espacios del texto de la jugada.
+  const parsedText = String(event.text || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
   const parsedMinute = parsedText.match(/(\d{1,3}(?:\+\d{1,2})?)['’]?$/)?.[1] || '';
-  const player = parsedMinute
+  const rawPlayer = parsedMinute
     ? parsedText.replace(new RegExp(`\\s*${parsedMinute}['’]?$`), '').trim()
     : parsedText;
+  // Recorta a un máximo de caracteres para que el chip no ocupe de más.
+  const player = formatLiveNotificationText(rawPlayer);
   const icon = event.kind === 'red-card'
     ? '🟥'
     : (event.kind === 'goal-penalty' ? '🎯' : '⚽');
