@@ -7,3 +7,6 @@ supabase/seed-player-pins.sql
 
 # Backups de la base de datos (datos, PINs en claro, usuarios auth): mantener privados.
 supabase/backup/
+
+# Credenciales de Supabase Auth de los jugadores (email + contraseña en claro): privado.
+supabase/player-auth-credentials.txt
