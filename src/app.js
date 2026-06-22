@@ -722,19 +722,30 @@ function buildGoalAlertEvents(previousSnapshot, nextSnapshot) {
   return events;
 }
 
+// Longitud máxima del texto de las notificaciones del directo.
+const LIVE_NOTIFICATION_MAX_LENGTH = 65;
+
+// Limpia el markdown (**negrita**) y recorta a un máximo de caracteres añadiendo …
+function formatLiveNotificationText(text, maxLength = LIVE_NOTIFICATION_MAX_LENGTH) {
+  const clean = String(text || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
+  if (clean.length <= maxLength) return clean;
+  return `${clean.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
 function notifyGoalAlert(event) {
   if (!event?.message) return;
 
   if (!areLiveNotificationsEnabled()) return;
 
-  showAppToast(event.message, 4200);
+  const toastText = formatLiveNotificationText(event.detail ? `${event.message} ${event.detail}` : event.message);
+  showAppToast(toastText, 4200);
 
   if (!canUseGoalNotifications() || Notification.permission !== 'granted') return;
   if (document.visibilityState === 'visible' && document.hasFocus()) return;
 
   try {
     const notification = new Notification(event.title || 'Aviso del partido', {
-      body: event.detail ? `${event.message} ${event.detail}` : event.message,
+      body: formatLiveNotificationText(event.detail ? `${event.message} ${event.detail}` : event.message),
       tag: `goal-alert:${Date.now()}`,
       silent: false
     });
