@@ -26,6 +26,16 @@ const KNOCKOUT_ROUNDS = [
   { key: 'final', label: 'Final' }
 ];
 
+const MINI_FIELD_TYPES = [
+  { value: 'text', label: 'Texto libre' },
+  { value: 'number', label: 'Número' },
+  { value: 'team', label: 'Equipo' },
+  { value: 'player', label: 'Jugador' },
+  { value: 'goals-range', label: 'Goles' }
+];
+
+const MINI_FIELD_TYPE_LABELS = Object.fromEntries(MINI_FIELD_TYPES.map(item => [item.value, item.label]));
+
 const PORRA_STATUS_FLOW = ['draft', 'open', 'playing', 'closed'];
 const PORRA_STATUS_LABELS = {
   draft: 'Borrador',
@@ -100,6 +110,9 @@ const state = {
   groups: [],
   matches: [],
   players: [],
+  miniQuestions: [],
+  editingTeamId: null,
+  editingMiniQuestionId: null,
   detailError: '',
   error: ''
 };
@@ -153,11 +166,60 @@ function syncCurrentPorraFromList() {
   state.currentPorra = state.porras.find(p => p.id === state.currentPorra.id) || state.currentPorra;
 }
 
+function teamGroupName(team) {
+  return state.groups.find(group => group.group_id === team.group_id)?.name || '';
+}
+
+function miniFieldTypeLabel(fieldType) {
+  return MINI_FIELD_TYPE_LABELS[fieldType] || fieldType || '—';
+}
+
+function parseMiniOptions(raw) {
+  return String(raw || '')
+    .split(/\r?\n/)
+    .map(value => value.trim())
+    .filter(Boolean);
+}
+
+function miniOptionsToText(options) {
+  return Array.isArray(options) ? options.join('\n') : String(options || '');
+}
+
+function sortedTeams() {
+  return [...state.teams].sort((a, b) => {
+    const groupA = teamGroupName(a);
+    const groupB = teamGroupName(b);
+    if (!groupA && groupB) return 1;
+    if (groupA && !groupB) return -1;
+    const byGroup = groupA.localeCompare(groupB, 'es');
+    if (byGroup !== 0) return byGroup;
+    return a.name.localeCompare(b.name, 'es');
+  });
+}
+
 function groupMatchKey(groupId, team1Id, team2Id) {
   return [groupId || '', ...[team1Id, team2Id].sort()].join('::');
 }
 
-function buildGroupMatches(firstKickoffRaw) {
+function buildRoundRobinRounds(teams) {
+  const participants = teams.length % 2 === 0 ? [...teams] : [...teams, null];
+  const rounds = [];
+
+  for (let round = 0; round < participants.length - 1; round += 1) {
+    const pairs = [];
+    for (let i = 0; i < participants.length / 2; i += 1) {
+      const team1 = participants[i];
+      const team2 = participants[participants.length - 1 - i];
+      if (team1 && team2) pairs.push([team1, team2]);
+    }
+    rounds.push(pairs);
+    participants.splice(1, 0, participants.pop());
+  }
+
+  return rounds;
+}
+
+function buildGroupMatches(firstKickoffRaw, daysBetweenRaw) {
   const existing = new Set(state.matches
     .filter(match => (match.phase ?? match.stage) === 'group')
     .map(match => groupMatchKey(
@@ -166,21 +228,27 @@ function buildGroupMatches(firstKickoffRaw) {
       match.team2_id ?? match.team2
     )));
   const firstKickoff = firstKickoffRaw ? new Date(firstKickoffRaw) : null;
-  const rows = [];
-
-  for (const group of state.groups) {
+  const daysBetween = Math.max(1, Number(daysBetweenRaw) || 4);
+  const basePosition = Math.max(0, ...state.matches.map(match => Number(match.position) || 0));
+  const groupedRounds = state.groups.map(group => {
     const groupTeams = state.teams
       .filter(team => team.group_id === group.group_id)
       .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    return { group, rounds: buildRoundRobinRounds(groupTeams) };
+  });
+  const maxRounds = Math.max(0, ...groupedRounds.map(item => item.rounds.length));
+  const rows = [];
 
-    for (let i = 0; i < groupTeams.length; i += 1) {
-      for (let j = i + 1; j < groupTeams.length; j += 1) {
-        const team1 = groupTeams[i];
-        const team2 = groupTeams[j];
+  for (let roundIndex = 0; roundIndex < maxRounds; roundIndex += 1) {
+    let matchIndexInRound = 0;
+    for (const { group, rounds } of groupedRounds) {
+      for (const [team1, team2] of rounds[roundIndex] || []) {
         const matchKey = groupMatchKey(group.group_id, team1.team_id, team2.team_id);
         if (existing.has(matchKey)) continue;
         const kickoff = firstKickoff
-          ? new Date(firstKickoff.getTime() + rows.length * 2 * 60 * 60 * 1000).toISOString()
+          ? new Date(firstKickoff.getTime()
+            + roundIndex * daysBetween * 24 * 60 * 60 * 1000
+            + matchIndexInRound * 2 * 60 * 60 * 1000).toISOString()
           : null;
         rows.push({
           porra_id: state.currentPorra.id,
@@ -195,9 +263,12 @@ function buildGroupMatches(firstKickoffRaw) {
           phase: 'group',
           group_label: group.name,
           kickoff,
+          slot: roundIndex + 1,
+          position: basePosition + rows.length + 1,
           status: 'scheduled'
         });
         existing.add(matchKey);
+        matchIndexInRound += 1;
       }
     }
   }
@@ -219,20 +290,29 @@ async function loadPorras() {
 
 async function loadDetail(porraId) {
   state.detailError = '';
-  const [teamsRes, groupsRes, matchesRes, playersRes] = await Promise.all([
+  const [teamsRes, groupsRes, matchesRes, playersRes, miniRes] = await Promise.all([
     supabase.from('porra_teams').select('*').eq('porra_id', porraId).order('name'),
     supabase.from('porra_groups').select('*').eq('porra_id', porraId).order('name'),
-    supabase.from('porra_matches').select('*').eq('porra_id', porraId).order('kickoff'),
-    supabase.from('porra_players').select('*').eq('porra_id', porraId).order('joined_at')
+    supabase.from('porra_matches').select('*').eq('porra_id', porraId).order('position').order('kickoff'),
+    supabase.from('porra_players').select('*').eq('porra_id', porraId).order('joined_at'),
+    supabase.from('porra_mini_questions').select('*').eq('porra_id', porraId).order('position').order('question')
   ]);
   if (teamsRes.error) state.detailError = teamsRes.error.message;
   if (groupsRes.error) state.detailError = groupsRes.error.message;
   if (matchesRes.error) state.detailError = matchesRes.error.message;
   if (playersRes.error) state.detailError = playersRes.error.message;
+  if (miniRes.error) state.detailError = miniRes.error.message;
   state.teams = teamsRes.data || [];
   state.groups = groupsRes.data || [];
   state.matches = matchesRes.data || [];
   state.players = playersRes.data || [];
+  state.miniQuestions = miniRes.data || [];
+  if (state.editingTeamId && !state.teams.find(team => team.team_id === state.editingTeamId)) {
+    state.editingTeamId = null;
+  }
+  if (state.editingMiniQuestionId && !state.miniQuestions.find(question => question.question_id === state.editingMiniQuestionId)) {
+    state.editingMiniQuestionId = null;
+  }
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────────
@@ -326,6 +406,7 @@ function renderPorraList() {
 function renderDetail() {
   const p = state.currentPorra;
   const nextStatus = nextPorraStatus(p.status);
+  const orderedTeams = sortedTeams();
 
   const playersRows = state.players.map(player => `
     <tr>
@@ -336,27 +417,48 @@ function renderDetail() {
     </tr>
   `).join('');
 
+  const groupOptions = state.groups.map(g =>
+    `<option value="${esc(g.group_id)}">${esc(g.name)}</option>`).join('');
+
   // Teams table
-  const teamsRows = state.teams.map(t => {
+  const teamsRows = orderedTeams.map(t => {
     const grp = state.groups.find(g => g.group_id === t.group_id);
     const flag = t.flag || flagForTeam(t.name);
+    if (state.editingTeamId === t.team_id) {
+      return `<tr>
+        <td colspan="4">
+          <form class="inline-form edit-team-form" data-id="${esc(t.team_id)}">
+            <input name="flag" type="text" value="${esc(flag)}" placeholder="Bandera" style="width:80px" />
+            <input name="teamName" type="text" value="${esc(t.name)}" required />
+            <select name="groupId">
+              <option value="">Sin grupo</option>
+              ${groupOptions.replace(`value="${esc(t.group_id)}"`, `value="${esc(t.group_id)}" selected`)}
+            </select>
+            <button type="submit" class="btn-secondary btn-sm">Guardar</button>
+            <button type="button" class="btn-secondary btn-sm cancel-edit-team">Cancelar</button>
+            <button type="button" class="btn-danger btn-sm del-team" data-id="${esc(t.team_id)}">✕</button>
+          </form>
+        </td>
+      </tr>`;
+    }
     return `<tr>
       <td>${esc(flag)}</td>
       <td>${esc(t.name)}</td>
       <td>${grp ? esc(grp.name) : '<span class="muted">—</span>'}</td>
-      <td><button type="button" class="btn-danger btn-sm del-team" data-id="${esc(t.team_id)}">✕</button></td>
+      <td class="team-actions">
+        <button type="button" class="btn-secondary btn-sm edit-team" data-id="${esc(t.team_id)}">Editar</button>
+        <button type="button" class="btn-danger btn-sm del-team" data-id="${esc(t.team_id)}">✕</button>
+      </td>
     </tr>`;
   }).join('');
 
-  const groupOptions = state.groups.map(g =>
-    `<option value="${esc(g.group_id)}">${esc(g.name)}</option>`).join('');
-  const teamOptions = state.teams.map(t =>
+  const teamOptions = orderedTeams.map(t =>
     `<option value="${esc(t.team_id)}">${esc(t.flag || flagForTeam(t.name))} ${esc(t.name)}</option>`).join('');
   const catalogTeamOptions = TEAM_CATALOG.map(t =>
     `<option value="${esc(t.name)}">${esc(t.flag)} ${esc(t.name)}</option>`).join('');
 
   // Matches table
-  const matchRows = state.matches.map(m => {
+  const matchRows = state.matches.map((m, index) => {
     const team1Id = m.team1_id ?? m.team1;
     const team2Id = m.team2_id ?? m.team2;
     const t1 = state.teams.find(t => t.team_id === team1Id);
@@ -366,24 +468,18 @@ function renderDetail() {
     const phase = phaseKey === 'group'
       ? (m.group_label ?? m.group_id ? `Grupo ${m.group_label ?? m.group_id}` : 'Fase de grupos')
       : (KNOCKOUT_ROUNDS.find(r => r.key === phaseKey)?.label ?? phaseKey ?? '—');
-    const scoreHome = m.score_home ?? m.result_home ?? '';
-    const scoreAway = m.score_away ?? m.result_away ?? '';
-    const matchStatus = m.status ?? ((scoreHome !== '' && scoreAway !== '') ? 'finished' : 'scheduled');
+    const matchday = m.slot ? `J${m.slot}` : '—';
     return `<tr>
+      <td>${esc(matchday)}</td>
       <td>${esc(phase)}</td>
       <td>${t1 ? `${esc(t1.flag || flagForTeam(t1.name))} ${esc(t1.name)}` : '—'}</td>
-      <td>
-        <form class="score-form" data-id="${esc(m.match_id)}">
-          <input name="score_home" type="number" min="0" inputmode="numeric" value="${esc(scoreHome)}" aria-label="Marcador local" />
-          <span class="muted">-</span>
-          <input name="score_away" type="number" min="0" inputmode="numeric" value="${esc(scoreAway)}" aria-label="Marcador visitante" />
-          <button type="submit" class="btn-secondary btn-sm">Guardar</button>
-        </form>
-      </td>
       <td>${t2 ? `${esc(t2.flag || flagForTeam(t2.name))} ${esc(t2.name)}` : '—'}</td>
       <td>${esc(when)}</td>
-      <td>${esc(matchStatus === 'finished' ? 'Finalizado' : 'Pendiente')}</td>
-      <td><button type="button" class="btn-danger btn-sm del-match" data-id="${esc(m.match_id)}">✕</button></td>
+      <td>
+        <button type="button" class="btn-secondary btn-sm move-match" data-id="${esc(m.match_id)}" data-dir="up" ${index === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="btn-secondary btn-sm move-match" data-id="${esc(m.match_id)}" data-dir="down" ${index === state.matches.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="btn-danger btn-sm del-match" data-id="${esc(m.match_id)}">✕</button>
+      </td>
     </tr>`;
   }).join('');
 
@@ -392,6 +488,41 @@ function renderDetail() {
     state.groups.map(g => `<option value="${esc(g.group_id)}">${esc(g.name)}</option>`).join('');
   const knockoutOpts = KNOCKOUT_ROUNDS.map(r =>
     `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join('');
+  const miniFieldTypeOptions = selected => MINI_FIELD_TYPES.map(type =>
+    `<option value="${esc(type.value)}"${type.value === selected ? ' selected' : ''}>${esc(type.label)}</option>`).join('');
+  const miniQuestionRows = state.miniQuestions.map((question, index) => {
+    const optionsText = miniOptionsToText(question.options);
+    if (state.editingMiniQuestionId === question.question_id) {
+      return `<tr>
+        <td colspan="6">
+          <form class="mini-edit-form edit-mini-question-form" data-id="${esc(question.question_id)}">
+            <input name="question" type="text" value="${esc(question.question)}" placeholder="Pregunta" required />
+            <input name="points" type="number" min="0" step="1" value="${esc(question.points)}" required style="width:90px" />
+            <select name="fieldType">${miniFieldTypeOptions(question.field_type)}</select>
+            <textarea name="options" rows="2" placeholder="Una opción por línea">${esc(optionsText)}</textarea>
+            <div class="mini-edit-actions">
+              <button type="submit" class="btn-secondary btn-sm">Guardar</button>
+              <button type="button" class="btn-secondary btn-sm cancel-edit-mini-question">Cancelar</button>
+              <button type="button" class="btn-danger btn-sm del-mini-question" data-id="${esc(question.question_id)}">✕</button>
+            </div>
+          </form>
+        </td>
+      </tr>`;
+    }
+    return `<tr>
+      <td>${index + 1}</td>
+      <td>${esc(question.question)}</td>
+      <td>${esc(question.points)}</td>
+      <td>${esc(miniFieldTypeLabel(question.field_type))}</td>
+      <td>${optionsText ? esc(optionsText.replace(/\n/g, ', ')) : '<span class="muted">—</span>'}</td>
+      <td class="mini-actions">
+        <button type="button" class="btn-secondary btn-sm edit-mini-question" data-id="${esc(question.question_id)}">Editar</button>
+        <button type="button" class="btn-secondary btn-sm move-mini-question" data-id="${esc(question.question_id)}" data-dir="up" ${index === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="btn-secondary btn-sm move-mini-question" data-id="${esc(question.question_id)}" data-dir="down" ${index === state.miniQuestions.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="btn-danger btn-sm del-mini-question" data-id="${esc(question.question_id)}">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
 
   return `
     <div class="detail-header">
@@ -405,7 +536,6 @@ function renderDetail() {
     </div>
     ${state.detailError ? `<p class="error">${esc(state.detailError)}</p>` : ''}
 
-    <!-- JUGADORES -->
     <section class="card">
       <h2>Jugadores <span class="muted">(${state.players.length})</span></h2>
       ${state.players.length
@@ -421,7 +551,6 @@ function renderDetail() {
       <span class="error" id="playerError"></span>
     </section>
 
-    <!-- GRUPOS -->
     <section class="card">
       <h2>Grupos</h2>
       ${state.groups.length
@@ -435,7 +564,6 @@ function renderDetail() {
       </form>
     </section>
 
-    <!-- EQUIPOS -->
     <section class="card">
       <h2>Equipos <span class="muted">(${state.teams.length})</span></h2>
       ${state.teams.length
@@ -461,12 +589,11 @@ function renderDetail() {
       <span class="error" id="teamError"></span>
     </section>
 
-    <!-- PARTIDOS -->
     <section class="card">
       <h2>Partidos <span class="muted">(${state.matches.length})</span></h2>
       ${state.matches.length
         ? `<div class="table-wrap"><table class="data-table">
-            <thead><tr><th>Fase</th><th>Local</th><th>Resultado</th><th>Visitante</th><th>Fecha</th><th>Estado</th><th></th></tr></thead>
+            <thead><tr><th>Jornada</th><th>Fase</th><th>Local</th><th>Visitante</th><th>Fecha</th><th>Orden</th></tr></thead>
             <tbody>${matchRows}</tbody>
           </table></div>`
         : `<p class="muted">Sin partidos todavía.</p>`}
@@ -474,8 +601,15 @@ function renderDetail() {
         <label>Fecha inicial (opcional)
           <input name="firstKickoff" type="datetime-local" />
         </label>
+        <label>Días entre jornadas
+          <input name="daysBetween" type="number" min="1" value="4" />
+        </label>
         <button type="submit">Generar fase de grupos</button>
       </form>
+      <button type="button" id="resetGroupMatchesBtn" class="btn-danger" style="margin-top:.5rem">
+        Resetear fase de grupos
+      </button>
+      <p class="muted" style="margin-top:.5rem">Borra solo los partidos de fase de grupos para poder regenerarlos desde cero.</p>
       <form id="addMatchForm" class="form match-form" style="margin-top:.75rem">
         <div class="match-row">
           <label>Fase
@@ -508,6 +642,37 @@ function renderDetail() {
         <button type="submit">+ Añadir partido</button>
         <span class="error" id="matchError"></span>
       </form>
+    </section>
+
+    <section class="card">
+      <h2>Mini-porra <span class="muted">(${state.miniQuestions.length})</span></h2>
+      ${state.miniQuestions.length
+        ? `<div class="table-wrap"><table class="data-table">
+            <thead><tr><th>#</th><th>Pregunta</th><th>Puntos</th><th>Tipo</th><th>Opciones</th><th></th></tr></thead>
+            <tbody>${miniQuestionRows}</tbody>
+          </table></div>`
+        : `<p class="muted">Sin preguntas de mini-porra todavía.</p>`}
+      <form id="addMiniQuestionForm" class="form mini-form" style="margin-top:.75rem">
+        <label>Pregunta
+          <input name="question" type="text" placeholder="¿Quién marcará el primer gol?" required />
+        </label>
+        <div class="match-row">
+          <label>Puntos
+            <input name="points" type="number" min="0" step="1" value="0" required />
+          </label>
+          <label>Tipo de campo
+            <select name="fieldType">
+              ${miniFieldTypeOptions('text')}
+            </select>
+          </label>
+        </div>
+        <label>Opciones, una por línea
+          <textarea name="options" rows="3" placeholder="Opcional"></textarea>
+        </label>
+        <button type="submit">+ Añadir pregunta</button>
+        <span class="error" id="miniError"></span>
+      </form>
+      <p class="muted" style="margin-top:.5rem">Las opciones se guardan como una lista en Supabase; si no aplican a la pregunta, puedes dejarlo vacío.</p>
     </section>`;
 }
 
@@ -661,7 +826,49 @@ async function handleAddTeam(form) {
     group_id: groupId || null
   });
   if (error) { errorEl.textContent = error.message; return; }
+  state.editingTeamId = null;
   form.reset();
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+function startEditTeam(teamId) {
+  state.editingTeamId = teamId;
+  state.detailError = '';
+  render();
+}
+
+function cancelEditTeam() {
+  state.editingTeamId = null;
+  state.detailError = '';
+  render();
+}
+
+async function handleEditTeam(form) {
+  const teamId = form.dataset.id;
+  const fd = new FormData(form);
+  const name = String(fd.get('teamName') || '').trim();
+  const flag = String(fd.get('flag') || '').trim() || null;
+  const groupId = String(fd.get('groupId') || '').trim() || null;
+  if (!name) {
+    state.detailError = 'El nombre del equipo es obligatorio.';
+    render();
+    return;
+  }
+  const { error } = await supabase.from('porra_teams')
+    .update({
+      name,
+      flag: flag || flagForTeam(name) || null,
+      group_id: groupId || null
+    })
+    .eq('porra_id', state.currentPorra.id)
+    .eq('team_id', teamId);
+  if (error) {
+    state.detailError = error.message;
+    render();
+    return;
+  }
+  state.editingTeamId = null;
   await loadDetail(state.currentPorra.id);
   render();
 }
@@ -689,6 +896,7 @@ async function handleAddMatch(form) {
     phase,
     group_label: groupLabel,
     kickoff: kickoffRaw ? new Date(kickoffRaw).toISOString() : null,
+    position: Math.max(0, ...state.matches.map(match => Number(match.position) || 0)) + 1,
     status: 'scheduled'
   });
   if (error) { errorEl.textContent = error.message; return; }
@@ -700,7 +908,8 @@ async function handleAddMatch(form) {
 async function handleGenerateGroupMatches(form) {
   const fd = new FormData(form);
   const firstKickoffRaw = String(fd.get('firstKickoff') || '');
-  const rows = buildGroupMatches(firstKickoffRaw);
+  const daysBetweenRaw = String(fd.get('daysBetween') || '');
+  const rows = buildGroupMatches(firstKickoffRaw, daysBetweenRaw);
   if (!rows.length) {
     state.detailError = 'No hay partidos nuevos que generar. Revisa que los grupos tengan al menos dos equipos y que no existan ya esos cruces.';
     render();
@@ -709,6 +918,155 @@ async function handleGenerateGroupMatches(form) {
   const { error } = await supabase.from('porra_matches').insert(rows);
   if (error) { state.detailError = error.message; render(); return; }
   form.reset();
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+async function resetGroupMatches() {
+  const groupMatches = state.matches.filter(match => (match.phase ?? match.stage) === 'group');
+  if (!groupMatches.length) {
+    state.detailError = 'No hay partidos de fase de grupos para resetear.';
+    render();
+    return;
+  }
+  if (!window.confirm(`Vas a borrar ${groupMatches.length} partidos de fase de grupos. ¿Continuar?`)) return;
+
+  const { error } = await supabase
+    .from('porra_matches')
+    .delete()
+    .eq('porra_id', state.currentPorra.id)
+    .in('match_id', groupMatches.map(match => match.match_id));
+  if (error) { state.detailError = error.message; render(); return; }
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+async function moveMatch(matchId, direction) {
+  const index = state.matches.findIndex(match => match.match_id === matchId);
+  const targetIndex = direction === 'up' ? index - 1 : index + 1;
+  if (index < 0 || targetIndex < 0 || targetIndex >= state.matches.length) return;
+
+  const ordered = [...state.matches];
+  [ordered[index], ordered[targetIndex]] = [ordered[targetIndex], ordered[index]];
+  const results = await Promise.all(ordered.map((match, positionIndex) =>
+    supabase.from('porra_matches')
+      .update({ position: positionIndex + 1 })
+      .eq('porra_id', state.currentPorra.id)
+      .eq('match_id', match.match_id)
+  ));
+  const failed = results.find(result => result.error);
+  if (failed) {
+    state.detailError = failed.error.message;
+    render();
+    return;
+  }
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+function nextMiniQuestionPosition() {
+  return Math.max(0, ...state.miniQuestions.map(question => Number(question.position) || 0)) + 1;
+}
+
+async function handleAddMiniQuestion(form) {
+  const errorEl = document.getElementById('miniError');
+  const fd = new FormData(form);
+  const question = String(fd.get('question') || '').trim();
+  const points = Math.max(0, Number(fd.get('points') || 0) || 0);
+  const fieldType = String(fd.get('fieldType') || 'text');
+  const options = parseMiniOptions(fd.get('options'));
+  if (!question) {
+    errorEl.textContent = 'La pregunta es obligatoria.';
+    return;
+  }
+  const { error } = await supabase.from('porra_mini_questions').insert({
+    porra_id: state.currentPorra.id,
+    question_id: makeEntityId('mini'),
+    position: nextMiniQuestionPosition(),
+    question,
+    points,
+    field_type: fieldType,
+    options
+  });
+  if (error) { errorEl.textContent = error.message; return; }
+  form.reset();
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+function startEditMiniQuestion(questionId) {
+  state.editingMiniQuestionId = questionId;
+  state.detailError = '';
+  render();
+}
+
+function cancelEditMiniQuestion() {
+  state.editingMiniQuestionId = null;
+  state.detailError = '';
+  render();
+}
+
+async function handleEditMiniQuestion(form) {
+  const questionId = form.dataset.id;
+  const fd = new FormData(form);
+  const question = String(fd.get('question') || '').trim();
+  const points = Math.max(0, Number(fd.get('points') || 0) || 0);
+  const fieldType = String(fd.get('fieldType') || 'text');
+  const options = parseMiniOptions(fd.get('options'));
+  if (!question) {
+    state.detailError = 'La pregunta es obligatoria.';
+    render();
+    return;
+  }
+  const { error } = await supabase.from('porra_mini_questions')
+    .update({
+      question,
+      points,
+      field_type: fieldType,
+      options
+    })
+    .eq('porra_id', state.currentPorra.id)
+    .eq('question_id', questionId);
+  if (error) {
+    state.detailError = error.message;
+    render();
+    return;
+  }
+  state.editingMiniQuestionId = null;
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+async function moveMiniQuestion(questionId, direction) {
+  const index = state.miniQuestions.findIndex(question => question.question_id === questionId);
+  const targetIndex = direction === 'up' ? index - 1 : index + 1;
+  if (index < 0 || targetIndex < 0 || targetIndex >= state.miniQuestions.length) return;
+
+  const ordered = [...state.miniQuestions];
+  [ordered[index], ordered[targetIndex]] = [ordered[targetIndex], ordered[index]];
+  const results = await Promise.all(ordered.map((question, positionIndex) =>
+    supabase.from('porra_mini_questions')
+      .update({ position: positionIndex + 1 })
+      .eq('porra_id', state.currentPorra.id)
+      .eq('question_id', question.question_id)
+  ));
+  const failed = results.find(result => result.error);
+  if (failed) {
+    state.detailError = failed.error.message;
+    render();
+    return;
+  }
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+async function deleteMiniQuestion(questionId) {
+  const { error } = await supabase
+    .from('porra_mini_questions')
+    .delete()
+    .eq('porra_id', state.currentPorra.id)
+    .eq('question_id', questionId);
+  if (error) { state.detailError = error.message; render(); return; }
   await loadDetail(state.currentPorra.id);
   render();
 }
@@ -730,39 +1088,6 @@ async function handleAddPlayer(form) {
     return;
   }
   form.reset();
-  await loadDetail(state.currentPorra.id);
-  render();
-}
-
-async function saveMatchResult(form) {
-  const matchId = form.dataset.id;
-  const fd = new FormData(form);
-  const homeRaw = String(fd.get('score_home') || '').trim();
-  const awayRaw = String(fd.get('score_away') || '').trim();
-  if (homeRaw === '' || awayRaw === '') {
-    state.detailError = 'Introduce los dos marcadores antes de guardar.';
-    render();
-    return;
-  }
-  const scoreHome = Number(homeRaw);
-  const scoreAway = Number(awayRaw);
-  if (!Number.isInteger(scoreHome) || !Number.isInteger(scoreAway) || scoreHome < 0 || scoreAway < 0) {
-    state.detailError = 'Los marcadores deben ser números enteros iguales o mayores que 0.';
-    render();
-    return;
-  }
-  const { error } = await supabase
-    .from('porra_matches')
-    .update({
-      score_home: scoreHome,
-      score_away: scoreAway,
-      result_home: scoreHome,
-      result_away: scoreAway,
-      status: 'finished'
-    })
-    .eq('porra_id', state.currentPorra.id)
-    .eq('match_id', matchId);
-  if (error) { state.detailError = error.message; render(); return; }
   await loadDetail(state.currentPorra.id);
   render();
 }
@@ -832,9 +1157,11 @@ document.addEventListener('submit', e => {
   if (e.target.id === 'addPlayerForm') { e.preventDefault(); handleAddPlayer(e.target); }
   if (e.target.id === 'addGroupForm') { e.preventDefault(); handleAddGroup(e.target); }
   if (e.target.id === 'addTeamForm')  { e.preventDefault(); handleAddTeam(e.target); }
+  if (e.target.classList.contains('edit-team-form')) { e.preventDefault(); handleEditTeam(e.target); }
   if (e.target.id === 'addMatchForm') { e.preventDefault(); handleAddMatch(e.target); }
   if (e.target.id === 'generateGroupMatchesForm') { e.preventDefault(); handleGenerateGroupMatches(e.target); }
-  if (e.target.classList.contains('score-form')) { e.preventDefault(); saveMatchResult(e.target); }
+  if (e.target.id === 'addMiniQuestionForm') { e.preventDefault(); handleAddMiniQuestion(e.target); }
+  if (e.target.classList.contains('edit-mini-question-form')) { e.preventDefault(); handleEditMiniQuestion(e.target); }
 });
 
 document.addEventListener('click', e => {
@@ -843,9 +1170,17 @@ document.addEventListener('click', e => {
   if (e.target.id === 'advanceStatusBtn')       advancePorraStatus();
   if (e.target.classList.contains('open-porra')) openPorra(e.target.dataset.id);
   if (e.target.classList.contains('del-player')) deletePlayer(e.target.dataset.id);
+  if (e.target.classList.contains('edit-team'))  startEditTeam(e.target.dataset.id);
+  if (e.target.classList.contains('cancel-edit-team')) cancelEditTeam();
   if (e.target.classList.contains('del-team'))   deleteTeam(e.target.dataset.id);
   if (e.target.classList.contains('del-group'))  deleteGroup(e.target.dataset.id);
   if (e.target.classList.contains('del-match'))  deleteMatch(e.target.dataset.id);
+  if (e.target.id === 'resetGroupMatchesBtn')     resetGroupMatches();
+  if (e.target.classList.contains('move-match')) moveMatch(e.target.dataset.id, e.target.dataset.dir);
+  if (e.target.classList.contains('edit-mini-question')) startEditMiniQuestion(e.target.dataset.id);
+  if (e.target.classList.contains('cancel-edit-mini-question')) cancelEditMiniQuestion();
+  if (e.target.classList.contains('del-mini-question')) deleteMiniQuestion(e.target.dataset.id);
+  if (e.target.classList.contains('move-mini-question')) moveMiniQuestion(e.target.dataset.id, e.target.dataset.dir);
 });
 
 supabase.auth.onAuthStateChange(() => { refreshAuth(); });

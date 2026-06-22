@@ -455,7 +455,7 @@ https://r03ert.github.io/porra-mundial-web/
 Sistema nuevo (en construcción) para que el admin pueda crear porras de futuros eventos (Mundial, Eurocopa, Nations League…) sin tocar la porra actual del Mundial 2026.
 
 - **Fase 0 (hecha)**: modelo de datos en Supabase. Tablas `porra_*` (porras, equipos, grupos, partidos, jugadores, predicciones, mini-porra y cruces) más `platform_admins`, todas con `porra_id` y aisladas del legacy. Esquema base en `supabase/platform-schema.sql` (migración `20260623000000`).
-- **Fase 1 (en marcha)**: dashboard en `admin-next/` con login admin, crear/listar porras, detalle por porra, gestión de grupos/equipos/partidos, catálogo de equipos con bandera ligada, generación automática de partidos de grupo con fecha inicial opcional, invitación y borrado de jugadores, carga manual de resultados y avance de estado `draft → open → playing → closed`.
+- **Fase 1 (en marcha)**: dashboard en `admin-next/` con login admin, crear/listar porras, detalle por porra, gestión de grupos/equipos/partidos/mini-porra, catálogo de equipos con bandera ligada, tabla de equipos ordenada por grupo y editable, generación y reset de partidos de grupo por jornadas con fecha inicial opcional y días entre jornadas, orden manual con subir/bajar e invitación y borrado de jugadores. Esta pantalla queda orientada a estructura, calendario y configuración de la mini-porra; la carga de resultados reales se decidirá aparte.
 - **Migración de soporte actual**: `supabase/migrations/20260623013000_admin_next_phase1.sql` añade la RPC `pp_add_player_by_email(...)`, columnas de resultados/estado para partidos y normaliza `playing` como estado de la porra.
 
 Planteamiento completo y fases en [docs/plataforma-multi-porra.md](./docs/plataforma-multi-porra.md).

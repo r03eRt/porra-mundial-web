@@ -5,8 +5,9 @@ Eurocopa, Nations League…) sin afectar a la porra actual del Mundial 2026.
 
 > Estado: **Fase 1 en curso**. Al 2026-06-23 el dashboard `admin-next/` ya cubre
 > login admin, crear/listar porras, detalle por porra, jugadores, grupos,
-> equipos con bandera ligada, generación de partidos de grupo, carga manual de
-> resultados y avance de estado.
+> equipos con bandera ligada, ordenados por grupo y editables, generación y
+> reset de partidos de grupo por jornadas, mini-porra editable, orden manual de
+> partidos y avance de estado.
 
 ## 1. Origen y objetivo
 
@@ -52,7 +53,8 @@ clasificación por grupos y probabilidades NO se reescribe.
 ## 5. Las dos caras de la app nueva
 
 - **Dashboard (con login, solo admin)**: asistente de creación + gestión en vivo
-  (meter resultados, corregir, abrir/cerrar la porra) + invitar jugadores.
+  (mini-porra editable, abrir/cerrar la porra, invitar jugadores y la parte
+  operativa que vaya tocando en cada fase).
 - **Vista pública (sin login)**: por URL `/p/<slug>`, con **todas las pestañas**
   de la app actual, leyendo los datos de esa porra.
 - **Predicciones del jugador**: mismo patrón que el actual (login Supabase Auth +
@@ -126,7 +128,7 @@ Regla: si una pestaña no tiene con qué alimentarse, no se muestra en esa porra
 | Fase | Qué | Resultado |
 |---|---|---|
 | 0 ✅ | Modelo de datos en Supabase (tablas nuevas + RLS), sin UI | Hecho: `supabase/platform-schema.sql` (migración `20260623000000`) |
-| 1 🚧 | Dashboard MVP: crear porra, configurar y operar manualmente | En curso: app `admin-next/` (Vite + supabase-js). Hecho: login admin, crear/listar porras, detalle por porra, gestión de jugadores/grupos/equipos con bandera ligada/partidos, generación automática de partidos de grupo con fecha inicial opcional, resultados manuales y ciclo `draft → open → playing → closed` |
+| 1 🚧 | Dashboard MVP: crear porra, configurar y operar manualmente | En curso: app `admin-next/` (Vite + supabase-js). Hecho: login admin, crear/listar porras, detalle por porra, gestión de jugadores/grupos/equipos con bandera ligada, ordenados por grupo y editables/partidos, mini-porra editable, generación y reset automático de partidos de grupo por jornadas con fecha inicial opcional y días entre jornadas, orden manual de partidos y ciclo `draft → open → playing → closed` |
 | 2 | Predicciones de jugadores + clasificación pública | Porra de grupos jugable |
 | 3 | Mini-porras + cruces configurables | Porra completa |
 | 4 | Entrada de resultados + cálculo automático + vistas en vivo | Operativa de torneo |

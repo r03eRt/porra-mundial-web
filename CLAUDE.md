@@ -7,10 +7,10 @@ Dos apps en el mismo repo, compartiendo el mismo proyecto Supabase.
 
 ## Reglas de trabajo
 
-- Commits siempre a **`main`** directamente. Sin ramas de feature.
+- No hagas commit, git push ni `supabase db push` hasta que el usuario lo pida explícitamente. Cuando se confirme commit, hazlo a **`main`** directamente, sin ramas de feature.
 - Cuando cambie el estado, flujo o convenciones del proyecto, actualiza también `AGENTS.md` y `CLAUDE.md`.
 - Cuando hagas cambios funcionales, actualiza también `README.md` y el doc relevante de `docs/`.
-- Ejecuta queries SQL y deploys tú cuando puedas; no dejes instrucciones pendientes al usuario.
+- Prepara y verifica queries SQL y deploys cuando haga falta, pero ejecútalos solo con confirmación explícita del usuario.
 - No toques nada de la app legacy (`src/app.js`, `index.html`, tablas sin prefijo `porra_`) salvo que se pida explícitamente.
 
 ## Estructura del repo
@@ -33,7 +33,7 @@ Dos apps en el mismo repo, compartiendo el mismo proyecto Supabase.
 - **URL**: `https://tsbjhbpdvewqysgmrhci.supabase.co`
 - **Publishable key** (pública, segura en frontend): `sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw`
 - La `service_role` key es secreta; no va al repo ni al frontend nunca.
-- Aplicar migrations: `npx supabase db push` (CLI tiene credenciales cacheadas).
+- Aplicar migrations: `npx supabase db push` (CLI tiene credenciales cacheadas), solo cuando el usuario lo pida explícitamente.
 
 ## Auth y roles
 
@@ -59,7 +59,7 @@ Dos apps en el mismo repo, compartiendo el mismo proyecto Supabase.
 | Fase | Estado | Qué hay |
 |------|--------|---------|
 | 0 | ✅ | Esquema DB aplicado (`supabase/platform-schema.sql`) |
-| 1 | 🚧 | `admin-next/`: login admin, crear/listar porras, gestionar jugadores/grupos/equipos con bandera ligada/partidos, generar fase de grupos, meter resultados y cambiar estado |
+| 1 | 🚧 | `admin-next/`: login admin, crear/listar porras, gestionar jugadores/grupos/equipos con bandera ligada, ordenados por grupo y editables/partidos/mini-porra, generar y resetear fase de grupos por jornadas, ordenar partidos y cambiar estado |
 | 2+ | ⬜ | Predicciones de jugadores, clasificación pública, mini, cruces, resultados |
 
 ### admin-next — cómo arrancarlo
@@ -69,7 +69,7 @@ cd admin-next && npm run dev   # → http://localhost:5174 (5173 ya lo usa la ap
 ```
 
 Login con `morgadoluengo@gmail.com`. El formulario de crear porra y el listado aparecen directamente.
-Haz clic en **→ Gestionar** en una porra para entrar a añadir jugadores, grupos, equipos y partidos. En la sección de partidos se puede generar automáticamente la fase de grupos desde los grupos y equipos ya creados, con fecha inicial opcional.
+Haz clic en **→ Gestionar** en una porra para entrar a añadir jugadores, grupos, equipos, partidos y mini-porra. La tabla de equipos queda ordenada por grupo y permite edición inline. En la sección de partidos se puede generar automáticamente la fase de grupos por jornadas desde los grupos y equipos ya creados, con fecha inicial opcional, días entre jornadas, opción para resetear esa fase si hace falta y botones para subir/bajar partidos. La mini-porra se gestiona como listado editable de preguntas con puntos, tipo de campo y opciones.
 
 ### admin-next — flujo de estado (main.js)
 

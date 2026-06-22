@@ -27,7 +27,7 @@ El repo tiene DOS apps en paralelo:
 | Publishable key (pública) | `sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw` |
 | service_role key | **secreta** — nunca al repo ni al frontend |
 
-Aplicar SQL: `npx supabase db push` (CLI ya está linkeado).
+Aplicar SQL: `npx supabase db push` (CLI ya está linkeado), solo cuando el usuario lo pida explícitamente.
 
 ## Roles y Auth
 
@@ -51,8 +51,12 @@ El dashboard en `admin-next/` tiene:
 - ✅ Vista de detalle por porra: añadir/borrar grupos, equipos y partidos
 - ✅ Gestión de jugadores: añadir por email, listar y eliminar
 - ✅ Equipos con bandera ligada desde catálogo, con opción de equipo personalizado
-- ✅ Generación automática de partidos de fase de grupos desde grupos + equipos
-- ✅ Entrada manual de resultados y estado de partidos
+- ✅ Tabla de equipos ordenada por grupo y edición inline de equipos
+- ✅ Generación automática de partidos de fase de grupos por jornadas desde grupos + equipos
+- ✅ Reset de fase de grupos para regenerar esa estructura si algo sale mal
+- ✅ Organización manual de partidos con botones subir/bajar usando `porra_matches.position`
+- ✅ Estructura de partidos: jornadas, orden manual y fechas
+- ✅ Mini-porra editable desde el detalle de la porra: preguntas, puntos, tipo y opciones
 - ✅ Ciclo de estado de porra: `draft → open → playing → closed`
 
 **Pendiente en Fase 1:**
@@ -122,7 +126,7 @@ porras              → nombre, slug, event_type, status, owner (uuid), predicti
 porra_teams         → porra_id, name, flag, group_id
 porra_groups        → porra_id, name
 porra_matches       → porra_id, team1_id, team2_id, phase, group_label, kickoff, status,
-                      score_home, score_away
+                      score_home, score_away, slot (jornada), position (orden)
 porra_players       → porra_id, user_id, display_name, joined_at
 porra_predictions   → porra_id, player_id, match_id, score_home, score_away
 porra_mini_questions → porra_id, text, points, field_type, options (jsonb)
@@ -141,13 +145,13 @@ platform_admins     → email
 
 ## Reglas de trabajo para el agente
 
-1. **Commits a `main` directamente.** Sin ramas de feature.
+1. **No hacer commit, git push ni `supabase db push` hasta que el usuario lo pida explícitamente.** Cuando se confirme commit, hacerlo a `main` directamente, sin ramas de feature.
 2. **No modificar la app legacy** (`src/`, `index.html`, tablas sin prefijo `porra_`) salvo bug explícito.
 3. Al añadir features en `admin-next/`, seguir el patrón existente: estado en `state`, render con `render()`, delegation en `document`.
 4. Escapar siempre con `esc()` antes de insertar en innerHTML.
 5. Actualizar `AGENTS.md` y `CLAUDE.md` cuando cambie el estado, flujo o convenciones del proyecto.
 6. Actualizar `README.md` y el doc de `docs/` cuando cambie algo funcional.
-7. Ejecutar las queries/deploys directamente cuando se pueda, no dejar instrucciones manuales pendientes.
+7. Preparar y verificar queries/deploys cuando haga falta, pero ejecutarlos solo con confirmación explícita del usuario.
 
 ## Cómo arrancar en local
 
@@ -165,6 +169,7 @@ npm run dev          # → http://localhost:5174 (5173 ya ocupado)
 
 1. **Pulir Fase 1 con pruebas reales**:
    - Revisar ergonomía de creación de porra completa.
-   - Ajustar edición de fechas si hace falta más granularidad por partido.
+   - Ajustar edición de fechas si hace falta más granularidad por partido o por jornada.
+   - Decidir en qué pantalla irá la carga de resultados reales del torneo.
 
 2. **Vista pública** (`/p/<slug>`) — Fase 2, app separada en `supabase-next/` o carpeta nueva.
