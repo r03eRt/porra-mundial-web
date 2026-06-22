@@ -26,6 +26,14 @@ const KNOCKOUT_ROUNDS = [
   { key: 'final', label: 'Final' }
 ];
 
+const PORRA_STATUS_FLOW = ['draft', 'open', 'playing', 'closed'];
+const PORRA_STATUS_LABELS = {
+  draft: 'Borrador',
+  open: 'Abierta',
+  playing: 'En juego',
+  closed: 'Cerrada'
+};
+
 const state = {
   user: null,
   isAdmin: false,
@@ -36,6 +44,7 @@ const state = {
   teams: [],
   groups: [],
   matches: [],
+  players: [],
   detailError: '',
   error: ''
 };
@@ -57,6 +66,34 @@ function slugify(value) {
     .slice(0, 48);
 }
 
+function makeEntityId(prefix) {
+  const random = typeof globalThis.crypto?.randomUUID === 'function'
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${prefix}-${random}`;
+}
+
+function normalizePorraStatus(status) {
+  return status === 'live' ? 'playing' : (status || 'draft');
+}
+
+function porraStatusLabel(status) {
+  return PORRA_STATUS_LABELS[normalizePorraStatus(status)] || status;
+}
+
+function nextPorraStatus(status) {
+  const current = normalizePorraStatus(status);
+  const index = PORRA_STATUS_FLOW.indexOf(current);
+  return index >= 0 && index < PORRA_STATUS_FLOW.length - 1
+    ? PORRA_STATUS_FLOW[index + 1]
+    : null;
+}
+
+function syncCurrentPorraFromList() {
+  if (!state.currentPorra) return;
+  state.currentPorra = state.porras.find(p => p.id === state.currentPorra.id) || state.currentPorra;
+}
+
 // ── Data loaders ───────────────────────────────────────────────────────────────
 
 async function loadPorras() {
@@ -65,22 +102,26 @@ async function loadPorras() {
     .select('id, slug, name, event_type, status, created_at')
     .order('created_at', { ascending: false });
   if (error) { state.error = error.message; state.porras = []; return; }
-  state.porras = data || [];
+  state.porras = (data || []).map(p => ({ ...p, status: normalizePorraStatus(p.status) }));
+  syncCurrentPorraFromList();
 }
 
 async function loadDetail(porraId) {
   state.detailError = '';
-  const [teamsRes, groupsRes, matchesRes] = await Promise.all([
+  const [teamsRes, groupsRes, matchesRes, playersRes] = await Promise.all([
     supabase.from('porra_teams').select('*').eq('porra_id', porraId).order('name'),
     supabase.from('porra_groups').select('*').eq('porra_id', porraId).order('name'),
-    supabase.from('porra_matches').select('*').eq('porra_id', porraId).order('kickoff')
+    supabase.from('porra_matches').select('*').eq('porra_id', porraId).order('kickoff'),
+    supabase.from('porra_players').select('*').eq('porra_id', porraId).order('joined_at')
   ]);
   if (teamsRes.error) state.detailError = teamsRes.error.message;
   if (groupsRes.error) state.detailError = groupsRes.error.message;
   if (matchesRes.error) state.detailError = matchesRes.error.message;
+  if (playersRes.error) state.detailError = playersRes.error.message;
   state.teams = teamsRes.data || [];
   state.groups = groupsRes.data || [];
   state.matches = matchesRes.data || [];
+  state.players = playersRes.data || [];
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────────
@@ -134,7 +175,7 @@ function renderPorraList() {
         <li class="porra-row">
           <div>
             <strong>${esc(p.name)}</strong>
-            <span class="muted"> · ${esc(p.event_type)} · ${esc(p.status)}</span>
+            <span class="muted"> · ${esc(p.event_type)} · ${esc(porraStatusLabel(p.status))}</span>
           </div>
           <button type="button" class="btn-secondary open-porra" data-id="${esc(p.id)}">&rarr; Gestionar</button>
         </li>`).join('')
@@ -173,42 +214,68 @@ function renderPorraList() {
 
 function renderDetail() {
   const p = state.currentPorra;
+  const nextStatus = nextPorraStatus(p.status);
+
+  const playersRows = state.players.map(player => `
+    <tr>
+      <td>${esc(player.display_name ?? player.name ?? player.player_id)}</td>
+      <td><code>${esc(player.player_id)}</code></td>
+      <td>${esc(player.joined_at ? new Date(player.joined_at).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—')}</td>
+      <td><button type="button" class="btn-danger btn-sm del-player" data-id="${esc(player.player_id)}">✕</button></td>
+    </tr>
+  `).join('');
 
   // Teams table
   const teamsRows = state.teams.map(t => {
-    const grp = state.groups.find(g => g.id === t.group_id);
+    const grp = state.groups.find(g => g.group_id === t.group_id);
     return `<tr>
       <td>${esc(t.flag ?? '')}</td>
       <td>${esc(t.name)}</td>
       <td>${grp ? esc(grp.name) : '<span class="muted">—</span>'}</td>
-      <td><button type="button" class="btn-danger btn-sm del-team" data-id="${esc(t.id)}">✕</button></td>
+      <td><button type="button" class="btn-danger btn-sm del-team" data-id="${esc(t.team_id)}">✕</button></td>
     </tr>`;
   }).join('');
 
   const groupOptions = state.groups.map(g =>
-    `<option value="${esc(g.id)}">${esc(g.name)}</option>`).join('');
+    `<option value="${esc(g.group_id)}">${esc(g.name)}</option>`).join('');
   const teamOptions = state.teams.map(t =>
-    `<option value="${esc(t.id)}">${esc(t.flag ?? '')} ${esc(t.name)}</option>`).join('');
+    `<option value="${esc(t.team_id)}">${esc(t.flag ?? '')} ${esc(t.name)}</option>`).join('');
 
   // Matches table
   const matchRows = state.matches.map(m => {
-    const t1 = state.teams.find(t => t.id === m.team1_id);
-    const t2 = state.teams.find(t => t.id === m.team2_id);
+    const team1Id = m.team1_id ?? m.team1;
+    const team2Id = m.team2_id ?? m.team2;
+    const t1 = state.teams.find(t => t.team_id === team1Id);
+    const t2 = state.teams.find(t => t.team_id === team2Id);
     const when = m.kickoff ? new Date(m.kickoff).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—';
-    const phase = m.phase === 'group' ? `Grupo ${m.group_label ?? ''}` : (KNOCKOUT_ROUNDS.find(r => r.key === m.phase)?.label ?? m.phase);
+    const phaseKey = m.phase ?? (m.stage === 'group' ? 'group' : m.round_key);
+    const phase = phaseKey === 'group'
+      ? (m.group_label ?? m.group_id ? `Grupo ${m.group_label ?? m.group_id}` : 'Fase de grupos')
+      : (KNOCKOUT_ROUNDS.find(r => r.key === phaseKey)?.label ?? phaseKey ?? '—');
+    const scoreHome = m.score_home ?? m.result_home ?? '';
+    const scoreAway = m.score_away ?? m.result_away ?? '';
+    const matchStatus = m.status ?? ((scoreHome !== '' && scoreAway !== '') ? 'finished' : 'scheduled');
     return `<tr>
       <td>${esc(phase)}</td>
       <td>${t1 ? `${esc(t1.flag ?? '')} ${esc(t1.name)}` : '—'}</td>
-      <td class="muted">vs</td>
+      <td>
+        <form class="score-form" data-id="${esc(m.match_id)}">
+          <input name="score_home" type="number" min="0" inputmode="numeric" value="${esc(scoreHome)}" aria-label="Marcador local" />
+          <span class="muted">-</span>
+          <input name="score_away" type="number" min="0" inputmode="numeric" value="${esc(scoreAway)}" aria-label="Marcador visitante" />
+          <button type="submit" class="btn-secondary btn-sm">Guardar</button>
+        </form>
+      </td>
       <td>${t2 ? `${esc(t2.flag ?? '')} ${esc(t2.name)}` : '—'}</td>
       <td>${esc(when)}</td>
-      <td><button type="button" class="btn-danger btn-sm del-match" data-id="${esc(m.id)}">✕</button></td>
+      <td>${esc(matchStatus === 'finished' ? 'Finalizado' : 'Pendiente')}</td>
+      <td><button type="button" class="btn-danger btn-sm del-match" data-id="${esc(m.match_id)}">✕</button></td>
     </tr>`;
   }).join('');
 
   // Group options for match form
   const groupOptMatch = `<option value="">— sin grupo —</option>` +
-    state.groups.map(g => `<option value="${esc(g.name)}">${esc(g.name)}</option>`).join('');
+    state.groups.map(g => `<option value="${esc(g.group_id)}">${esc(g.name)}</option>`).join('');
   const knockoutOpts = KNOCKOUT_ROUNDS.map(r =>
     `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join('');
 
@@ -217,15 +284,35 @@ function renderDetail() {
       <button type="button" id="backBtn" class="btn-secondary">&larr; Volver</button>
       <h2 style="margin:0">${esc(p.name)}</h2>
       <code class="muted">${esc(p.slug)}</code>
+      <span class="status-pill">${esc(porraStatusLabel(p.status))}</span>
+      <button type="button" id="advanceStatusBtn" class="btn-secondary" ${nextStatus ? '' : 'disabled'}>
+        ${nextStatus ? `Pasar a ${esc(porraStatusLabel(nextStatus).toLowerCase())}` : 'Porra cerrada'}
+      </button>
     </div>
     ${state.detailError ? `<p class="error">${esc(state.detailError)}</p>` : ''}
+
+    <!-- JUGADORES -->
+    <section class="card">
+      <h2>Jugadores <span class="muted">(${state.players.length})</span></h2>
+      ${state.players.length
+        ? `<div class="table-wrap"><table class="data-table">
+            <thead><tr><th>Nombre</th><th>ID jugador</th><th>Alta</th><th></th></tr></thead>
+            <tbody>${playersRows}</tbody>
+          </table></div>`
+        : `<p class="muted">Sin jugadores todavía.</p>`}
+      <form id="addPlayerForm" class="form inline-form" style="margin-top:.75rem">
+        <input name="email" type="email" placeholder="jugador@correo.com" required style="flex:1" />
+        <button type="submit">+ Añadir jugador</button>
+      </form>
+      <span class="error" id="playerError"></span>
+    </section>
 
     <!-- GRUPOS -->
     <section class="card">
       <h2>Grupos</h2>
       ${state.groups.length
         ? `<ul class="group-chips">${state.groups.map(g =>
-            `<li>${esc(g.name)} <button type="button" class="btn-danger btn-sm del-group" data-id="${esc(g.id)}">✕</button></li>`
+            `<li>${esc(g.name)} <button type="button" class="btn-danger btn-sm del-group" data-id="${esc(g.group_id)}">✕</button></li>`
           ).join('')}</ul>`
         : `<p class="muted">Sin grupos todavía.</p>`}
       <form id="addGroupForm" class="form inline-form">
@@ -260,7 +347,7 @@ function renderDetail() {
       <h2>Partidos <span class="muted">(${state.matches.length})</span></h2>
       ${state.matches.length
         ? `<div class="table-wrap"><table class="data-table">
-            <thead><tr><th>Fase</th><th>Local</th><th></th><th>Visitante</th><th>Fecha</th><th></th></tr></thead>
+            <thead><tr><th>Fase</th><th>Local</th><th>Resultado</th><th>Visitante</th><th>Fecha</th><th>Estado</th><th></th></tr></thead>
             <tbody>${matchRows}</tbody>
           </table></div>`
         : `<p class="muted">Sin partidos todavía.</p>`}
@@ -406,7 +493,11 @@ async function openPorra(id) {
 async function handleAddGroup(form) {
   const name = String(new FormData(form).get('groupName') || '').trim().toUpperCase();
   if (!name) return;
-  const { error } = await supabase.from('porra_groups').insert({ porra_id: state.currentPorra.id, name });
+  const { error } = await supabase.from('porra_groups').insert({
+    porra_id: state.currentPorra.id,
+    group_id: name,
+    name
+  });
   if (error) { state.detailError = error.message; render(); return; }
   form.reset();
   await loadDetail(state.currentPorra.id);
@@ -421,7 +512,11 @@ async function handleAddTeam(form) {
   const groupId = String(fd.get('groupId') || '').trim() || null;
   if (!name) return;
   const { error } = await supabase.from('porra_teams').insert({
-    porra_id: state.currentPorra.id, name, flag, group_id: groupId || null
+    porra_id: state.currentPorra.id,
+    team_id: makeEntityId('team'),
+    name,
+    flag,
+    group_id: groupId || null
   });
   if (error) { errorEl.textContent = error.message; return; }
   form.reset();
@@ -441,8 +536,16 @@ async function handleAddMatch(form) {
   if (team1Id === team2Id) { errorEl.textContent = 'Los dos equipos deben ser distintos.'; return; }
   const { error } = await supabase.from('porra_matches').insert({
     porra_id: state.currentPorra.id,
-    team1_id: team1Id, team2_id: team2Id,
-    phase, group_label: groupLabel,
+    match_id: makeEntityId('match'),
+    stage: phase === 'group' ? 'group' : 'knockout',
+    group_id: groupLabel,
+    round_key: phase === 'group' ? null : phase,
+    team1: team1Id,
+    team2: team2Id,
+    team1_id: team1Id,
+    team2_id: team2Id,
+    phase,
+    group_label: groupLabel,
     kickoff: kickoffRaw ? new Date(kickoffRaw).toISOString() : null,
     status: 'scheduled'
   });
@@ -452,20 +555,113 @@ async function handleAddMatch(form) {
   render();
 }
 
-async function deleteTeam(id) {
-  await supabase.from('porra_teams').delete().eq('id', id);
+async function handleAddPlayer(form) {
+  const errorEl = document.getElementById('playerError');
+  const btn = form.querySelector('button[type=submit]');
+  const email = String(new FormData(form).get('email') || '').trim();
+  if (!email) return;
+  btn.disabled = true;
+  errorEl.textContent = '';
+  const { error } = await supabase.rpc('pp_add_player_by_email', {
+    p_porra_id: state.currentPorra.id,
+    p_email: email
+  });
+  if (error) {
+    errorEl.textContent = error.message;
+    btn.disabled = false;
+    return;
+  }
+  form.reset();
   await loadDetail(state.currentPorra.id);
   render();
 }
 
-async function deleteGroup(id) {
-  await supabase.from('porra_groups').delete().eq('id', id);
+async function saveMatchResult(form) {
+  const matchId = form.dataset.id;
+  const fd = new FormData(form);
+  const homeRaw = String(fd.get('score_home') || '').trim();
+  const awayRaw = String(fd.get('score_away') || '').trim();
+  if (homeRaw === '' || awayRaw === '') {
+    state.detailError = 'Introduce los dos marcadores antes de guardar.';
+    render();
+    return;
+  }
+  const scoreHome = Number(homeRaw);
+  const scoreAway = Number(awayRaw);
+  if (!Number.isInteger(scoreHome) || !Number.isInteger(scoreAway) || scoreHome < 0 || scoreAway < 0) {
+    state.detailError = 'Los marcadores deben ser números enteros iguales o mayores que 0.';
+    render();
+    return;
+  }
+  const { error } = await supabase
+    .from('porra_matches')
+    .update({
+      score_home: scoreHome,
+      score_away: scoreAway,
+      result_home: scoreHome,
+      result_away: scoreAway,
+      status: 'finished'
+    })
+    .eq('porra_id', state.currentPorra.id)
+    .eq('match_id', matchId);
+  if (error) { state.detailError = error.message; render(); return; }
   await loadDetail(state.currentPorra.id);
   render();
 }
 
-async function deleteMatch(id) {
-  await supabase.from('porra_matches').delete().eq('id', id);
+async function advancePorraStatus() {
+  const nextStatus = nextPorraStatus(state.currentPorra?.status);
+  if (!nextStatus) return;
+  const { error } = await supabase
+    .from('porras')
+    .update({ status: nextStatus })
+    .eq('id', state.currentPorra.id);
+  if (error) { state.detailError = error.message; render(); return; }
+  await loadPorras();
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+async function deletePlayer(playerId) {
+  const { error } = await supabase
+    .from('porra_players')
+    .delete()
+    .eq('porra_id', state.currentPorra.id)
+    .eq('player_id', playerId);
+  if (error) { state.detailError = error.message; render(); return; }
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+async function deleteTeam(teamId) {
+  const { error } = await supabase
+    .from('porra_teams')
+    .delete()
+    .eq('porra_id', state.currentPorra.id)
+    .eq('team_id', teamId);
+  if (error) { state.detailError = error.message; render(); return; }
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+async function deleteGroup(groupId) {
+  const { error } = await supabase
+    .from('porra_groups')
+    .delete()
+    .eq('porra_id', state.currentPorra.id)
+    .eq('group_id', groupId);
+  if (error) { state.detailError = error.message; render(); return; }
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+async function deleteMatch(matchId) {
+  const { error } = await supabase
+    .from('porra_matches')
+    .delete()
+    .eq('porra_id', state.currentPorra.id)
+    .eq('match_id', matchId);
+  if (error) { state.detailError = error.message; render(); return; }
   await loadDetail(state.currentPorra.id);
   render();
 }
@@ -475,15 +671,19 @@ async function deleteMatch(id) {
 document.addEventListener('submit', e => {
   if (e.target.id === 'loginForm')    { e.preventDefault(); handleLogin(e.target); }
   if (e.target.id === 'createForm')   { e.preventDefault(); handleCreate(e.target); }
+  if (e.target.id === 'addPlayerForm') { e.preventDefault(); handleAddPlayer(e.target); }
   if (e.target.id === 'addGroupForm') { e.preventDefault(); handleAddGroup(e.target); }
   if (e.target.id === 'addTeamForm')  { e.preventDefault(); handleAddTeam(e.target); }
   if (e.target.id === 'addMatchForm') { e.preventDefault(); handleAddMatch(e.target); }
+  if (e.target.classList.contains('score-form')) { e.preventDefault(); saveMatchResult(e.target); }
 });
 
 document.addEventListener('click', e => {
   if (e.target.id === 'logoutBtn')              supabase.auth.signOut().then(refreshAuth);
   if (e.target.id === 'backBtn')                { state.currentPorra = null; render(); }
+  if (e.target.id === 'advanceStatusBtn')       advancePorraStatus();
   if (e.target.classList.contains('open-porra')) openPorra(e.target.dataset.id);
+  if (e.target.classList.contains('del-player')) deletePlayer(e.target.dataset.id);
   if (e.target.classList.contains('del-team'))   deleteTeam(e.target.dataset.id);
   if (e.target.classList.contains('del-group'))  deleteGroup(e.target.dataset.id);
   if (e.target.classList.contains('del-match'))  deleteMatch(e.target.dataset.id);

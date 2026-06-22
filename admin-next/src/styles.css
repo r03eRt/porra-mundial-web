@@ -99,6 +99,17 @@ button:disabled { opacity: 0.6; cursor: default; }
 /* Detail header */
 .detail-header { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .detail-header h2 { flex: 1; }
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel2);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
 
 /* Group chips */
 .group-chips { list-style: none; margin: 0 0 0.75rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
@@ -112,6 +123,16 @@ button:disabled { opacity: 0.6; cursor: default; }
 .match-form { gap: 0.65rem; }
 .match-row { display: flex; gap: 0.65rem; flex-wrap: wrap; }
 .match-row label { flex: 1; min-width: 120px; }
+.score-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.score-form input {
+  width: 3.6rem;
+  padding: 0.35rem 0.45rem;
+  text-align: center;
+}
 
 /* Tables */
 .table-wrap { overflow-x: auto; }
@@ -119,6 +140,13 @@ button:disabled { opacity: 0.6; cursor: default; }
 .data-table th { text-align: left; color: var(--muted); font-weight: 500; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
 .data-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
 .data-table tr:last-child td { border-bottom: none; }
+.data-table code { font-size: 0.8rem; }
+
+@media (max-width: 640px) {
+  .score-form {
+    flex-wrap: wrap;
+  }
+}
 
 .muted { color: var(--muted); }
 .error { color: var(--error); font-size: 0.85rem; }
