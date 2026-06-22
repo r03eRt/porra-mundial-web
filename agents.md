@@ -1,0 +1,175 @@
+# agents.md — Handoff para agentes de código (Codex, Claude, etc.)
+
+> Este documento es la fuente de verdad para cualquier agente que continúe el trabajo en este repo.
+> Léelo antes de tocar cualquier archivo. Está sincronizado con `CLAUDE.md`.
+
+## Contexto del proyecto
+
+**Porrazo 2026** — porra del Mundial de Fútbol 2026 para un grupo privado (22 jugadores).
+El repo tiene DOS apps en paralelo:
+
+1. **App legacy** (`/`): la porra ya montada del Mundial 2026. **No se toca** salvo bug crítico.
+2. **Dashboard nuevo** (`admin-next/`): plataforma para crear porras de futuros eventos. Aquí está el trabajo activo.
+
+## Stack
+
+- **Frontend**: Vite 8 + JavaScript vanilla (sin framework). No TypeScript.
+- **Backend**: Supabase (Auth, RLS, Edge Functions con Deno, pg_cron, migraciones CLI).
+- **Deploy legacy**: GitHub Pages automático desde `main`.
+- **Dashboard**: corre local en dev; deploy pendiente.
+
+## Supabase
+
+| Variable | Valor |
+|----------|-------|
+| Project ref | `tsbjhbpdvewqysgmrhci` |
+| URL | `https://tsbjhbpdvewqysgmrhci.supabase.co` |
+| Publishable key (pública) | `sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw` |
+| service_role key | **secreta** — nunca al repo ni al frontend |
+
+Aplicar SQL: `npx supabase db push` (CLI ya está linkeado).
+
+## Roles y Auth
+
+### Legacy app
+- **Admin**: autenticado, `user_metadata.player_id` ausente. Email: `morgadoluengo@gmail.com`.
+- **Jugadores** (22): autenticados, `user_metadata.player_id` presente. Email: `<id>@porrazo.local`.
+- `isAdmin()` y `isPlayerSession()` en `src/app.js` leen eso del JWT.
+- Escrituras seguras vía RPC SECURITY DEFINER: `set_my_override(scope, entity_id, value)` y `clear_my_override(scope, entity_id)` — el `player_id` lo sacan del JWT, nunca de parámetro.
+
+### Plataforma multi-porra
+- Tabla `platform_admins` con `morgadoluengo@gmail.com`.
+- Función `pp_is_admin()` (SECURITY DEFINER) — devuelve bool.
+- Función `pp_owns(porra_id uuid)` — devuelve bool si el usuario autenticado es owner de esa porra.
+
+## Estado actual de la Fase 1 (trabajo activo)
+
+El dashboard en `admin-next/` tiene:
+- ✅ Login con Supabase Auth + comprobación `pp_is_admin()`
+- ✅ Crear porra (nombre, slug auto, tipo de evento, deadline, features)
+- ✅ Listar porras del admin
+- ✅ Vista de detalle por porra: añadir/borrar grupos, equipos y partidos
+
+**Pendiente en Fase 1:**
+- Gestión de jugadores (invitar a una porra, listar, eliminar)
+- Entrada de resultados de partidos ya creados (marcar marcador real)
+- Cambiar estado de la porra (draft → open → playing → closed)
+
+**Fase 2 (no empezada):**
+- Vista pública `/p/<slug>` con todas las pestañas
+- Predicciones de jugadores + clasificación automática
+- Mini-porra configurable, cruces configurables
+
+## Archivos clave
+
+### Dashboard (admin-next/)
+
+| Archivo | Qué hace |
+|---------|----------|
+| `admin-next/src/main.js` | Toda la lógica: auth, renders, handlers, event delegation |
+| `admin-next/src/styles.css` | Tema oscuro, tablas, formularios inline |
+| `admin-next/index.html` | Esqueleto: `<header class="topbar">`, `<main id="app">`, `<div id="session">` |
+| `admin-next/vite.config.js` | `base: './'` |
+
+### App legacy (src/)
+
+| Archivo | Qué hace |
+|---------|----------|
+| `src/app.js` | 4 000+ líneas. Auth, UI, cálculos, API calls, overrides |
+| `data/porra-data.js` | `window.PORRA_DATA` — 22 jugadores, 72 partidos, predicciones |
+| `index.html` | Entrada legacy |
+
+### Supabase
+
+| Archivo | Qué hace |
+|---------|----------|
+| `supabase/platform-schema.sql` | Esquema completo de tablas `porra_*` (Fase 0, ya aplicado) |
+| `supabase/migrations/20260623000000_platform_schema.sql` | Migración aplicada |
+| `supabase/player-auth-login.sql` | RPCs `set_my_override` / `clear_my_override` |
+| `supabase/create-player-users.mjs` | Crea 22 cuentas Auth para jugadores |
+| `supabase/backup.sh` | Backup completo (DB + código) |
+| `supabase/set-edit-deadline.sql` | Actualiza `player_edit_deadline` |
+
+## Convenciones de admin-next/src/main.js
+
+```js
+// Estado global (objeto plano, sin reactividad)
+const state = { user, isAdmin, loading, porras, currentPorra, teams, groups, matches, ... }
+
+// Render único — regenera todo el DOM de #app
+function render() { ... }
+
+// Vista activa según state.currentPorra
+state.currentPorra === null  →  renderPorraList()   // lista + crear
+state.currentPorra !== null  →  renderDetail()      // grupos + equipos + partidos
+
+// Event delegation global
+document.addEventListener('submit', e => { /* por id de form */ })
+document.addEventListener('click', e => { /* por id o clase */ })
+
+// Escapado HTML obligatorio para todo output dinámico
+function esc(value) { ... }   // XSS safe
+```
+
+## Tablas de la plataforma (todas con porra_id)
+
+```
+porras              → nombre, slug, event_type, status, owner (uuid), predictions_deadline,
+                      scoring (jsonb), features (jsonb)
+porra_teams         → porra_id, name, flag, group_id
+porra_groups        → porra_id, name
+porra_matches       → porra_id, team1_id, team2_id, phase, group_label, kickoff, status,
+                      score_home, score_away
+porra_players       → porra_id, user_id, display_name, joined_at
+porra_predictions   → porra_id, player_id, match_id, score_home, score_away
+porra_mini_questions → porra_id, text, points, field_type, options (jsonb)
+porra_mini_answers  → porra_id, player_id, question_id, value
+porra_mini_results  → porra_id, question_id, value
+porra_knockout_picks → porra_id, player_id, round, team_id
+platform_admins     → email
+```
+
+## RLS en tablas de la plataforma
+
+- Lectura: pública en todas.
+- Insertar en `porras`: solo `pp_is_admin()`.
+- Modificar/borrar en `porras` y subtablas: solo `pp_owns(porra_id)`.
+- Insertar en `platform_admins`: bloqueado (solo desde service_role).
+
+## Reglas de trabajo para el agente
+
+1. **Commits a `main` directamente.** Sin ramas de feature.
+2. **No modificar la app legacy** (`src/`, `index.html`, tablas sin prefijo `porra_`) salvo bug explícito.
+3. Al añadir features en `admin-next/`, seguir el patrón existente: estado en `state`, render con `render()`, delegation en `document`.
+4. Escapar siempre con `esc()` antes de insertar en innerHTML.
+5. Actualizar `README.md` y el doc de `docs/` cuando cambie algo funcional.
+6. Ejecutar las queries/deploys directamente cuando se pueda, no dejar instrucciones manuales pendientes.
+
+## Cómo arrancar en local
+
+```bash
+# App legacy
+npm run dev          # → http://localhost:5173
+
+# Dashboard admin
+cd admin-next
+npm install
+npm run dev          # → http://localhost:5174 (5173 ya ocupado)
+```
+
+## Próximos pasos concretos (Fase 1, en orden)
+
+1. **Gestión de jugadores** en la vista de detalle de una porra:
+   - Listar `porra_players` de esa porra.
+   - Formulario para añadir jugador: buscar en `auth.users` por email y hacer insert en `porra_players`.
+   - Botón eliminar jugador de la porra.
+
+2. **Entrada de resultados** de partidos:
+   - En la tabla de partidos del detalle, añadir inputs de marcador (home / away).
+   - Guardar en `porra_matches.score_home` y `score_home.score_away`, cambiar `status` a `finished`.
+
+3. **Estado de la porra** (botón en la cabecera del detalle):
+   - Ciclo: `draft → open → playing → closed`.
+   - Update en `porras.status`.
+
+4. **Vista pública** (`/p/<slug>`) — Fase 2, app separada en `supabase-next/` o carpeta nueva.
