@@ -1,3 +1,6 @@
 node_modules/
 dist/
 .DS_Store
+
+# Contiene los PINs reales de los jugadores en claro: no subir al repo público.
+supabase/seed-player-pins.sql

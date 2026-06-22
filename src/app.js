@@ -20,6 +20,7 @@ const WORLDCUP_RESULTS_KIND = 'openfootball-2026';
 const AS_LIVE_MATCH_TABLE = 'as_live_match_cache';
 const AS_LIVE_MATCH_KIND = 'worldcup-2026';
 const PREDICTION_OVERRIDES_TABLE = 'prediction_overrides';
+const PLAYER_EDIT_DEADLINE_KEY = 'player_edit_deadline';
 const AS_LIVE_MATCH_ACTIVE_REFRESH_MS = 90 * 1000;
 const AS_LIVE_MATCH_IDLE_REFRESH_MS = 15 * 60 * 1000;
 const AS_LIVE_MATCH_FETCH_TIMEOUT_MS = 15000;
@@ -41,8 +42,12 @@ const LS_KEYS = {
   goalAlertSnapshot: 'porra.goalAlertSnapshot.v1',
   liveNotificationsEnabled: 'porra.liveNotifications.enabled.v1',
   theme: 'porra.theme.v1',
-  installDismissedUntil: 'porra.installBanner.dismissedUntil.v1'
+  installDismissedUntil: 'porra.installBanner.dismissedUntil.v1',
+  playerSession: 'porra.playerSession.v1'
 };
+
+const PLAYER_REQUESTED = new URLSearchParams(window.location.search).has('player');
+const PLAYER_PARAM = new URLSearchParams(window.location.search).get('player') || '';
 
 const TEAM_FLAGS = {
   'A. SAUDÍ': '🇸🇦',
@@ -126,7 +131,10 @@ const state = {
   adminDashboard: { playerId: '', scope: 'group_match' },
   adminSyncStatus: { type: '', message: '', at: 0, inFlight: false },
   adminRowSyncStatus: {},
-  asLiveMatch: null
+  asLiveMatch: null,
+  playerSession: loadPlayerSession(),
+  playerLoginError: '',
+  editDeadline: null
 };
 let apiRefreshInProgress = false;
 let asLiveMatchRefreshInProgress = false;
@@ -372,6 +380,50 @@ async function fetchJsonWithTimeout(url, options = {}, timeoutMs = API_FETCH_TIM
 
 function isAdmin() {
   return Boolean(state.adminUser);
+}
+
+function loadPlayerSession() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_KEYS.playerSession) || 'null');
+    if (raw && typeof raw.playerId === 'string' && typeof raw.pin === 'string') return raw;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function savePlayerSession(session) {
+  state.playerSession = session;
+  if (session) {
+    localStorage.setItem(LS_KEYS.playerSession, JSON.stringify(session));
+  } else {
+    localStorage.removeItem(LS_KEYS.playerSession);
+  }
+}
+
+// Sesión de jugador activa (y no en modo admin: el admin usa su propio panel).
+function isPlayerSession() {
+  return !isAdmin() && Boolean(state.playerSession?.playerId);
+}
+
+function currentPlayerId() {
+  return state.playerSession?.playerId || '';
+}
+
+// La edición del propio jugador está abierta mientras no se pase el deadline.
+// Si no hay deadline configurado, se considera abierta.
+function isPlayerEditOpen() {
+  if (!state.editDeadline) return true;
+  const limit = new Date(state.editDeadline).getTime();
+  if (!Number.isFinite(limit)) return true;
+  return Date.now() < limit;
+}
+
+function formatDeadline() {
+  if (!state.editDeadline) return '';
+  const date = new Date(state.editDeadline);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' });
 }
 
 function applyTheme(theme) {
@@ -1098,7 +1150,54 @@ function applyAdminMode() {
     activatePanel('ranking');
   }
 
+  // Pestaña "Mi porra": visible solo con sesión de jugador (y no en modo admin).
+  const myPorraTab = document.getElementById('myPorraTab');
+  const myPorraPanel = document.getElementById('myPorra');
+  const showMyPorra = isPlayerSession();
+  if (myPorraTab) myPorraTab.hidden = !showMyPorra;
+  if (myPorraPanel && !showMyPorra && myPorraPanel.classList.contains('active')) {
+    activatePanel('ranking');
+  }
+
   renderAdminAccess();
+  renderPlayerAccess();
+}
+
+function renderPlayerAccess() {
+  const container = document.getElementById('playerAccess');
+  if (!container) return;
+
+  // Si hay admin logueado, el jugador no se muestra (el admin manda).
+  const session = state.playerSession;
+  const shouldShow = !isAdmin() && (PLAYER_REQUESTED || Boolean(session));
+  container.hidden = !shouldShow;
+  if (!shouldShow) return;
+
+  if (session) {
+    const player = DATA.players.find(item => item.id === session.playerId);
+    container.innerHTML = html`
+      <div class="admin-session-row">
+        <span class="admin-session">Tu porra · ${escapeHtml(player?.name || session.playerId)}</span>
+        <button type="button" data-player-logout>Salir</button>
+      </div>
+    `;
+    return;
+  }
+
+  const options = DATA.players
+    .map(player => `<option value="${player.id}"${player.id === PLAYER_PARAM ? ' selected' : ''}>${escapeHtml(player.name)}</option>`)
+    .join('');
+  container.innerHTML = html`
+    <form id="playerLoginForm" class="admin-login">
+      <select name="playerId" aria-label="Jugador" required>
+        <option value="">Elige tu nombre</option>
+        ${options}
+      </select>
+      <input name="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" required />
+      <button type="submit">Editar mi porra</button>
+    </form>
+    <span class="admin-login-error" role="alert">${escapeHtml(state.playerLoginError || '')}</span>
+  `;
 }
 
 function renderAdminAccess() {
@@ -3191,7 +3290,47 @@ function renderAdminDashboard() {
   }
 }
 
-function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderHistory(); renderProbabilities(); renderCompare(); renderMatches(); renderTeams(); renderStatistics(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); renderAdminDashboard(); }
+function renderPlayerDashboard() {
+  const panel = document.getElementById('myPorra');
+  if (!panel) return;
+  if (!isPlayerSession()) return;
+
+  const playerId = currentPlayerId();
+  const player = DATA.players.find(item => item.id === playerId);
+  const scopeSelect = document.getElementById('myPorraScopeSelect');
+  const scope = scopeSelect?.value || state.adminDashboard.scope || 'group_match';
+  if (scopeSelect) scopeSelect.value = scope;
+
+  const open = isPlayerEditOpen();
+  const deadlineText = formatDeadline();
+  const hint = document.getElementById('myPorraHint');
+  if (hint) {
+    hint.innerHTML = open
+      ? (deadlineText
+          ? `Puedes editar tu porra hasta el <b>${escapeHtml(deadlineText)}</b>.`
+          : 'Puedes editar tu porra. Guarda cada cambio individualmente.')
+      : `La edición está cerrada${deadlineText ? ` desde el <b>${escapeHtml(deadlineText)}</b>` : ''}. Solo consulta.`;
+  }
+
+  const titleEl = document.getElementById('myPorraTitle');
+  if (titleEl) titleEl.textContent = `✏️ Editar mi porra · ${player?.name || ''}`;
+
+  const content = document.getElementById('myPorraContent');
+  if (!content) return;
+  let inner;
+  if (scope === 'mini') inner = renderAdminMiniEditor(playerId);
+  else if (scope === 'knockout') inner = renderAdminKnockoutEditor(playerId);
+  else inner = renderAdminGroupEditor(playerId);
+  content.innerHTML = inner;
+
+  // Si la edición está cerrada, deshabilita inputs y botones de guardado.
+  if (!open) {
+    content.querySelectorAll('[data-admin-override-value]').forEach(el => { el.disabled = true; });
+    content.querySelectorAll('[data-save-prediction-override],[data-clear-prediction-override]').forEach(el => { el.disabled = true; });
+  }
+}
+
+function renderAll() { renderSummary(); renderFilters(); renderRanking(); renderHistory(); renderProbabilities(); renderCompare(); renderMatches(); renderTeams(); renderStatistics(); renderGroupStandings(); renderBestThirds(); renderTopScorers(); renderPlayerDetail(); renderKnockout(); renderMini(); renderSettings(); renderAdminDashboard(); renderPlayerDashboard(); }
 
 async function loadMiniResultsFromSupabase() {
   const { data, error } = await supabase
@@ -3221,6 +3360,115 @@ async function loadPredictionOverridesFromSupabase() {
   state.predictionOverrides = normalizeOverrideRows(data);
   applyPredictionOverrides();
   renderAll();
+}
+
+async function loadEditDeadlineFromSupabase() {
+  const { data, error } = await supabase
+    .from('app_config')
+    .select('value')
+    .eq('key', PLAYER_EDIT_DEADLINE_KEY)
+    .maybeSingle();
+
+  if (error) {
+    console.warn('No se pudo cargar la fecha límite de edición:', error);
+    return;
+  }
+
+  // value es jsonb; puede llegar como string ISO directamente.
+  const value = data?.value;
+  state.editDeadline = typeof value === 'string' ? value : (value ?? null);
+  renderPlayerAccess();
+  renderPlayerDashboard();
+}
+
+// Guarda la corrección del propio jugador vía RPC segura (valida PIN + deadline
+// en el servidor). No toca el flujo de admin.
+async function savePlayerOverrideFromRow(row) {
+  if (!row) return;
+  const playerId = row.dataset.playerId;
+  const scope = row.dataset.scope;
+  const entityId = row.dataset.entityId;
+  const session = state.playerSession;
+
+  if (!session || session.playerId !== playerId) {
+    return alert('Solo puedes editar tu propia porra.');
+  }
+  if (!isPlayerEditOpen()) {
+    return alert('La edición ya está cerrada.');
+  }
+
+  const value = valueFromAdminOverrideRow(row);
+  setAdminRowSyncStatus(playerId, scope, entityId, 'info', 'guardando...', { inFlight: true });
+
+  if (isEmptyOverrideValue(value)) {
+    return clearPlayerOverrideFromRow(row);
+  }
+
+  const { error } = await supabase.rpc('set_player_override', {
+    p_player_id: playerId,
+    p_pin: session.pin,
+    p_scope: scope,
+    p_entity_id: entityId,
+    p_value: value
+  });
+
+  if (error) {
+    setAdminRowSyncStatus(playerId, scope, entityId, 'error', `error · ${error.message}`, { clearAfterMs: 8000 });
+    return alert('No se pudo guardar: ' + error.message);
+  }
+
+  const payload = {
+    player_id: playerId,
+    scope,
+    entity_id: entityId,
+    value,
+    updated_at: new Date().toISOString()
+  };
+  const key = predictionOverrideKey(playerId, scope, entityId);
+  state.predictionOverrides = [
+    ...state.predictionOverrides.filter(item => predictionOverrideKey(item.player_id, item.scope, item.entity_id) !== key),
+    payload
+  ];
+  applyPredictionOverrides();
+  renderAll();
+  setAdminRowSyncStatus(playerId, scope, entityId, 'success', 'ok', { clearAfterMs: 4000 });
+  showAppToast('Tu pronóstico se ha guardado.');
+}
+
+async function clearPlayerOverrideFromRow(row) {
+  if (!row) return;
+  const playerId = row.dataset.playerId;
+  const scope = row.dataset.scope;
+  const entityId = row.dataset.entityId;
+  const session = state.playerSession;
+
+  if (!session || session.playerId !== playerId) {
+    return alert('Solo puedes editar tu propia porra.');
+  }
+  if (!isPlayerEditOpen()) {
+    return alert('La edición ya está cerrada.');
+  }
+
+  setAdminRowSyncStatus(playerId, scope, entityId, 'info', 'quitando...', { inFlight: true });
+
+  const { error } = await supabase.rpc('clear_player_override', {
+    p_player_id: playerId,
+    p_pin: session.pin,
+    p_scope: scope,
+    p_entity_id: entityId
+  });
+
+  if (error) {
+    setAdminRowSyncStatus(playerId, scope, entityId, 'error', `error · ${error.message}`, { clearAfterMs: 8000 });
+    return alert('No se pudo quitar: ' + error.message);
+  }
+
+  const key = predictionOverrideKey(playerId, scope, entityId);
+  state.predictionOverrides = state.predictionOverrides.filter(item => predictionOverrideKey(item.player_id, item.scope, item.entity_id) !== key);
+  applyPredictionOverrides();
+  renderAll();
+  setAdminRowSyncStatus(playerId, scope, entityId, 'success', 'ok', { clearAfterMs: 4000 });
+  showAppToast('Pronóstico restaurado al valor original.');
 }
 
 function valueFromAdminOverrideRow(row) {
@@ -3531,15 +3779,26 @@ async function refreshStatsRankings(options = {}) {
   }
 }
 
+// Al activarse el modo admin, cerramos la sesión de jugador (usuario + PIN)
+// para que no convivan las dos a la vez.
+function clearPlayerSessionOnAdmin() {
+  if (isAdmin() && state.playerSession) {
+    savePlayerSession(null);
+    state.playerLoginError = '';
+  }
+}
+
 async function initializeAuth() {
   const { data, error } = await supabase.auth.getSession();
   if (error) console.error('No se pudo recuperar la sesión de administrador:', error);
   state.adminUser = data.session?.user || null;
+  clearPlayerSessionOnAdmin();
   applyAdminMode();
   renderAll();
 
   supabase.auth.onAuthStateChange((_event, session) => {
     state.adminUser = session?.user || null;
+    clearPlayerSessionOnAdmin();
     applyAdminMode();
     renderAll();
   });
@@ -3773,15 +4032,26 @@ document.addEventListener('click', e => {
   const clearMini = e.target.dataset.clearMini; if (clearMini) clearMiniResult(clearMini);
   const saveOverrideButton = e.target.closest('[data-save-prediction-override]');
   if (saveOverrideButton) {
-    savePredictionOverrideFromRow(saveOverrideButton.closest('[data-admin-override-row]'));
+    const row = saveOverrideButton.closest('[data-admin-override-row]');
+    if (isAdmin()) savePredictionOverrideFromRow(row);
+    else if (isPlayerSession()) savePlayerOverrideFromRow(row);
     return;
   }
   const clearOverrideButton = e.target.closest('[data-clear-prediction-override]');
   if (clearOverrideButton) {
-    clearPredictionOverrideFromRow(clearOverrideButton.closest('[data-admin-override-row]'));
+    const row = clearOverrideButton.closest('[data-admin-override-row]');
+    if (isAdmin()) clearPredictionOverrideFromRow(row);
+    else if (isPlayerSession()) clearPlayerOverrideFromRow(row);
     return;
   }
   if (e.target.matches('[data-admin-logout]')) supabase.auth.signOut();
+  if (e.target.matches('[data-player-logout]')) {
+    savePlayerSession(null);
+    state.playerLoginError = '';
+    activatePanel('ranking');
+    applyAdminMode();
+    renderAll();
+  }
 });
 
 document.addEventListener('keydown', e => {
@@ -3803,6 +4073,36 @@ document.getElementById('matchPredictionsDialog').addEventListener('click', e =>
 });
 
 document.addEventListener('submit', async e => {
+  if (e.target.id === 'playerLoginForm') {
+    e.preventDefault();
+    const submitButton = e.target.querySelector('button[type="submit"]');
+    const formData = new FormData(e.target);
+    const playerId = String(formData.get('playerId') || '');
+    const pin = String(formData.get('pin') || '');
+    submitButton.disabled = true;
+    state.playerLoginError = '';
+    renderPlayerAccess();
+
+    const { data, error } = await supabase.rpc('verify_player_pin', {
+      p_player_id: playerId,
+      p_pin: pin
+    });
+
+    if (error || !data) {
+      state.playerLoginError = error ? `Error: ${error.message}` : 'PIN incorrecto.';
+      submitButton.disabled = false;
+      renderPlayerAccess();
+      return;
+    }
+
+    savePlayerSession({ playerId, pin });
+    state.playerLoginError = '';
+    applyAdminMode();
+    activatePanel('myPorra');
+    renderAll();
+    return;
+  }
+
   if (e.target.id !== 'adminLoginForm') return;
   e.preventDefault();
   const submitButton = e.target.querySelector('button[type="submit"]');
@@ -3879,6 +4179,11 @@ document.addEventListener('change', e => {
   if (e.target.id === 'adminScopeSelect') {
     state.adminDashboard.scope = e.target.value;
     renderAdminDashboard();
+    return;
+  }
+  if (e.target.id === 'myPorraScopeSelect') {
+    state.adminDashboard.scope = e.target.value;
+    renderPlayerDashboard();
     return;
   }
   const comparePlayerSelect = e.target.closest('[data-compare-player-select]');
@@ -4001,6 +4306,7 @@ initializeResultsFlow();
 initializeAsLiveMatchFlow();
 loadMiniResultsFromSupabase();
 loadPredictionOverridesFromSupabase();
+loadEditDeadlineFromSupabase();
 loadStatsRankings();
 initializeAuth();
 disablePwa();

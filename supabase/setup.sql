@@ -136,3 +136,14 @@ create policy "Authenticated admins can delete prediction overrides"
   for delete
   to authenticated
   using (true);
+
+-- ============================================================================
+-- Edición de la porra por el propio jugador (PIN + fecha límite).
+-- Ejecuta también, en este orden, los scripts adicionales:
+--   1. supabase/player-self-edit.sql  -> tablas player_access / app_config + RPCs
+--   2. supabase/set-edit-deadline.sql -> fija la fecha límite de edición
+--   3. (privado, no versionado) carga los PINs de cada jugador en player_access:
+--        insert into public.player_access (player_id, pin) values ('roberto','XXXX')
+--        on conflict (player_id) do update set pin = excluded.pin, updated_at = now();
+-- Son aditivos: no modifican nada de lo anterior.
+-- ============================================================================

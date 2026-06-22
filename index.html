@@ -49,12 +49,13 @@
         </button>
         <button id="goalNotificationsBtn" type="button">Avisos partido</button>
         <button id="refreshApiBtn" class="primary">Actualizar datos</button>
-        <button id="adminDashboardBtn" class="admin-shortcut" type="button" data-admin-only data-open-panel="adminDashboard">Admin porra</button>
+        <button id="adminDashboardBtn" class="admin-shortcut" type="button" data-admin-only data-open-panel="adminDashboard">✏️ Admin porra</button>
         <button id="exportBtn" data-admin-only>Exportar estado</button>
         <label class="import-btn" data-admin-only>Importar JSON<input id="importInput" type="file" accept="application/json" hidden /></label>
       </div>
       <p id="headerLastUpdate" class="hint header-status"></p>
       <div id="adminAccess" class="admin-access" hidden></div>
+      <div id="playerAccess" class="admin-access" hidden></div>
     </div>
   </header>
 
@@ -63,6 +64,7 @@
 
     <nav class="tabs" aria-label="Secciones">
       <button class="tab active" data-tab="ranking">Clasificación porra</button>
+      <button id="myPorraTab" class="tab" data-tab="myPorra" hidden>✏️ Editar mi porra</button>
       <button class="tab" data-tab="history">Histórico</button>
       <button class="tab" data-tab="mini">Mini-porra</button>
       <button class="tab" data-tab="matches">Partidos</button>
@@ -353,7 +355,7 @@
     <section id="adminDashboard" class="panel" data-admin-only>
       <div class="panel-head">
         <div>
-          <h2>Admin porra</h2>
+          <h2>✏️ Admin porra</h2>
           <p class="hint">Correcciones manuales sobre los valores originales del Excel.</p>
         </div>
         <div class="filters">
@@ -367,6 +369,23 @@
       </div>
       <div id="adminDashboardSummary" class="cards"></div>
       <div id="adminDashboardContent"></div>
+    </section>
+
+    <section id="myPorra" class="panel">
+      <div class="panel-head">
+        <div>
+          <h2 id="myPorraTitle">Mi porra</h2>
+          <p id="myPorraHint" class="hint">Edita tus pronósticos. Guarda cada cambio individualmente.</p>
+        </div>
+        <div class="filters">
+          <select id="myPorraScopeSelect" aria-label="Tipo de pronóstico">
+            <option value="group_match">Fase de grupos</option>
+            <option value="knockout">Cruces</option>
+            <option value="mini">Mini-porra</option>
+          </select>
+        </div>
+      </div>
+      <div id="myPorraContent"></div>
     </section>
   </main>
 
