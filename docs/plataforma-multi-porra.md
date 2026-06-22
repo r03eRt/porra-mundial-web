@@ -3,7 +3,8 @@
 Documento de diseño para poder **crear porras de cualquier evento** (Mundial,
 Eurocopa, Nations League…) sin afectar a la porra actual del Mundial 2026.
 
-> Estado: planteamiento aprobado a falta de arrancar la Fase 0. No hay código aún.
+> Estado: **Fase 0 (modelo de datos) aplicada en producción** el 2026-06-23.
+> Tablas `porra_*` creadas y aisladas del legacy. Siguiente: Fase 1 (dashboard).
 
 ## 1. Origen y objetivo
 
@@ -122,7 +123,7 @@ Regla: si una pestaña no tiene con qué alimentarse, no se muestra en esa porra
 
 | Fase | Qué | Resultado |
 |---|---|---|
-| 0 | Modelo de datos en Supabase (tablas nuevas + RLS), sin UI | Base aislada del legacy |
+| 0 ✅ | Modelo de datos en Supabase (tablas nuevas + RLS), sin UI | Hecho: `supabase/platform-schema.sql` (migración `20260623000000`) |
 | 1 | Dashboard MVP: crear porra, equipos, grupos, partidos (manual) | Montar un evento |
 | 2 | Predicciones de jugadores + clasificación pública | Porra de grupos jugable |
 | 3 | Mini-porras + cruces configurables | Porra completa |

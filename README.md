@@ -75,6 +75,8 @@ La idea es:
 - `app_config`: configuración editable de la app. Hoy guarda `player_edit_deadline`, la fecha límite hasta la que cada jugador puede editar su porra.
 - `player_access`: tabla del antiguo login por PIN. Sustituida por Supabase Auth (ver «Login y roles»); se mantiene por compatibilidad.
 
+Además, en el mismo proyecto Supabase conviven las tablas `porra_*` y `platform_admins` de la **plataforma multi-porra** (crear porras de futuros eventos). Son independientes de las de arriba y no afectan a la porra del Mundial. Ver «Plataforma multi-porra».
+
 ## Fuente de verdad por pantalla
 
 La app mezcla datos embebidos en el frontend con caches de Supabase. El reparto actual es este:
@@ -447,6 +449,15 @@ Cada cambio enviado a `main` despliega automáticamente la web en:
 ```text
 https://r03ert.github.io/porra-mundial-web/
 ```
+
+## Plataforma multi-porra
+
+Sistema nuevo (en construcción) para que el admin pueda crear porras de futuros eventos (Mundial, Eurocopa, Nations League…) sin tocar la porra actual del Mundial 2026.
+
+- **Fase 0 (hecha)**: modelo de datos en Supabase. Tablas `porra_*` (porras, equipos, grupos, partidos, jugadores, predicciones, mini-porra y cruces) más `platform_admins`, todas con `porra_id` y aisladas del legacy. Esquema en `supabase/platform-schema.sql` (migración `20260623000000`). Solo los usuarios de `platform_admins` pueden crear porras; lectura pública para la futura vista pública.
+- **Siguiente**: Fase 1 (dashboard de creación) y posteriores.
+
+Planteamiento completo y fases en [docs/plataforma-multi-porra.md](./docs/plataforma-multi-porra.md).
 
 ## Reglas implementadas
 
