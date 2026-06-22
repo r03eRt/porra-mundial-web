@@ -153,6 +153,58 @@ function syncCurrentPorraFromList() {
   state.currentPorra = state.porras.find(p => p.id === state.currentPorra.id) || state.currentPorra;
 }
 
+function groupMatchKey(groupId, team1Id, team2Id) {
+  return [groupId || '', ...[team1Id, team2Id].sort()].join('::');
+}
+
+function buildGroupMatches(firstKickoffRaw) {
+  const existing = new Set(state.matches
+    .filter(match => (match.phase ?? match.stage) === 'group')
+    .map(match => groupMatchKey(
+      match.group_id ?? match.group_label,
+      match.team1_id ?? match.team1,
+      match.team2_id ?? match.team2
+    )));
+  const firstKickoff = firstKickoffRaw ? new Date(firstKickoffRaw) : null;
+  const rows = [];
+
+  for (const group of state.groups) {
+    const groupTeams = state.teams
+      .filter(team => team.group_id === group.group_id)
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+
+    for (let i = 0; i < groupTeams.length; i += 1) {
+      for (let j = i + 1; j < groupTeams.length; j += 1) {
+        const team1 = groupTeams[i];
+        const team2 = groupTeams[j];
+        const matchKey = groupMatchKey(group.group_id, team1.team_id, team2.team_id);
+        if (existing.has(matchKey)) continue;
+        const kickoff = firstKickoff
+          ? new Date(firstKickoff.getTime() + rows.length * 2 * 60 * 60 * 1000).toISOString()
+          : null;
+        rows.push({
+          porra_id: state.currentPorra.id,
+          match_id: makeEntityId('match'),
+          stage: 'group',
+          group_id: group.group_id,
+          round_key: null,
+          team1: team1.team_id,
+          team2: team2.team_id,
+          team1_id: team1.team_id,
+          team2_id: team2.team_id,
+          phase: 'group',
+          group_label: group.name,
+          kickoff,
+          status: 'scheduled'
+        });
+        existing.add(matchKey);
+      }
+    }
+  }
+
+  return rows;
+}
+
 // ── Data loaders ───────────────────────────────────────────────────────────────
 
 async function loadPorras() {
@@ -418,6 +470,12 @@ function renderDetail() {
             <tbody>${matchRows}</tbody>
           </table></div>`
         : `<p class="muted">Sin partidos todavía.</p>`}
+      <form id="generateGroupMatchesForm" class="form inline-form" style="margin-top:.75rem">
+        <label>Fecha inicial (opcional)
+          <input name="firstKickoff" type="datetime-local" />
+        </label>
+        <button type="submit">Generar fase de grupos</button>
+      </form>
       <form id="addMatchForm" class="form match-form" style="margin-top:.75rem">
         <div class="match-row">
           <label>Fase
@@ -639,6 +697,22 @@ async function handleAddMatch(form) {
   render();
 }
 
+async function handleGenerateGroupMatches(form) {
+  const fd = new FormData(form);
+  const firstKickoffRaw = String(fd.get('firstKickoff') || '');
+  const rows = buildGroupMatches(firstKickoffRaw);
+  if (!rows.length) {
+    state.detailError = 'No hay partidos nuevos que generar. Revisa que los grupos tengan al menos dos equipos y que no existan ya esos cruces.';
+    render();
+    return;
+  }
+  const { error } = await supabase.from('porra_matches').insert(rows);
+  if (error) { state.detailError = error.message; render(); return; }
+  form.reset();
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
 async function handleAddPlayer(form) {
   const errorEl = document.getElementById('playerError');
   const btn = form.querySelector('button[type=submit]');
@@ -759,6 +833,7 @@ document.addEventListener('submit', e => {
   if (e.target.id === 'addGroupForm') { e.preventDefault(); handleAddGroup(e.target); }
   if (e.target.id === 'addTeamForm')  { e.preventDefault(); handleAddTeam(e.target); }
   if (e.target.id === 'addMatchForm') { e.preventDefault(); handleAddMatch(e.target); }
+  if (e.target.id === 'generateGroupMatchesForm') { e.preventDefault(); handleGenerateGroupMatches(e.target); }
   if (e.target.classList.contains('score-form')) { e.preventDefault(); saveMatchResult(e.target); }
 });
 

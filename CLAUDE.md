@@ -8,6 +8,7 @@ Dos apps en el mismo repo, compartiendo el mismo proyecto Supabase.
 ## Reglas de trabajo
 
 - Commits siempre a **`main`** directamente. Sin ramas de feature.
+- Cuando cambie el estado, flujo o convenciones del proyecto, actualiza también `AGENTS.md` y `CLAUDE.md`.
 - Cuando hagas cambios funcionales, actualiza también `README.md` y el doc relevante de `docs/`.
 - Ejecuta queries SQL y deploys tú cuando puedas; no dejes instrucciones pendientes al usuario.
 - No toques nada de la app legacy (`src/app.js`, `index.html`, tablas sin prefijo `porra_`) salvo que se pida explícitamente.
@@ -58,7 +59,7 @@ Dos apps en el mismo repo, compartiendo el mismo proyecto Supabase.
 | Fase | Estado | Qué hay |
 |------|--------|---------|
 | 0 | ✅ | Esquema DB aplicado (`supabase/platform-schema.sql`) |
-| 1 | 🚧 | `admin-next/`: login admin, crear/listar porras, gestionar equipos/grupos/partidos |
+| 1 | 🚧 | `admin-next/`: login admin, crear/listar porras, gestionar jugadores/grupos/equipos con bandera ligada/partidos, generar fase de grupos, meter resultados y cambiar estado |
 | 2+ | ⬜ | Predicciones de jugadores, clasificación pública, mini, cruces, resultados |
 
 ### admin-next — cómo arrancarlo
@@ -68,7 +69,7 @@ cd admin-next && npm run dev   # → http://localhost:5174 (5173 ya lo usa la ap
 ```
 
 Login con `morgadoluengo@gmail.com`. El formulario de crear porra y el listado aparecen directamente.
-Haz clic en **→ Gestionar** en una porra para entrar a añadir equipos, grupos y partidos.
+Haz clic en **→ Gestionar** en una porra para entrar a añadir jugadores, grupos, equipos y partidos. En la sección de partidos se puede generar automáticamente la fase de grupos desde los grupos y equipos ya creados, con fecha inicial opcional.
 
 ### admin-next — flujo de estado (main.js)
 

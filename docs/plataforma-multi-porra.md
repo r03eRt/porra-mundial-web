@@ -5,7 +5,8 @@ Eurocopa, Nations League…) sin afectar a la porra actual del Mundial 2026.
 
 > Estado: **Fase 1 en curso**. Al 2026-06-23 el dashboard `admin-next/` ya cubre
 > login admin, crear/listar porras, detalle por porra, jugadores, grupos,
-> equipos con bandera ligada, partidos, carga manual de resultados y avance de estado.
+> equipos con bandera ligada, generación de partidos de grupo, carga manual de
+> resultados y avance de estado.
 
 ## 1. Origen y objetivo
 
@@ -125,7 +126,7 @@ Regla: si una pestaña no tiene con qué alimentarse, no se muestra en esa porra
 | Fase | Qué | Resultado |
 |---|---|---|
 | 0 ✅ | Modelo de datos en Supabase (tablas nuevas + RLS), sin UI | Hecho: `supabase/platform-schema.sql` (migración `20260623000000`) |
-| 1 🚧 | Dashboard MVP: crear porra, configurar y operar manualmente | En curso: app `admin-next/` (Vite + supabase-js). Hecho: login admin, crear/listar porras, detalle por porra, gestión de jugadores/grupos/equipos con bandera ligada/partidos, resultados manuales y ciclo `draft → open → playing → closed` |
+| 1 🚧 | Dashboard MVP: crear porra, configurar y operar manualmente | En curso: app `admin-next/` (Vite + supabase-js). Hecho: login admin, crear/listar porras, detalle por porra, gestión de jugadores/grupos/equipos con bandera ligada/partidos, generación automática de partidos de grupo con fecha inicial opcional, resultados manuales y ciclo `draft → open → playing → closed` |
 | 2 | Predicciones de jugadores + clasificación pública | Porra de grupos jugable |
 | 3 | Mini-porras + cruces configurables | Porra completa |
 | 4 | Entrada de resultados + cálculo automático + vistas en vivo | Operativa de torneo |

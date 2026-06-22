@@ -49,11 +49,14 @@ El dashboard en `admin-next/` tiene:
 - ✅ Crear porra (nombre, slug auto, tipo de evento, deadline, features)
 - ✅ Listar porras del admin
 - ✅ Vista de detalle por porra: añadir/borrar grupos, equipos y partidos
+- ✅ Gestión de jugadores: añadir por email, listar y eliminar
+- ✅ Equipos con bandera ligada desde catálogo, con opción de equipo personalizado
+- ✅ Generación automática de partidos de fase de grupos desde grupos + equipos
+- ✅ Entrada manual de resultados y estado de partidos
+- ✅ Ciclo de estado de porra: `draft → open → playing → closed`
 
 **Pendiente en Fase 1:**
-- Gestión de jugadores (invitar a una porra, listar, eliminar)
-- Entrada de resultados de partidos ya creados (marcar marcador real)
-- Cambiar estado de la porra (draft → open → playing → closed)
+- Ajustes finales de usabilidad del dashboard según pruebas reales
 
 **Fase 2 (no empezada):**
 - Vista pública `/p/<slug>` con todas las pestañas
@@ -66,7 +69,7 @@ El dashboard en `admin-next/` tiene:
 
 | Archivo | Qué hace |
 |---------|----------|
-| `admin-next/src/main.js` | Toda la lógica: auth, renders, handlers, event delegation |
+| `admin-next/src/main.js` | Toda la lógica: auth, renders, handlers, event delegation, catálogo de equipos y generación de partidos |
 | `admin-next/src/styles.css` | Tema oscuro, tablas, formularios inline |
 | `admin-next/index.html` | Esqueleto: `<header class="topbar">`, `<main id="app">`, `<div id="session">` |
 | `admin-next/vite.config.js` | `base: './'` |
@@ -142,8 +145,9 @@ platform_admins     → email
 2. **No modificar la app legacy** (`src/`, `index.html`, tablas sin prefijo `porra_`) salvo bug explícito.
 3. Al añadir features en `admin-next/`, seguir el patrón existente: estado en `state`, render con `render()`, delegation en `document`.
 4. Escapar siempre con `esc()` antes de insertar en innerHTML.
-5. Actualizar `README.md` y el doc de `docs/` cuando cambie algo funcional.
-6. Ejecutar las queries/deploys directamente cuando se pueda, no dejar instrucciones manuales pendientes.
+5. Actualizar `AGENTS.md` y `CLAUDE.md` cuando cambie el estado, flujo o convenciones del proyecto.
+6. Actualizar `README.md` y el doc de `docs/` cuando cambie algo funcional.
+7. Ejecutar las queries/deploys directamente cuando se pueda, no dejar instrucciones manuales pendientes.
 
 ## Cómo arrancar en local
 
@@ -159,17 +163,8 @@ npm run dev          # → http://localhost:5174 (5173 ya ocupado)
 
 ## Próximos pasos concretos (Fase 1, en orden)
 
-1. **Gestión de jugadores** en la vista de detalle de una porra:
-   - Listar `porra_players` de esa porra.
-   - Formulario para añadir jugador: buscar en `auth.users` por email y hacer insert en `porra_players`.
-   - Botón eliminar jugador de la porra.
+1. **Pulir Fase 1 con pruebas reales**:
+   - Revisar ergonomía de creación de porra completa.
+   - Ajustar edición de fechas si hace falta más granularidad por partido.
 
-2. **Entrada de resultados** de partidos:
-   - En la tabla de partidos del detalle, añadir inputs de marcador (home / away).
-   - Guardar en `porra_matches.score_home` y `score_home.score_away`, cambiar `status` a `finished`.
-
-3. **Estado de la porra** (botón en la cabecera del detalle):
-   - Ciclo: `draft → open → playing → closed`.
-   - Update en `porras.status`.
-
-4. **Vista pública** (`/p/<slug>`) — Fase 2, app separada en `supabase-next/` o carpeta nueva.
+2. **Vista pública** (`/p/<slug>`) — Fase 2, app separada en `supabase-next/` o carpeta nueva.
