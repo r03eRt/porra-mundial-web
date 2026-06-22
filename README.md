@@ -71,7 +71,9 @@ La idea es:
 - `as_rankings_cache`: caché de estadísticas de jugadores y selecciones.
 - `worldcup_results_cache`: caché central de resultados y partidos del Mundial 2026.
 - `as_live_match_cache`: tarjeta del partido en directo de AS que aparece en portada.
-- `prediction_overrides`: correcciones manuales del admin sobre fase de grupos, mini-porra y cruces.
+- `prediction_overrides`: correcciones sobre fase de grupos, mini-porra y cruces. Las escribe tanto el admin (cualquier jugador) como cada jugador sobre su propia porra.
+- `app_config`: configuración editable de la app. Hoy guarda `player_edit_deadline`, la fecha límite hasta la que cada jugador puede editar su porra.
+- `player_access`: tabla del antiguo login por PIN. Sustituida por Supabase Auth (ver «Login y roles»); se mantiene por compatibilidad.
 
 ## Fuente de verdad por pantalla
 
@@ -81,7 +83,7 @@ La app mezcla datos embebidos en el frontend con caches de Supabase. El reparto 
 - `Estadísticas` lee de `as_rankings_cache`.
 - La tarjeta de directo de AS en portada lee de `as_live_match_cache`.
 - La `mini-porra` lee y guarda en `mini_results`.
-- El `Admin porra` lee y guarda en `prediction_overrides`.
+- El panel `Administrar` (admin) y la pestaña `Editar mi porra` (cada jugador sobre la suya) leen y guardan en `prediction_overrides`.
 - La base de la porra sigue viniendo de `window.PORRA_DATA` dentro del bundle, con Supabase encima como cache y capa de overrides.
 
 ## Qué sigue siendo local
@@ -237,17 +239,58 @@ En resumen:
 - los datos vivos vienen de Supabase
 - el navegador solo conserva estado local auxiliar, no la fuente de verdad de resultados
 
-## Modo administrador
+## Login y roles
 
-Añade `?admin=1` a la URL para mostrar el acceso de administrador. Tras iniciar sesión con Supabase Auth se pueden editar los resultados de la mini-porra, acceder a Datos/API e importar o exportar el estado.
+El login es único: en la portada hay un formulario de email + contraseña visible para cualquiera, sin necesidad de parámetros en la URL. Todo el mundo (admin y jugadores) entra por ahí con Supabase Auth. El rol se decide solo según la cuenta:
+
+- **Jugador**: su cuenta tiene `player_id` en `user_metadata`. Al entrar va a la pestaña «✏️ Editar mi porra», donde corrige su fase de grupos, cruces y mini-porra.
+- **Administrador**: su cuenta NO tiene `player_id`. Al entrar va al panel «Administrar» y el menú se simplifica a Clasificación, Mini-porra, Administrar y Datos/API.
+
+Esa distinción está en `src/app.js`: `isAdmin()` = autenticado sin `player_id`; `isPlayerSession()` = autenticado con `player_id`.
+
+### Edición de la porra por el jugador
+
+Cada jugador solo puede editar su propia porra. El guardado pasa por funciones `SECURITY DEFINER` (`set_my_override` / `clear_my_override`) que toman el `player_id` del propio token (`auth.jwt()`), nunca de un parámetro, así nadie puede tocar la porra de otro. La edición está abierta mientras `now()` sea anterior a `player_edit_deadline` (en `app_config`); pasada esa fecha los campos se deshabilitan y el servidor rechaza escrituras.
+
+Detalle completo de la migración del PIN a Supabase Auth en [docs/login-y-roles.md](./docs/login-y-roles.md).
 
 ### Configuración de Supabase
 
 1. Abre el SQL Editor de Supabase y ejecuta `supabase/setup.sql`.
-2. En Authentication, desactiva el registro público de nuevos usuarios.
-3. En Authentication > Users, crea manualmente el usuario administrador con email y contraseña.
+2. Ejecuta también `supabase/player-self-edit.sql` (tablas `player_access`/`app_config` y helper de deadline), `supabase/set-edit-deadline.sql` (fija la fecha límite real) y `supabase/player-auth-login.sql` (RPCs de edición por jugador autenticado).
+3. En Authentication, desactiva el registro público de nuevos usuarios (registro limitado: las altas las hace el admin).
+4. Crea el usuario administrador en Authentication > Users (email y contraseña, sin `player_id`).
+5. Crea las cuentas de los jugadores con `supabase/create-player-users.mjs` (ver «Cuentas de jugadores»).
 
 La clave `sb_publishable_...` es pública y puede incluirse en el frontend. La seguridad depende de Supabase Auth y de las políticas RLS, no de ocultar esta clave.
+
+### Cuentas de jugadores
+
+`supabase/create-player-users.mjs` crea una cuenta de Supabase Auth por jugador (email `<id>@porrazo.local`, contraseña aleatoria, `player_id` en `user_metadata`). Es idempotente: salta las que ya existan, así no toca al admin. Uso:
+
+```bash
+export SUPABASE_URL="https://<project-ref>.supabase.co"
+export SUPABASE_SERVICE_ROLE_KEY="<service_role key (secreta, panel API)>"
+node supabase/create-player-users.mjs
+```
+
+Las credenciales generadas quedan en `supabase/player-auth-credentials.txt` (ignorado por git). La `service_role` key no debe ir nunca al frontend ni al repo.
+
+## Copias de seguridad
+
+`supabase/backup.sh` hace un backup completo (base de datos + código). Crea `supabase/backup/<fecha>/` con:
+
+- `schema.sql`, `data.sql`, `roles.sql`: estructura, datos y permisos de la BD.
+- `auth.sql`: usuarios de Supabase Auth.
+- `functions/`: las Edge Functions.
+- `code.zip`: copia íntegra del proyecto.
+- `ENV-VARIABLES.md` + `secrets-names.txt`: qué variables/secrets necesita el proyecto (nombres, sin valores).
+
+```bash
+bash supabase/backup.sh
+```
+
+Pide la contraseña de la base de datos. La carpeta `supabase/backup/` está en `.gitignore`: contiene datos sensibles (contraseñas hasheadas, datos de usuarios) y no se sube al repo. Los valores de los secrets no son exportables; las variables necesarias están documentadas en [supabase/ENV-VARIABLES.md](./supabase/ENV-VARIABLES.md).
 
 ### Actualización automática de estadísticas
 
