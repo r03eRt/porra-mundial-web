@@ -50,8 +50,14 @@ npx supabase db dump --data-only --schema auth -f "$OUT/auth.sql" \
 echo "==> 5/6 Edge Functions (copia local)..."
 cp -R supabase/functions/. "$OUT/functions/" 2>/dev/null || true
 
-echo "==> 6/6 Código (snapshot de git)..."
-git archive --format=zip -o "$OUT/code.zip" HEAD
+echo "==> 6/6 Código (copia íntegra de la carpeta, sin node_modules/dist/backups)..."
+# Copia TODO el contenido del proyecto, incluidos archivos ignorados por git
+# (p.ej. seed-player-pins.sql), excepto dependencias, build y los propios backups.
+( cd "$ROOT" && zip -r -q "$OUT/code.zip" . \
+    -x 'node_modules/*' \
+    -x 'dist/*' \
+    -x 'supabase/backup/*' \
+    -x '.git/*' )
 
 cat > "$OUT/README.txt" <<EOF
 Backup Porrazo 2026 — $STAMP
@@ -62,7 +68,8 @@ Contenido:
   roles.sql     roles/permisos
   auth.sql      usuarios de Supabase Auth
   functions/    Edge Functions
-  code.zip      código del proyecto (rama main)
+  code.zip      copia íntegra del proyecto (incluye archivos locales/secretos;
+                sin node_modules, dist ni backups)
 
 NO incluido automáticamente:
   - Archivos de Supabase Storage (si usas buckets, descárgalos desde el panel
