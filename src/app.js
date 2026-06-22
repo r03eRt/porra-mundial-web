@@ -1150,6 +1150,17 @@ function applyAdminMode() {
     activatePanel('ranking');
   }
 
+  // En modo admin se simplifica el menú: solo quedan las pestañas marcadas con
+  // data-keep-in-admin (Clasificación y Datos/API). El resto se ocultan.
+  // Fuera de admin, se restauran todas (las data-admin-only las controla el loop
+  // de arriba; myPorra se gestiona aparte justo debajo).
+  document.querySelectorAll('.tabs .tab').forEach(tab => {
+    if (tab.id === 'myPorraTab') return;            // gestionada por la sesión de jugador
+    if (tab.hasAttribute('data-admin-only')) return; // ya la controla el loop de data-admin-only
+    if (tab.hasAttribute('data-keep-in-admin')) return;
+    tab.hidden = admin;
+  });
+
   // Pestaña "Mi porra": visible solo con sesión de jugador (y no en modo admin).
   const myPorraTab = document.getElementById('myPorraTab');
   const myPorraPanel = document.getElementById('myPorra');
@@ -1157,6 +1168,12 @@ function applyAdminMode() {
   if (myPorraTab) myPorraTab.hidden = !showMyPorra;
   if (myPorraPanel && !showMyPorra && myPorraPanel.classList.contains('active')) {
     activatePanel('ranking');
+  }
+
+  // Si en modo admin estamos en una pestaña que se acaba de ocultar, volvemos a Clasificación.
+  if (admin) {
+    const activeTab = document.querySelector('.tabs .tab.active');
+    if (activeTab && activeTab.hidden) activatePanel('ranking');
   }
 
   renderAdminAccess();
