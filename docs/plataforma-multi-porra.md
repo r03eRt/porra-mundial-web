@@ -124,7 +124,7 @@ Regla: si una pestaña no tiene con qué alimentarse, no se muestra en esa porra
 | Fase | Qué | Resultado |
 |---|---|---|
 | 0 ✅ | Modelo de datos en Supabase (tablas nuevas + RLS), sin UI | Hecho: `supabase/platform-schema.sql` (migración `20260623000000`) |
-| 1 | Dashboard MVP: crear porra, equipos, grupos, partidos (manual) | Montar un evento |
+| 1 🚧 | Dashboard MVP: crear porra, equipos, grupos, partidos (manual) | En curso: app `admin-next/` (Vite + supabase-js). Hecho: login admin + crear/listar porras. Pendiente: equipos, grupos, partidos |
 | 2 | Predicciones de jugadores + clasificación pública | Porra de grupos jugable |
 | 3 | Mini-porras + cruces configurables | Porra completa |
 | 4 | Entrada de resultados + cálculo automático + vistas en vivo | Operativa de torneo |

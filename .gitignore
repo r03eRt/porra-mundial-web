@@ -10,3 +10,7 @@ supabase/backup/
 
 # Credenciales de Supabase Auth de los jugadores (email + contraseña en claro): privado.
 supabase/player-auth-credentials.txt
+
+# App nueva del dashboard (build y deps locales)
+admin-next/node_modules/
+admin-next/dist/
