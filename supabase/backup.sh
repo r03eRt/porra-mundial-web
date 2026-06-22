@@ -59,17 +59,32 @@ echo "==> 6/6 Código (copia íntegra de la carpeta, sin node_modules/dist/backu
     -x 'supabase/backup/*' \
     -x '.git/*' )
 
+echo "==> Secrets: referencia de variables + lista de nombres (sin valores)..."
+# Documento qué variables necesita el proyecto (sin valores: no son exportables).
+cp supabase/ENV-VARIABLES.md "$OUT/ENV-VARIABLES.md" 2>/dev/null || true
+# Lista de secrets configurados (nombres + hash, NUNCA el valor en claro).
+npx supabase secrets list > "$OUT/secrets-names.txt" 2>/dev/null \
+  || echo "(no se pudo listar; ejecuta 'npx supabase secrets list' manualmente)" > "$OUT/secrets-names.txt"
+
 cat > "$OUT/README.txt" <<EOF
 Backup Porrazo 2026 — $STAMP
 
 Contenido:
-  schema.sql    estructura de la base de datos
-  data.sql      datos de todas las tablas (incluye PINs en claro)
-  roles.sql     roles/permisos
-  auth.sql      usuarios de Supabase Auth
-  functions/    Edge Functions
-  code.zip      copia íntegra del proyecto (incluye archivos locales/secretos;
-                sin node_modules, dist ni backups)
+  schema.sql        estructura de la base de datos
+  data.sql          datos de todas las tablas (incluye PINs en claro)
+  roles.sql         roles/permisos
+  auth.sql          usuarios de Supabase Auth
+  functions/        Edge Functions
+  code.zip          copia íntegra del proyecto (incluye archivos locales/secretos;
+                    sin node_modules, dist ni backups)
+  ENV-VARIABLES.md  qué variables/secrets necesita el proyecto (sin valores)
+  secrets-names.txt nombres de los secrets configurados (hash, sin valores)
+
+Sobre los secrets:
+  Los VALORES de los secrets NO son exportables (Supabase solo da nombre + hash).
+  Para recrear el proyecto, reconfigura cada secret con sus valores reales:
+    npx supabase secrets set NOMBRE=valor
+  El único secret propio es FOOTBALL_DATA_TOKEN (ver ENV-VARIABLES.md).
 
 NO incluido automáticamente:
   - Archivos de Supabase Storage (si usas buckets, descárgalos desde el panel
