@@ -1340,7 +1340,7 @@ function formatAsLiveEvent(event) {
     ? parsedText.replace(new RegExp(`\\s*${parsedMinute}['’]?$`), '').trim()
     : parsedText;
   // Recorta a un máximo de caracteres para que el chip no ocupe de más.
-  const player = formatLiveNotificationText(rawPlayer);
+  const player = formatLiveNotificationText(rawPlayer, 50);
   const icon = event.kind === 'red-card'
     ? '🟥'
     : (event.kind === 'goal-penalty' ? '🎯' : '⚽');
@@ -1487,7 +1487,7 @@ function renderAsLiveMatchCard() {
         <span class="live-match-minute">${escapeHtml(matchMinuteLabel || liveBadge)}</span>
         <span>${escapeHtml(freshLabel)}</span>
       </div>
-      <b>${escapeHtml(headline)}</b>
+      <b>${escapeHtml(formatLiveNotificationText(headline, 52))}</b>
       ${showSummaryLine ? `<span>${escapeHtml(match.scorerSummary || 'Abrir directo en AS')}</span>` : ''}
       ${(liveEvents.length || goalChips.length) ? `<div class="live-event-list">${[...liveEvents.map(formatAsLiveEvent), ...goalChips].join('')}</div>` : ''}
       <span class="card-detail">
