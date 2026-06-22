@@ -42,12 +42,10 @@ const LS_KEYS = {
   goalAlertSnapshot: 'porra.goalAlertSnapshot.v1',
   liveNotificationsEnabled: 'porra.liveNotifications.enabled.v1',
   theme: 'porra.theme.v1',
-  installDismissedUntil: 'porra.installBanner.dismissedUntil.v1',
-  playerSession: 'porra.playerSession.v1'
+  installDismissedUntil: 'porra.installBanner.dismissedUntil.v1'
 };
 
 const PLAYER_REQUESTED = new URLSearchParams(window.location.search).has('player');
-const PLAYER_PARAM = new URLSearchParams(window.location.search).get('player') || '';
 
 const TEAM_FLAGS = {
   'A. SAUDÍ': '🇸🇦',
@@ -132,7 +130,6 @@ const state = {
   adminSyncStatus: { type: '', message: '', at: 0, inFlight: false },
   adminRowSyncStatus: {},
   asLiveMatch: null,
-  playerSession: loadPlayerSession(),
   playerLoginError: '',
   editDeadline: null
 };
@@ -378,36 +375,24 @@ async function fetchJsonWithTimeout(url, options = {}, timeoutMs = API_FETCH_TIM
   }
 }
 
+// player_id del usuario autenticado (lo metimos en user_metadata al crear las
+// cuentas). El admin NO tiene player_id, así se distingue admin de jugador.
+function authPlayerId() {
+  return state.adminUser?.user_metadata?.player_id || '';
+}
+
+// Es admin si hay usuario autenticado y NO es una cuenta de jugador.
 function isAdmin() {
-  return Boolean(state.adminUser);
+  return Boolean(state.adminUser) && !authPlayerId();
 }
 
-function loadPlayerSession() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(LS_KEYS.playerSession) || 'null');
-    if (raw && typeof raw.playerId === 'string' && typeof raw.pin === 'string') return raw;
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-function savePlayerSession(session) {
-  state.playerSession = session;
-  if (session) {
-    localStorage.setItem(LS_KEYS.playerSession, JSON.stringify(session));
-  } else {
-    localStorage.removeItem(LS_KEYS.playerSession);
-  }
-}
-
-// Sesión de jugador activa (y no en modo admin: el admin usa su propio panel).
+// Sesión de jugador: usuario autenticado que SÍ tiene player_id en su metadata.
 function isPlayerSession() {
-  return !isAdmin() && Boolean(state.playerSession?.playerId);
+  return Boolean(state.adminUser) && Boolean(authPlayerId());
 }
 
 function currentPlayerId() {
-  return state.playerSession?.playerId || '';
+  return authPlayerId();
 }
 
 // La edición del propio jugador está abierta mientras no se pase el deadline.
@@ -1195,33 +1180,28 @@ function renderPlayerAccess() {
   const container = document.getElementById('playerAccess');
   if (!container) return;
 
-  // Si hay admin logueado, el jugador no se muestra (el admin manda).
-  const session = state.playerSession;
-  const shouldShow = !isAdmin() && (PLAYER_REQUESTED || Boolean(session));
+  // Si hay admin logueado, el acceso de jugador no se muestra (el admin manda).
+  const playing = isPlayerSession();
+  const shouldShow = !isAdmin() && (PLAYER_REQUESTED || playing);
   container.hidden = !shouldShow;
   if (!shouldShow) return;
 
-  if (session) {
-    const player = DATA.players.find(item => item.id === session.playerId);
+  if (playing) {
+    const playerId = currentPlayerId();
+    const player = DATA.players.find(item => item.id === playerId);
     container.innerHTML = html`
       <div class="admin-session-row">
-        <span class="admin-session">Tu porra · ${escapeHtml(player?.name || session.playerId)}</span>
+        <span class="admin-session">Tu porra · ${escapeHtml(player?.name || state.adminUser?.email || playerId)}</span>
         <button type="button" data-player-logout>Salir</button>
       </div>
     `;
     return;
   }
 
-  const options = DATA.players
-    .map(player => `<option value="${player.id}"${player.id === PLAYER_PARAM ? ' selected' : ''}>${escapeHtml(player.name)}</option>`)
-    .join('');
   container.innerHTML = html`
     <form id="playerLoginForm" class="admin-login">
-      <select name="playerId" aria-label="Jugador" required>
-        <option value="">Elige tu nombre</option>
-        ${options}
-      </select>
-      <input name="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" required />
+      <input name="email" type="email" autocomplete="username" placeholder="Email" required />
+      <input name="password" type="password" autocomplete="current-password" placeholder="Contraseña" required />
       <button type="submit">Editar mi porra</button>
     </form>
     <span class="admin-login-error" role="alert">${escapeHtml(state.playerLoginError || '')}</span>
@@ -3412,16 +3392,16 @@ async function loadEditDeadlineFromSupabase() {
   renderPlayerDashboard();
 }
 
-// Guarda la corrección del propio jugador vía RPC segura (valida PIN + deadline
-// en el servidor). No toca el flujo de admin.
+// Guarda la corrección del propio jugador autenticado vía RPC segura.
+// El servidor toma el player_id del JWT (no de un parámetro), valida deadline
+// y hace el upsert. No toca el flujo de admin.
 async function savePlayerOverrideFromRow(row) {
   if (!row) return;
   const playerId = row.dataset.playerId;
   const scope = row.dataset.scope;
   const entityId = row.dataset.entityId;
-  const session = state.playerSession;
 
-  if (!session || session.playerId !== playerId) {
+  if (!isPlayerSession() || currentPlayerId() !== playerId) {
     return alert('Solo puedes editar tu propia porra.');
   }
   if (!isPlayerEditOpen()) {
@@ -3435,9 +3415,7 @@ async function savePlayerOverrideFromRow(row) {
     return clearPlayerOverrideFromRow(row);
   }
 
-  const { error } = await supabase.rpc('set_player_override', {
-    p_player_id: playerId,
-    p_pin: session.pin,
+  const { error } = await supabase.rpc('set_my_override', {
     p_scope: scope,
     p_entity_id: entityId,
     p_value: value
@@ -3471,9 +3449,8 @@ async function clearPlayerOverrideFromRow(row) {
   const playerId = row.dataset.playerId;
   const scope = row.dataset.scope;
   const entityId = row.dataset.entityId;
-  const session = state.playerSession;
 
-  if (!session || session.playerId !== playerId) {
+  if (!isPlayerSession() || currentPlayerId() !== playerId) {
     return alert('Solo puedes editar tu propia porra.');
   }
   if (!isPlayerEditOpen()) {
@@ -3482,9 +3459,7 @@ async function clearPlayerOverrideFromRow(row) {
 
   setAdminRowSyncStatus(playerId, scope, entityId, 'info', 'quitando...', { inFlight: true });
 
-  const { error } = await supabase.rpc('clear_player_override', {
-    p_player_id: playerId,
-    p_pin: session.pin,
+  const { error } = await supabase.rpc('clear_my_override', {
     p_scope: scope,
     p_entity_id: entityId
   });
@@ -3810,26 +3785,15 @@ async function refreshStatsRankings(options = {}) {
   }
 }
 
-// Al activarse el modo admin, cerramos la sesión de jugador (usuario + PIN)
-// para que no convivan las dos a la vez.
-function clearPlayerSessionOnAdmin() {
-  if (isAdmin() && state.playerSession) {
-    savePlayerSession(null);
-    state.playerLoginError = '';
-  }
-}
-
 async function initializeAuth() {
   const { data, error } = await supabase.auth.getSession();
-  if (error) console.error('No se pudo recuperar la sesión de administrador:', error);
+  if (error) console.error('No se pudo recuperar la sesión:', error);
   state.adminUser = data.session?.user || null;
-  clearPlayerSessionOnAdmin();
   applyAdminMode();
   renderAll();
 
   supabase.auth.onAuthStateChange((_event, session) => {
     state.adminUser = session?.user || null;
-    clearPlayerSessionOnAdmin();
     applyAdminMode();
     renderAll();
   });
@@ -4077,11 +4041,9 @@ document.addEventListener('click', e => {
   }
   if (e.target.matches('[data-admin-logout]')) supabase.auth.signOut();
   if (e.target.matches('[data-player-logout]')) {
-    savePlayerSession(null);
     state.playerLoginError = '';
     activatePanel('ranking');
-    applyAdminMode();
-    renderAll();
+    supabase.auth.signOut();
   }
 });
 
@@ -4108,29 +4070,26 @@ document.addEventListener('submit', async e => {
     e.preventDefault();
     const submitButton = e.target.querySelector('button[type="submit"]');
     const formData = new FormData(e.target);
-    const playerId = String(formData.get('playerId') || '');
-    const pin = String(formData.get('pin') || '');
     submitButton.disabled = true;
     state.playerLoginError = '';
     renderPlayerAccess();
 
-    const { data, error } = await supabase.rpc('verify_player_pin', {
-      p_player_id: playerId,
-      p_pin: pin
+    const { error } = await supabase.auth.signInWithPassword({
+      email: String(formData.get('email') || ''),
+      password: String(formData.get('password') || '')
     });
 
-    if (error || !data) {
-      state.playerLoginError = error ? `Error: ${error.message}` : 'PIN incorrecto.';
+    if (error) {
+      state.playerLoginError = 'Email o contraseña incorrectos.';
       submitButton.disabled = false;
       renderPlayerAccess();
       return;
     }
 
-    savePlayerSession({ playerId, pin });
+    // onAuthStateChange actualizará state.adminUser; al ser cuenta de jugador,
+    // isPlayerSession() pasará a true. Abrimos su porra.
     state.playerLoginError = '';
-    applyAdminMode();
     activatePanel('myPorra');
-    renderAll();
     return;
   }
 
