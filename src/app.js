@@ -1078,6 +1078,13 @@ function sortableHeader(table, key, label, sort, className = '') {
   return `<th class="${className}" aria-sort="${ariaSort}"><button type="button" class="sort-button ${className} ${active ? 'active' : ''} ${directionClass}" data-sort-table="${table}" data-sort-key="${key}"><span>${indicator}</span>${label}</button></th>`;
 }
 
+function activatePanel(panelId) {
+  document.querySelectorAll('.tab,.panel,[data-open-panel]').forEach(element => element.classList.remove('active'));
+  document.querySelector(`.tab[data-tab="${panelId}"]`)?.classList.add('active');
+  document.querySelector(`[data-open-panel="${panelId}"]`)?.classList.add('active');
+  document.getElementById(panelId)?.classList.add('active');
+}
+
 function applyAdminMode() {
   const admin = isAdmin();
   document.querySelectorAll('[data-admin-only]').forEach(element => {
@@ -1086,10 +1093,9 @@ function applyAdminMode() {
   document.body.classList.toggle('admin-mode', admin);
 
   const settingsPanel = document.getElementById('settings');
-  if (!admin && settingsPanel.classList.contains('active')) {
-    document.querySelectorAll('.tab,.panel').forEach(element => element.classList.remove('active'));
-    document.querySelector('[data-tab="ranking"]').classList.add('active');
-    document.getElementById('ranking').classList.add('active');
+  const adminDashboardPanel = document.getElementById('adminDashboard');
+  if (!admin && (settingsPanel.classList.contains('active') || adminDashboardPanel.classList.contains('active'))) {
+    activatePanel('ranking');
   }
 
   renderAdminAccess();
@@ -3752,11 +3758,15 @@ document.addEventListener('click', e => {
     return;
   }
 
+  const openPanelButton = e.target.closest('[data-open-panel]');
+  if (openPanelButton) {
+    activatePanel(openPanelButton.dataset.openPanel);
+    return;
+  }
+
   const tab = e.target.closest('.tab');
   if (tab) {
-    document.querySelectorAll('.tab,.panel').forEach(el => el.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById(tab.dataset.tab).classList.add('active');
+    activatePanel(tab.dataset.tab);
     return;
   }
   const saveMini = e.target.dataset.saveMini; if (saveMini) saveMiniResult(saveMini);
