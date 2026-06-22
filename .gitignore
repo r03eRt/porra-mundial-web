@@ -4,3 +4,6 @@ dist/
 
 # Contiene los PINs reales de los jugadores en claro: no subir al repo público.
 supabase/seed-player-pins.sql
+
+# Backups de la base de datos (datos, PINs en claro, usuarios auth): mantener privados.
+supabase/backup/
