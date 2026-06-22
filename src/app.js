@@ -303,7 +303,7 @@ const MINI_FIELD_TYPES = {
   Q9: 'player',
   Q10: 'player',
   Q11: 'player',
-  Q12: 'number',
+  Q12: 'goals-range',
   Q13: 'number',
   Q14: 'player',
   Q15: 'player'
@@ -1056,7 +1056,7 @@ function scoreMiniAnswer(question, answer, result) {
   const acceptedAnswers = result.split('|').map(value => value.trim()).filter(Boolean);
   let correct = false;
 
-  if (fieldType === 'number') {
+  if (fieldType === 'number' || fieldType === 'goals-range') {
     const predicted = String(answer || '').trim();
     const actual = Number(result);
     const minimumMatch = predicted.match(/^\+\s*(\d+)$/);
@@ -2838,6 +2838,10 @@ function renderQuestionInput(question, result, dataAttribute) {
   if (fieldType === 'number') {
     return `<input type="number" min="0" step="1" inputmode="numeric" ${dataAttribute}="${question.id}" value="${escapedResult}" placeholder="Cantidad"${readOnly} />`;
   }
+  if (fieldType === 'goals-range') {
+    const disabled = isAdmin() ? '' : ' disabled aria-disabled="true"';
+    return `<select ${dataAttribute}="${question.id}"${disabled}>${goalsRangeOptionsHtml(result)}</select>`;
+  }
   if (fieldType === 'team') {
     return `<input type="text" list="teamOptions" ${dataAttribute}="${question.id}" value="${escapedResult}" placeholder="Selección"${readOnly} />`;
   }
@@ -2845,8 +2849,21 @@ function renderQuestionInput(question, result, dataAttribute) {
 }
 
 function questionFieldLabel(question) {
-  const labels = { number: 'Cantidad', team: 'Selección', player: 'Jugador' };
+  const labels = { number: 'Cantidad', 'goals-range': 'Goles', team: 'Selección', player: 'Jugador' };
   return labels[MINI_FIELD_TYPES[question.id]];
+}
+
+// Opciones del desplegable de "goles": 0..14 y +15 (15 o más).
+// Incluye el valor actual si quedara fuera de la lista, para no perder respuestas.
+function goalsRangeOptionsHtml(current) {
+  const value = String(current ?? '').trim();
+  const options = [];
+  for (let n = 0; n <= 14; n += 1) options.push(String(n));
+  options.push('+15');
+  if (value && !options.includes(value)) options.unshift(value);
+  return [`<option value="">—</option>`, ...options.map(opt =>
+    `<option value="${escapeHtml(opt)}"${opt === value ? ' selected' : ''}>${escapeHtml(opt)}</option>`
+  )].join('');
 }
 
 function renderMini() {
@@ -3107,6 +3124,9 @@ function renderAdminMiniEditor(playerId) {
         const list = fieldType === 'team' ? ' list="teamOptions"' : '';
         const inputType = fieldType === 'number' ? 'number' : 'text';
         const syncStatus = getAdminRowSyncStatus(playerId, 'mini', question.id);
+        const inputField = fieldType === 'goals-range'
+          ? `<select data-admin-override-value>${goalsRangeOptionsHtml(active)}</select>`
+          : `<input data-admin-override-value type="${inputType}"${list} value="${escapeHtml(active)}" />`;
         return html`
           <article class="mini-result-card" data-admin-override-row data-player-id="${playerId}" data-scope="mini" data-entity-id="${question.id}">
             <div>
@@ -3116,7 +3136,7 @@ function renderAdminMiniEditor(playerId) {
               <span class="field-type">${adminOverrideStatus(playerId, 'mini', question.id)} ${renderAdminRowSyncBadge(syncStatus)}</span>
             </div>
             <div class="mini-result-actions">
-              <input data-admin-override-value type="${inputType}"${list} value="${escapeHtml(active)}" />
+              ${inputField}
               <button type="button" data-save-prediction-override>Guardar</button>
               <button type="button" data-clear-prediction-override>Quitar</button>
             </div>
