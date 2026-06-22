@@ -34,6 +34,61 @@ const PORRA_STATUS_LABELS = {
   closed: 'Cerrada'
 };
 
+const TEAM_FLAGS = {
+  'A. SAUDÍ': '🇸🇦',
+  'ALEMANIA': '🇩🇪',
+  'ARGELIA': '🇩🇿',
+  'ARGENTINA': '🇦🇷',
+  'AUSTRALIA': '🇦🇺',
+  'AUSTRIA': '🇦🇹',
+  'BOSNIA': '🇧🇦',
+  'BRASIL': '🇧🇷',
+  'BÉLGICA': '🇧🇪',
+  'C. MARFIL': '🇨🇮',
+  'CABO VERDE': '🇨🇻',
+  'CANADÁ': '🇨🇦',
+  'CATAR': '🇶🇦',
+  'CHEQUIA': '🇨🇿',
+  'COLOMBIA': '🇨🇴',
+  'COREA': '🇰🇷',
+  'CROACIA': '🇭🇷',
+  'CURAZAO': '🇨🇼',
+  'ECUADOR': '🇪🇨',
+  'EE.UU.': '🇺🇸',
+  'EGIPTO': '🇪🇬',
+  'ESCOCIA': '\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}',
+  'ESPAÑA': '🇪🇸',
+  'FRANCIA': '🇫🇷',
+  'GHANA': '🇬🇭',
+  'HAITÍ': '🇭🇹',
+  'INGLATERRA': '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}',
+  'IRAK': '🇮🇶',
+  'IRÁN': '🇮🇷',
+  'JAPÓN': '🇯🇵',
+  'JORDANIA': '🇯🇴',
+  'MARRUECOS': '🇲🇦',
+  'MÉXICO': '🇲🇽',
+  'N. ZELANDA': '🇳🇿',
+  'NORUEGA': '🇳🇴',
+  'PANAMÁ': '🇵🇦',
+  'PARAGUAY': '🇵🇾',
+  'PAÍSES BAJOS': '🇳🇱',
+  'PORTUGAL': '🇵🇹',
+  'RD CONGO': '🇨🇩',
+  'SENEGAL': '🇸🇳',
+  'SUDÁFRICA': '🇿🇦',
+  'SUECIA': '🇸🇪',
+  'SUIZA': '🇨🇭',
+  'TURQUÍA': '🇹🇷',
+  'TÚNEZ': '🇹🇳',
+  'URUGUAY': '🇺🇾',
+  'UZBEKISTÁN': '🇺🇿'
+};
+
+const TEAM_CATALOG = Object.entries(TEAM_FLAGS)
+  .map(([name, flag]) => ({ name, flag }))
+  .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+
 const state = {
   user: null,
   isAdmin: false,
@@ -79,6 +134,10 @@ function normalizePorraStatus(status) {
 
 function porraStatusLabel(status) {
   return PORRA_STATUS_LABELS[normalizePorraStatus(status)] || status;
+}
+
+function flagForTeam(team) {
+  return TEAM_FLAGS[String(team || '').trim().toUpperCase()] || '';
 }
 
 function nextPorraStatus(status) {
@@ -228,8 +287,9 @@ function renderDetail() {
   // Teams table
   const teamsRows = state.teams.map(t => {
     const grp = state.groups.find(g => g.group_id === t.group_id);
+    const flag = t.flag || flagForTeam(t.name);
     return `<tr>
-      <td>${esc(t.flag ?? '')}</td>
+      <td>${esc(flag)}</td>
       <td>${esc(t.name)}</td>
       <td>${grp ? esc(grp.name) : '<span class="muted">—</span>'}</td>
       <td><button type="button" class="btn-danger btn-sm del-team" data-id="${esc(t.team_id)}">✕</button></td>
@@ -239,7 +299,9 @@ function renderDetail() {
   const groupOptions = state.groups.map(g =>
     `<option value="${esc(g.group_id)}">${esc(g.name)}</option>`).join('');
   const teamOptions = state.teams.map(t =>
-    `<option value="${esc(t.team_id)}">${esc(t.flag ?? '')} ${esc(t.name)}</option>`).join('');
+    `<option value="${esc(t.team_id)}">${esc(t.flag || flagForTeam(t.name))} ${esc(t.name)}</option>`).join('');
+  const catalogTeamOptions = TEAM_CATALOG.map(t =>
+    `<option value="${esc(t.name)}">${esc(t.flag)} ${esc(t.name)}</option>`).join('');
 
   // Matches table
   const matchRows = state.matches.map(m => {
@@ -257,7 +319,7 @@ function renderDetail() {
     const matchStatus = m.status ?? ((scoreHome !== '' && scoreAway !== '') ? 'finished' : 'scheduled');
     return `<tr>
       <td>${esc(phase)}</td>
-      <td>${t1 ? `${esc(t1.flag ?? '')} ${esc(t1.name)}` : '—'}</td>
+      <td>${t1 ? `${esc(t1.flag || flagForTeam(t1.name))} ${esc(t1.name)}` : '—'}</td>
       <td>
         <form class="score-form" data-id="${esc(m.match_id)}">
           <input name="score_home" type="number" min="0" inputmode="numeric" value="${esc(scoreHome)}" aria-label="Marcador local" />
@@ -266,7 +328,7 @@ function renderDetail() {
           <button type="submit" class="btn-secondary btn-sm">Guardar</button>
         </form>
       </td>
-      <td>${t2 ? `${esc(t2.flag ?? '')} ${esc(t2.name)}` : '—'}</td>
+      <td>${t2 ? `${esc(t2.flag || flagForTeam(t2.name))} ${esc(t2.name)}` : '—'}</td>
       <td>${esc(when)}</td>
       <td>${esc(matchStatus === 'finished' ? 'Finalizado' : 'Pendiente')}</td>
       <td><button type="button" class="btn-danger btn-sm del-match" data-id="${esc(m.match_id)}">✕</button></td>
@@ -331,8 +393,13 @@ function renderDetail() {
           </table></div>`
         : `<p class="muted">Sin equipos todavía.</p>`}
       <form id="addTeamForm" class="form inline-form" style="margin-top:.75rem">
-        <input name="flag" type="text" placeholder="🏴󠁧󠁢󠁥󠁮󠁧󠁿" style="width:60px" />
-        <input name="teamName" type="text" placeholder="Nombre del equipo" required style="flex:1" />
+        <select name="catalogTeam" id="catalogTeam" style="flex:1" required>
+          <option value="">Equipo</option>
+          ${catalogTeamOptions}
+          <option value="__custom">Personalizado</option>
+        </select>
+        <input name="flag" id="customTeamFlag" type="text" placeholder="Bandera" style="width:80px;display:none" />
+        <input name="teamName" id="customTeamName" type="text" placeholder="Nombre del equipo" style="flex:1;display:none" />
         <select name="groupId" style="width:120px">
           <option value="">Sin grupo</option>
           ${groupOptions}
@@ -436,6 +503,20 @@ function wireDetail() {
   }
   phaseSelect?.addEventListener('change', toggleGroupLabel);
   toggleGroupLabel();
+
+  const catalogTeam = document.getElementById('catalogTeam');
+  const customTeamName = document.getElementById('customTeamName');
+  const customTeamFlag = document.getElementById('customTeamFlag');
+  function toggleCustomTeam() {
+    const custom = catalogTeam?.value === '__custom';
+    if (customTeamName) {
+      customTeamName.style.display = custom ? '' : 'none';
+      customTeamName.required = custom;
+    }
+    if (customTeamFlag) customTeamFlag.style.display = custom ? '' : 'none';
+  }
+  catalogTeam?.addEventListener('change', toggleCustomTeam);
+  toggleCustomTeam();
 }
 
 // ── Handlers ───────────────────────────────────────────────────────────────────
@@ -507,15 +588,18 @@ async function handleAddGroup(form) {
 async function handleAddTeam(form) {
   const errorEl = document.getElementById('teamError');
   const fd = new FormData(form);
-  const name = String(fd.get('teamName') || '').trim();
-  const flag = String(fd.get('flag') || '').trim() || null;
+  const catalogTeam = String(fd.get('catalogTeam') || '').trim();
+  const customName = String(fd.get('teamName') || '').trim();
+  const customFlag = String(fd.get('flag') || '').trim();
+  const name = catalogTeam === '__custom' ? customName : catalogTeam;
+  const flag = catalogTeam === '__custom' ? (customFlag || flagForTeam(customName)) : flagForTeam(catalogTeam);
   const groupId = String(fd.get('groupId') || '').trim() || null;
   if (!name) return;
   const { error } = await supabase.from('porra_teams').insert({
     porra_id: state.currentPorra.id,
     team_id: makeEntityId('team'),
     name,
-    flag,
+    flag: flag || null,
     group_id: groupId || null
   });
   if (error) { errorEl.textContent = error.message; return; }
