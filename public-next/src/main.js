@@ -29,6 +29,10 @@ const state = {
   players: [],
   predictions: [],     // todas las predicciones de la porra (lectura pública)
   knockoutPicks: [],   // pronósticos de cruces (para columna Campeón)
+  miniQuestions: [],   // preguntas de la mini-porra
+  miniAnswers: [],     // respuestas de los jugadores a la mini
+  miniResults: [],     // resultados oficiales de la mini
+  miniQuery: '',       // buscador de la clasificación mini
   session: null,       // sesión Supabase Auth
   myPlayerId: null,    // player_id del usuario logueado en esta porra (o null)
   tab: 'ranking',
@@ -64,13 +68,17 @@ async function loadPorra() {
   state.porra = porra;
 
   const id = porra.id;
-  const [teams, groups, matches, players, predictions, knockoutPicks] = await Promise.all([
+  const [teams, groups, matches, players, predictions, knockoutPicks,
+         miniQuestions, miniAnswers, miniResults] = await Promise.all([
     supabase.from('porra_teams').select('*').eq('porra_id', id).order('position'),
     supabase.from('porra_groups').select('*').eq('porra_id', id).order('position'),
     supabase.from('porra_matches').select('*').eq('porra_id', id).order('position'),
     supabase.from('porra_players').select('*').eq('porra_id', id).order('position'),
     supabase.from('porra_predictions').select('*').eq('porra_id', id),
-    supabase.from('porra_knockout_picks').select('*').eq('porra_id', id)
+    supabase.from('porra_knockout_picks').select('*').eq('porra_id', id),
+    supabase.from('porra_mini_questions').select('*').eq('porra_id', id).order('position'),
+    supabase.from('porra_mini_answers').select('*').eq('porra_id', id),
+    supabase.from('porra_mini_results').select('*').eq('porra_id', id)
   ]);
   state.teams = teams.data || [];
   state.groups = groups.data || [];
@@ -78,6 +86,9 @@ async function loadPorra() {
   state.players = players.data || [];
   state.predictions = predictions.data || [];
   state.knockoutPicks = knockoutPicks.data || [];
+  state.miniQuestions = miniQuestions.data || [];
+  state.miniAnswers = miniAnswers.data || [];
+  state.miniResults = miniResults.data || [];
 
   await refreshSession();
 }
@@ -210,6 +221,7 @@ function render() {
     case 'groupStandings': renderGroupStandings(); break;
     case 'teams': renderTeams(); break;
     case 'player': renderPlayerDetail(); break;
+    case 'mini': renderMini(); break;
     default: renderRanking();
   }
 }
@@ -258,7 +270,7 @@ const TABS = [
   { key: 'ranking', label: 'Clasificación porra', ready: true },
   { key: 'mine', label: '✏️ Editar mi porra', ready: true, playerOnly: true },
   { key: 'history', label: 'Histórico', ready: false },
-  { key: 'mini', label: 'Mini-porra', ready: false },
+  { key: 'mini', label: 'Mini-porra', ready: true },
   { key: 'matches', label: 'Partidos', ready: true },
   { key: 'knockout', label: 'Cruces', ready: false },
   { key: 'groupStandings', label: 'Clasificación grupos', ready: true },
@@ -716,6 +728,125 @@ function renderPlayerDetail() {
     </div>`;
 }
 
+// --- Mini-porra ------------------------------------------------------------
+const MINI_FIELD_LABELS = {
+  text: 'Texto libre', number: 'Número', team: 'Equipo',
+  player: 'Jugador', 'goals-range': 'Goles'
+};
+
+function miniNormalize(s) {
+  return String(s || '').trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function miniResultFor(questionId) {
+  const r = state.miniResults.find(x => x.question_id === questionId);
+  return r ? String(r.value || '').trim() : '';
+}
+function miniAnswerFor(playerId, questionId) {
+  const a = state.miniAnswers.find(x => x.player_id === playerId && x.question_id === questionId);
+  return a ? String(a.value || '').trim() : '';
+}
+
+// Puntúa la respuesta de un jugador a una pregunta. Misma lógica que la legacy:
+// el resultado admite variantes separadas por "|"; en número, "+N" = "al menos N".
+function scoreMiniAnswer(question, answer, result) {
+  if (!result) return { points: 0, correct: false };
+  const accepted = result.split('|').map(v => v.trim()).filter(Boolean);
+  let correct = false;
+  const ft = question.field_type;
+  if (ft === 'number' || ft === 'goals-range') {
+    const predicted = String(answer || '').trim();
+    const actual = Number(result);
+    const min = predicted.match(/^\+\s*(\d+)$/);
+    correct = Number.isFinite(actual) && (min ? actual >= Number(min[1]) : Number(predicted) === actual);
+  } else if (ft === 'team') {
+    correct = accepted.map(miniNormalize).includes(miniNormalize(answer));
+  } else {
+    correct = accepted.some(v => miniNormalize(v) && miniNormalize(v) === miniNormalize(answer));
+  }
+  return { points: correct ? (question.points || 0) : 0, correct };
+}
+
+function computeMiniRanking() {
+  const rows = state.players.map(player => {
+    let points = 0, correct = 0, resolved = 0;
+    for (const q of state.miniQuestions) {
+      const result = miniResultFor(q.question_id);
+      const s = scoreMiniAnswer(q, miniAnswerFor(player.player_id, q.question_id), result);
+      points += s.points;
+      if (s.correct) correct++;
+      if (result) resolved++;
+    }
+    return { id: player.player_id, name: player.name, miniPoints: points, miniCorrect: correct, miniResolved: resolved };
+  }).sort((a, b) => b.miniPoints - a.miniPoints || b.miniCorrect - a.miniCorrect || a.name.localeCompare(b.name, 'es'));
+  rows.forEach((r, i) => { r.position = i + 1; });
+  return rows;
+}
+
+function renderMini() {
+  const questions = state.miniQuestions;
+  if (!questions.length) {
+    $app.innerHTML = `<div class="panel"><div class="panel-head"><h2>Mini-porra</h2></div><p class="empty-state">Esta porra no tiene mini-porra configurada.</p></div>`;
+    return;
+  }
+  const ranking = computeMiniRanking();
+  const q = (state.miniQuery || '').toLowerCase();
+  const rows = ranking.filter(r => r.name.toLowerCase().includes(q));
+  const resolved = questions.filter(qq => miniResultFor(qq.question_id)).length;
+  const maxPoints = questions.reduce((t, qq) => t + (qq.points || 0), 0);
+
+  $app.innerHTML = `
+    <section class="cards">
+      <article class="card"><b>${resolved}/${questions.length}</b><span>preguntas resueltas</span></article>
+      <article class="card summary-leader"><b>${ranking[0] ? esc(ranking[0].name) : '-'}</b><span>líder mini-porra</span></article>
+      <article class="card"><b>${ranking[0]?.miniPoints || 0}</b><span>puntos del líder</span></article>
+      <article class="card"><b>${maxPoints}</b><span>puntos máximos</span></article>
+    </section>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Clasificación mini-porra</h2>
+        <input type="search" data-action="mini-search" placeholder="Buscar participante…" value="${esc(state.miniQuery || '')}" />
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th class="table-center">#</th><th>Participante</th><th class="table-center">Puntos</th><th class="table-center">Aciertos</th><th class="table-center">Corregidas</th></tr></thead>
+          <tbody>${rows.map(r => `
+            <tr class="${r.position <= 3 ? 'rank-' + r.position : ''}">
+              <td class="ranking-position">${r.position}</td>
+              <td class="standing-team">${esc(r.name)}${r.id === state.myPlayerId ? ' <span class="pill">tú</span>' : ''}</td>
+              <td class="table-center points">${r.miniPoints}</td>
+              <td class="table-center">${r.miniCorrect}</td>
+              <td class="table-center">${r.miniResolved}/${questions.length}</td>
+            </tr>`).join('') || `<tr><td colspan="5" class="empty-state">Sin participantes.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Respuestas por pregunta</h2></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Pregunta</th><th>Resultado</th><th class="table-center">Puntos</th>${state.players.map(p => `<th>${esc(p.name)}</th>`).join('')}</tr></thead>
+          <tbody>${questions.map(question => {
+            const result = miniResultFor(question.question_id);
+            return `<tr>
+              <td><strong>${esc(question.question)}</strong><br><span class="field-type">${MINI_FIELD_LABELS[question.field_type] || question.field_type}</span></td>
+              <td>${result ? esc(result) : '<span class="muted">pendiente</span>'}</td>
+              <td class="table-center">${question.points || 0}</td>
+              ${state.players.map(player => {
+                const answer = miniAnswerFor(player.player_id, question.question_id);
+                const s = scoreMiniAnswer(question, answer, result);
+                return `<td class="${result ? (s.correct ? 'ok' : 'muted') : ''}">${answer ? esc(answer) : '<span class="muted">—</span>'}${s.correct ? ` (+${s.points})` : ''}</td>`;
+              }).join('')}
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
 function renderMyPorra() {
   if (!state.myPlayerId) { state.tab = 'ranking'; render(); return; }
   const open = state.porra.status === 'open' &&
@@ -831,6 +962,16 @@ document.addEventListener('input', (e) => {
     const caret = rankSearch.selectionStart;
     render();
     const again = document.querySelector('[data-action="ranking-search"]');
+    if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch {} }
+    return;
+  }
+
+  const miniSearch = e.target.closest('[data-action="mini-search"]');
+  if (miniSearch) {
+    state.miniQuery = miniSearch.value;
+    const caret = miniSearch.selectionStart;
+    render();
+    const again = document.querySelector('[data-action="mini-search"]');
     if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch {} }
   }
 });

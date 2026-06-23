@@ -81,6 +81,7 @@ El dashboard en `admin-next/` tiene:
 - ✅ Equipos como la legacy: layout de dos columnas (lista con buscador + detalle con tarjetas y barras). Reusa `src/lib/team-stats.js` (`calculateTeamStats`, `TEAM_DETAIL_METRICS`)
 - ✅ Clasificación como la legacy: medallas (🥇🥈🥉 / 💩 último), columna Mov. (`historyPositionChange`), Total/1ª fase/Exactos/Aciertos/Cruces/Campeón, cabeceras ordenables (`sortableHeader`/`sortRankingRows`) y buscador. Campeón de `porra_knockout_picks`
 - ✅ Tarjetas de accesos rápidos (`#summary`/`.cards`) encima del menú: último partido + goleadores, siguiente partido + pronóstico más elegido, partidos con resultado, líder ⭐, purria 💩, mejor racha 🔥. Reusa `pickNextPendingMatch` y `calculateBestCurrentStreak` de la lib
+- ✅ Mini-porra: tarjetas resumen + clasificación mini ordenada con buscador + tabla de respuestas por pregunta. Lee `porra_mini_questions`/`porra_mini_answers`/`porra_mini_results`. Puntuación `scoreMiniAnswer` (clon de la legacy): variantes con `|`, y en número `+N` = "al menos N"
 - ⬜ Pendiente: columna Mov. real (necesita histórico/snapshots, hoy "se mantiene"); puntos de Cruces (sin lógica de knockout todavía)
 - ✅ RLS de escritura del jugador aplicada: migración `supabase/migrations/20260623040000_player_write_predictions.sql` (funciones `pp_is_player`, `pp_predictions_open`; políticas `… player write` en `porra_predictions`/`porra_mini_answers`/`porra_knockout_picks`). Script suelto equivalente: `supabase/platform-player-write.sql`
 - ⬜ Clasificación de grupos calculada, entrada de resultados reales por el admin

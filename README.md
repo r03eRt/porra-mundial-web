@@ -519,7 +519,8 @@ Todas las secciones leen de las tablas `porra_*` (filtradas por la porra del slu
 | Clasificación grupos | ✅ | Una tabla por grupo (PJ/G/E/P/GF/GC/DG/Pts), top-2 resaltado | `porra_matches` con resultado (puntos 3/1/0, desempate Pts→DG→GF) |
 | Equipos | ✅ | Lista con buscador + detalle de un equipo: resumen y 12 stats con barras de progreso | `src/lib/team-stats.js` (`calculateTeamStats`, `TEAM_DETAIL_METRICS`) sobre `porra_matches` |
 | Detalle jugador | ✅ | Selector de jugador + su pronóstico vs resultado y puntos por partido, con total | `porra_predictions` del jugador + `scorePrediction` |
-| Histórico, Mini-porra, Cruces, Mejores terceros, Máximos goleadores, Probabilidades, Estadísticas, Comparador | ⬜ | Placeholder "próximamente" | — (se irán portando) |
+| Mini-porra | ✅ | Tarjetas resumen (resueltas, líder, puntos del líder, máximos), clasificación mini ordenada con buscador, y tabla de respuestas por pregunta vs resultado | `porra_mini_questions`, `porra_mini_answers`, `porra_mini_results`; el resultado admite variantes con `\|` y en número `+N` = "al menos N" |
+| Histórico, Cruces, Mejores terceros, Máximos goleadores, Probabilidades, Estadísticas, Comparador | ⬜ | Placeholder "próximamente" | — (se irán portando) |
 
 Login de jugador: Supabase Auth (email/password), cuenta enlazada por `porra_players.user_id`. La pestaña "Editar mi porra" solo aparece con sesión de jugador.
 

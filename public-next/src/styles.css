@@ -53,6 +53,9 @@ main{padding:24px clamp(16px,4vw,56px) 52px}
 .panel h2{margin:0}
 .hint,.muted{color:var(--muted)}
 .section-head{margin:0 0 12px}
+.field-type{color:var(--muted);font-size:12px}
+/* .cards dentro del contenido (mini-porra) sin padding lateral del resumen */
+#app .cards{padding:0;margin-bottom:0}
 
 /* --- Tablas --- */
 .table-wrap{overflow:auto;border-radius:16px;border:1px solid var(--border)}
