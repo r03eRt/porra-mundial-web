@@ -59,6 +59,7 @@ create table if not exists public.porra_teams (
   name text not null,
   flag text default '',
   group_id text,                                        -- grupo al que pertenece (opcional)
+  position int not null default 0,
   primary key (porra_id, team_id)
 );
 alter table public.porra_teams enable row level security;

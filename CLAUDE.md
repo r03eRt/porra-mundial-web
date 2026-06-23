@@ -59,7 +59,7 @@ Dos apps en el mismo repo, compartiendo el mismo proyecto Supabase.
 | Fase | Estado | Qué hay |
 |------|--------|---------|
 | 0 | ✅ | Esquema DB aplicado (`supabase/platform-schema.sql`) |
-| 1 | 🚧 | `admin-next/`: login admin, crear/listar porras, gestionar jugadores/grupos/equipos con bandera ligada, ordenados por grupo y editables/partidos/mini-porra, generar y resetear fase de grupos por jornadas, ordenar partidos y cambiar estado |
+| 1 | 🚧 | `admin-next/`: login admin, crear/listar porras, gestionar jugadores/grupos/equipos con bandera ligada, ordenados por grupo y editables/partidos/mini-porra, generar y resetear fase de grupos por jornadas, ordenar partidos con subir/bajar y arrastre en fase de grupos, y cambiar estado |
 | 2+ | ⬜ | Predicciones de jugadores, clasificación pública, mini, cruces, resultados |
 
 ### admin-next — cómo arrancarlo
@@ -69,7 +69,7 @@ cd admin-next && npm run dev   # → http://localhost:5174 (5173 ya lo usa la ap
 ```
 
 Login con `morgadoluengo@gmail.com`. El formulario de crear porra y el listado aparecen directamente.
-Haz clic en **→ Gestionar** en una porra para entrar a añadir jugadores, grupos, equipos, partidos y mini-porra. La tabla de equipos queda ordenada por grupo y permite edición inline. En la sección de partidos se puede generar automáticamente la fase de grupos por jornadas desde los grupos y equipos ya creados, con fecha inicial opcional, días entre jornadas, opción para resetear esa fase si hace falta y botones para subir/bajar partidos. La mini-porra se gestiona como listado editable de preguntas con puntos, tipo de campo y opciones.
+Haz clic en **→ Gestionar** en una porra para entrar a añadir jugadores, grupos, equipos, partidos y mini-porra. Al invitar jugadores se pide nombre visible y email; si la cuenta Auth todavía no existe, el panel la crea y la enlaza automáticamente. La tabla de equipos queda ordenada por grupo, permite edición inline y arrastre dentro del mismo grupo. En la sección de partidos se puede generar automáticamente la fase de grupos por jornadas desde los grupos y equipos ya creados, con fecha inicial opcional, días entre jornadas, opción para resetear esa fase si hace falta y botones para subir/bajar partidos o reordenar por arrastre las filas de fase de grupos. La mini-porra se gestiona como listado editable de preguntas con puntos, tipo de campo y opciones.
 
 ### admin-next — flujo de estado (main.js)
 

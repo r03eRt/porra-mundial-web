@@ -54,6 +54,10 @@ Se crean con `supabase/create-player-users.mjs` (ver el README, sección
 «Cuentas de jugadores»). Email `<id>@porrazo.local`, contraseña aleatoria,
 `player_id` y `role: 'player'` en `user_metadata`.
 
+En la plataforma multi-porra, el alta de jugadores desde `admin-next/` usa una
+Edge Function que busca primero el email en Auth y, si no existe, crea la
+cuenta automáticamente y la enlaza a la porra.
+
 ## Registro
 
 El registro público debe estar desactivado en Authentication. Las altas las

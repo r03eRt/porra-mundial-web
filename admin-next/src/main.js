@@ -113,6 +113,9 @@ const state = {
   miniQuestions: [],
   editingTeamId: null,
   editingMiniQuestionId: null,
+  playerMessage: '',
+  draggingMatchId: null,
+  draggingTeamId: null,
   detailError: '',
   error: ''
 };
@@ -189,16 +192,167 @@ function sortedTeams() {
   return [...state.teams].sort((a, b) => {
     const groupA = teamGroupName(a);
     const groupB = teamGroupName(b);
-    if (!groupA && groupB) return 1;
-    if (groupA && !groupB) return -1;
+    const aGrouped = Boolean(groupA);
+    const bGrouped = Boolean(groupB);
+    if (!aGrouped && bGrouped) return 1;
+    if (aGrouped && !bGrouped) return -1;
     const byGroup = groupA.localeCompare(groupB, 'es');
     if (byGroup !== 0) return byGroup;
+    const positionA = Number(a.position) || 0;
+    const positionB = Number(b.position) || 0;
+    if (positionA !== positionB) return positionA - positionB;
     return a.name.localeCompare(b.name, 'es');
   });
 }
 
+function nextTeamPosition(groupId) {
+  return Math.max(
+    0,
+    ...state.teams
+      .filter(team => (team.group_id ?? '') === (groupId ?? ''))
+      .map(team => Number(team.position) || 0)
+  ) + 1;
+}
+
 function groupMatchKey(groupId, team1Id, team2Id) {
   return [groupId || '', ...[team1Id, team2Id].sort()].join('::');
+}
+
+function isGroupMatch(match) {
+  return (match.phase ?? match.stage) === 'group';
+}
+
+function clearMatchDragState() {
+  state.draggingMatchId = null;
+  document.querySelectorAll('tr[data-match-id]').forEach(row => {
+    row.classList.remove('match-row-dragging', 'match-row-drop-target');
+  });
+  document.querySelectorAll('tbody[data-match-dropzone="group"]').forEach(zone => {
+    zone.classList.remove('match-dropzone-active');
+  });
+}
+
+function clearTeamDragState() {
+  state.draggingTeamId = null;
+  document.querySelectorAll('tr[data-team-id]').forEach(row => {
+    row.classList.remove('team-row-dragging', 'team-row-drop-target');
+  });
+}
+
+async function persistMatchOrder(orderedMatches) {
+  const results = await Promise.all(orderedMatches.map((match, positionIndex) =>
+    supabase.from('porra_matches')
+      .update({ position: positionIndex + 1 })
+      .eq('porra_id', state.currentPorra.id)
+      .eq('match_id', match.match_id)
+  ));
+  const failed = results.find(result => result.error);
+  if (failed) {
+    state.detailError = failed.error.message;
+    render();
+    return false;
+  }
+  return true;
+}
+
+async function persistTeamOrder(orderedTeams) {
+  const results = await Promise.all(orderedTeams.map((team, positionIndex) =>
+    supabase.from('porra_teams')
+      .update({ position: positionIndex + 1 })
+      .eq('porra_id', state.currentPorra.id)
+      .eq('team_id', team.team_id)
+  ));
+  const failed = results.find(result => result.error);
+  if (failed) {
+    state.detailError = failed.error.message;
+    render();
+    return false;
+  }
+  return true;
+}
+
+async function reorderGroupMatches(draggedMatchId, targetMatchId = null) {
+  const draggedMatch = state.matches.find(match => match.match_id === draggedMatchId);
+  if (!draggedMatch || !isGroupMatch(draggedMatch)) return;
+
+  const groupMatches = state.matches.filter(isGroupMatch);
+  const draggedIndex = groupMatches.findIndex(match => match.match_id === draggedMatchId);
+  if (draggedIndex < 0) return;
+
+  const reorderedGroup = [...groupMatches];
+  const [dragged] = reorderedGroup.splice(draggedIndex, 1);
+
+  if (targetMatchId) {
+    const targetIndex = groupMatches.findIndex(match => match.match_id === targetMatchId);
+    if (targetIndex < 0 || targetMatchId === draggedMatchId) return;
+    const insertIndex = targetIndex > draggedIndex ? targetIndex - 1 : targetIndex;
+    reorderedGroup.splice(insertIndex, 0, dragged);
+  } else {
+    reorderedGroup.push(dragged);
+  }
+
+  const rebuilt = [];
+  const groupIterator = reorderedGroup[Symbol.iterator]();
+  for (const match of state.matches) {
+    rebuilt.push(isGroupMatch(match) ? groupIterator.next().value : match);
+  }
+
+  if (rebuilt.every((match, index) => match.match_id === state.matches[index].match_id)) return;
+  if (!(await persistMatchOrder(rebuilt))) return;
+
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+function findMatchRow(element) {
+  return element instanceof Element ? element.closest('tr[data-match-id]') : null;
+}
+
+function findGroupDropzone(element) {
+  return element instanceof Element ? element.closest('tbody[data-match-dropzone="group"]') : null;
+}
+
+function highlightMatchDropTarget(matchId = null) {
+  document.querySelectorAll('tr[data-match-id]').forEach(row => {
+    row.classList.toggle('match-row-drop-target', Boolean(matchId) && row.dataset.matchId === matchId);
+  });
+}
+
+async function reorderTeamsInGroup(draggedTeamId, targetTeamId = null) {
+  const draggedTeam = state.teams.find(team => team.team_id === draggedTeamId);
+  if (!draggedTeam || !draggedTeam.group_id) return;
+
+  const groupTeams = sortedTeams().filter(team => (team.group_id ?? '') === (draggedTeam.group_id ?? ''));
+  const draggedIndex = groupTeams.findIndex(team => team.team_id === draggedTeamId);
+  if (draggedIndex < 0) return;
+
+  const reorderedGroup = [...groupTeams];
+  const [dragged] = reorderedGroup.splice(draggedIndex, 1);
+
+  if (targetTeamId) {
+    const targetIndex = groupTeams.findIndex(team => team.team_id === targetTeamId);
+    if (targetIndex < 0 || targetTeamId === draggedTeamId) return;
+    const insertIndex = targetIndex > draggedIndex ? targetIndex - 1 : targetIndex;
+    reorderedGroup.splice(insertIndex, 0, dragged);
+  } else {
+    reorderedGroup.push(dragged);
+  }
+
+  if (reorderedGroup.every((team, index) => team.team_id === groupTeams[index].team_id)) return;
+  if (!(await persistTeamOrder(reorderedGroup))) return;
+
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+function findTeamRow(element) {
+  return element instanceof Element ? element.closest('tr[data-team-id]') : null;
+}
+
+function highlightTeamDropTarget(teamId = null) {
+  document.querySelectorAll('tr[data-team-id]').forEach(row => {
+    row.classList.toggle('team-row-drop-target', Boolean(teamId) && row.dataset.teamId === teamId);
+  });
 }
 
 function buildRoundRobinRounds(teams) {
@@ -411,6 +565,7 @@ function renderDetail() {
   const playersRows = state.players.map(player => `
     <tr>
       <td>${esc(player.display_name ?? player.name ?? player.player_id)}</td>
+      <td>${esc(player.email ?? '—')}</td>
       <td><code>${esc(player.player_id)}</code></td>
       <td>${esc(player.joined_at ? new Date(player.joined_at).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—')}</td>
       <td><button type="button" class="btn-danger btn-sm del-player" data-id="${esc(player.player_id)}">✕</button></td>
@@ -441,7 +596,9 @@ function renderDetail() {
         </td>
       </tr>`;
     }
-    return `<tr>
+    const draggable = t.group_id ? 'true' : 'false';
+    const draggingClass = state.draggingTeamId === t.team_id ? ' team-row-dragging' : '';
+    return `<tr class="team-row${draggable === 'true' ? ` team-row-draggable${draggingClass}` : draggingClass}" data-team-id="${esc(t.team_id)}" data-team-group="${esc(t.group_id || '')}" draggable="${draggable}">
       <td>${esc(flag)}</td>
       <td>${esc(t.name)}</td>
       <td>${grp ? esc(grp.name) : '<span class="muted">—</span>'}</td>
@@ -469,7 +626,9 @@ function renderDetail() {
       ? (m.group_label ?? m.group_id ? `Grupo ${m.group_label ?? m.group_id}` : 'Fase de grupos')
       : (KNOCKOUT_ROUNDS.find(r => r.key === phaseKey)?.label ?? phaseKey ?? '—');
     const matchday = m.slot ? `J${m.slot}` : '—';
-    return `<tr>
+    const draggable = isGroupMatch(m) ? 'true' : 'false';
+    const draggingClass = state.draggingMatchId === m.match_id ? ' match-row-dragging' : '';
+    return `<tr class="${isGroupMatch(m) ? `match-row-draggable${draggingClass}` : `match-row${draggingClass}`}" data-match-id="${esc(m.match_id)}" data-match-phase="${esc(phaseKey)}" draggable="${draggable}">
       <td>${esc(matchday)}</td>
       <td>${esc(phase)}</td>
       <td>${t1 ? `${esc(t1.flag || flagForTeam(t1.name))} ${esc(t1.name)}` : '—'}</td>
@@ -540,15 +699,17 @@ function renderDetail() {
       <h2>Jugadores <span class="muted">(${state.players.length})</span></h2>
       ${state.players.length
         ? `<div class="table-wrap"><table class="data-table">
-            <thead><tr><th>Nombre</th><th>ID jugador</th><th>Alta</th><th></th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Email</th><th>ID jugador</th><th>Alta</th><th></th></tr></thead>
             <tbody>${playersRows}</tbody>
           </table></div>`
         : `<p class="muted">Sin jugadores todavía.</p>`}
       <form id="addPlayerForm" class="form inline-form" style="margin-top:.75rem">
+        <input name="displayName" type="text" placeholder="Nombre visible" required style="flex:1" />
         <input name="email" type="email" placeholder="jugador@correo.com" required style="flex:1" />
         <button type="submit">+ Añadir jugador</button>
       </form>
       <span class="error" id="playerError"></span>
+      ${state.playerMessage ? `<span class="muted" id="playerMessage" style="display:block;margin-top:.35rem">${esc(state.playerMessage)}</span>` : ''}
     </section>
 
     <section class="card">
@@ -569,7 +730,7 @@ function renderDetail() {
       ${state.teams.length
         ? `<div class="table-wrap"><table class="data-table">
             <thead><tr><th></th><th>Nombre</th><th>Grupo</th><th></th></tr></thead>
-            <tbody>${teamsRows}</tbody>
+            <tbody data-team-dropzone="groups">${teamsRows}</tbody>
           </table></div>`
         : `<p class="muted">Sin equipos todavía.</p>`}
       <form id="addTeamForm" class="form inline-form" style="margin-top:.75rem">
@@ -586,6 +747,7 @@ function renderDetail() {
         </select>
         <button type="submit">+ Añadir</button>
       </form>
+      <p class="muted" style="margin-top:.5rem">Puedes arrastrar los equipos dentro del mismo grupo para cambiar su orden.</p>
       <span class="error" id="teamError"></span>
     </section>
 
@@ -594,7 +756,7 @@ function renderDetail() {
       ${state.matches.length
         ? `<div class="table-wrap"><table class="data-table">
             <thead><tr><th>Jornada</th><th>Fase</th><th>Local</th><th>Visitante</th><th>Fecha</th><th>Orden</th></tr></thead>
-            <tbody>${matchRows}</tbody>
+            <tbody data-match-dropzone="group">${matchRows}</tbody>
           </table></div>`
         : `<p class="muted">Sin partidos todavía.</p>`}
       <form id="generateGroupMatchesForm" class="form inline-form" style="margin-top:.75rem">
@@ -609,6 +771,7 @@ function renderDetail() {
       <button type="button" id="resetGroupMatchesBtn" class="btn-danger" style="margin-top:.5rem">
         Resetear fase de grupos
       </button>
+      <p class="muted" style="margin-top:.5rem">También puedes arrastrar las filas de fase de grupos para reordenarlas.</p>
       <p class="muted" style="margin-top:.5rem">Borra solo los partidos de fase de grupos para poder regenerarlos desde cero.</p>
       <form id="addMatchForm" class="form match-form" style="margin-top:.75rem">
         <div class="match-row">
@@ -789,6 +952,7 @@ async function handleCreate(form) {
 
 async function openPorra(id) {
   state.currentPorra = state.porras.find(p => p.id === id) || null;
+  state.playerMessage = '';
   if (!state.currentPorra) return;
   await loadDetail(id);
   render();
@@ -823,7 +987,8 @@ async function handleAddTeam(form) {
     team_id: makeEntityId('team'),
     name,
     flag: flag || null,
-    group_id: groupId || null
+    group_id: groupId || null,
+    position: nextTeamPosition(groupId)
   });
   if (error) { errorEl.textContent = error.message; return; }
   state.editingTeamId = null;
@@ -850,6 +1015,7 @@ async function handleEditTeam(form) {
   const name = String(fd.get('teamName') || '').trim();
   const flag = String(fd.get('flag') || '').trim() || null;
   const groupId = String(fd.get('groupId') || '').trim() || null;
+  const existingTeam = state.teams.find(team => team.team_id === teamId);
   if (!name) {
     state.detailError = 'El nombre del equipo es obligatorio.';
     render();
@@ -859,7 +1025,10 @@ async function handleEditTeam(form) {
     .update({
       name,
       flag: flag || flagForTeam(name) || null,
-      group_id: groupId || null
+      group_id: groupId || null,
+      position: groupId !== (existingTeam?.group_id ?? null)
+        ? nextTeamPosition(groupId)
+        : existingTeam?.position ?? 0
     })
     .eq('porra_id', state.currentPorra.id)
     .eq('team_id', teamId);
@@ -948,18 +1117,7 @@ async function moveMatch(matchId, direction) {
 
   const ordered = [...state.matches];
   [ordered[index], ordered[targetIndex]] = [ordered[targetIndex], ordered[index]];
-  const results = await Promise.all(ordered.map((match, positionIndex) =>
-    supabase.from('porra_matches')
-      .update({ position: positionIndex + 1 })
-      .eq('porra_id', state.currentPorra.id)
-      .eq('match_id', match.match_id)
-  ));
-  const failed = results.find(result => result.error);
-  if (failed) {
-    state.detailError = failed.error.message;
-    render();
-    return;
-  }
+  if (!(await persistMatchOrder(ordered))) return;
   await loadDetail(state.currentPorra.id);
   render();
 }
@@ -1074,22 +1232,34 @@ async function deleteMiniQuestion(questionId) {
 async function handleAddPlayer(form) {
   const errorEl = document.getElementById('playerError');
   const btn = form.querySelector('button[type=submit]');
-  const email = String(new FormData(form).get('email') || '').trim();
-  if (!email) return;
+  const fd = new FormData(form);
+  const displayName = String(fd.get('displayName') || '').trim();
+  const email = String(fd.get('email') || '').trim();
+  if (!displayName || !email) {
+    errorEl.textContent = 'Indica nombre y email.';
+    return;
+  }
   btn.disabled = true;
   errorEl.textContent = '';
-  const { error } = await supabase.rpc('pp_add_player_by_email', {
-    p_porra_id: state.currentPorra.id,
-    p_email: email
+  const { data, error } = await supabase.functions.invoke('admin-next-add-player', {
+    body: {
+      porra_id: state.currentPorra.id,
+      email,
+      display_name: displayName
+    }
   });
-  if (error) {
-    errorEl.textContent = error.message;
+  if (error || data?.error) {
+    errorEl.textContent = error?.message || data?.error || 'No se pudo añadir el jugador.';
     btn.disabled = false;
     return;
   }
+  state.playerMessage = data?.temp_password
+    ? `Usuario creado en Auth. Contraseña temporal: ${data.temp_password}`
+    : 'Jugador añadido y enlazado.';
   form.reset();
   await loadDetail(state.currentPorra.id);
   render();
+  btn.disabled = false;
 }
 
 async function advancePorraStatus() {
@@ -1164,9 +1334,88 @@ document.addEventListener('submit', e => {
   if (e.target.classList.contains('edit-mini-question-form')) { e.preventDefault(); handleEditMiniQuestion(e.target); }
 });
 
+document.addEventListener('dragstart', e => {
+  const teamRow = findTeamRow(e.target);
+  if (teamRow && teamRow.dataset.teamGroup) {
+    state.draggingTeamId = teamRow.dataset.teamId;
+    teamRow.classList.add('team-row-dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', teamRow.dataset.teamId);
+    }
+    return;
+  }
+  const row = findMatchRow(e.target);
+  if (!row || row.dataset.matchPhase !== 'group') return;
+  state.draggingMatchId = row.dataset.matchId;
+  row.classList.add('match-row-dragging');
+  row.closest('tbody[data-match-dropzone="group"]')?.classList.add('match-dropzone-active');
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', row.dataset.matchId);
+  }
+});
+
+document.addEventListener('dragover', e => {
+  const teamRow = findTeamRow(e.target);
+  if (teamRow && teamRow.dataset.teamGroup) {
+    const draggedTeam = state.draggingTeamId
+      ? state.teams.find(team => team.team_id === state.draggingTeamId)
+      : null;
+    if (!draggedTeam || draggedTeam.group_id !== teamRow.dataset.teamGroup) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    highlightTeamDropTarget(teamRow.dataset.teamId);
+    return;
+  }
+  const zone = findGroupDropzone(e.target);
+  if (!zone) return;
+  const row = findMatchRow(e.target);
+  if (row && row.dataset.matchPhase !== 'group') return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  if (row && row.dataset.matchId !== state.draggingMatchId) {
+    highlightMatchDropTarget(row.dataset.matchId);
+    zone.classList.remove('match-dropzone-active');
+  } else {
+    highlightMatchDropTarget();
+    zone.classList.add('match-dropzone-active');
+  }
+});
+
+document.addEventListener('drop', e => {
+  const teamRow = findTeamRow(e.target);
+  if (teamRow && teamRow.dataset.teamGroup) {
+    const draggedId = state.draggingTeamId || e.dataTransfer?.getData('text/plain');
+    const draggedTeam = draggedId ? state.teams.find(team => team.team_id === draggedId) : null;
+    if (!draggedTeam || draggedTeam.group_id !== teamRow.dataset.teamGroup) {
+      clearTeamDragState();
+      return;
+    }
+    e.preventDefault();
+    clearTeamDragState();
+    reorderTeamsInGroup(draggedId, teamRow.dataset.teamId);
+    return;
+  }
+  const zone = findGroupDropzone(e.target);
+  if (!zone) return;
+  const row = findMatchRow(e.target);
+  if (row && row.dataset.matchPhase !== 'group') return;
+  e.preventDefault();
+  const draggedId = state.draggingMatchId || e.dataTransfer?.getData('text/plain');
+  clearMatchDragState();
+  if (!draggedId) return;
+  reorderGroupMatches(draggedId, row?.dataset.matchId || null);
+});
+
+document.addEventListener('dragend', () => {
+  clearMatchDragState();
+  clearTeamDragState();
+});
+
 document.addEventListener('click', e => {
   if (e.target.id === 'logoutBtn')              supabase.auth.signOut().then(refreshAuth);
-  if (e.target.id === 'backBtn')                { state.currentPorra = null; render(); }
+  if (e.target.id === 'backBtn')                { state.currentPorra = null; state.playerMessage = ''; render(); }
   if (e.target.id === 'advanceStatusBtn')       advancePorraStatus();
   if (e.target.classList.contains('open-porra')) openPorra(e.target.dataset.id);
   if (e.target.classList.contains('del-player')) deletePlayer(e.target.dataset.id);

@@ -161,6 +161,43 @@ button:disabled { opacity: 0.6; cursor: default; }
   gap: 0.5rem;
 }
 
+/* Match drag and drop */
+.match-row-draggable {
+  cursor: grab;
+}
+.match-row-draggable:hover td {
+  background: rgba(91, 140, 255, 0.06);
+}
+.match-row-dragging {
+  opacity: 0.45;
+}
+.match-row-drop-target td {
+  background: rgba(91, 140, 255, 0.15);
+}
+.match-dropzone-active {
+  position: relative;
+}
+.match-dropzone-active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px dashed rgba(91, 140, 255, 0.45);
+  border-radius: 8px;
+  pointer-events: none;
+}
+.team-row-draggable {
+  cursor: grab;
+}
+.team-row-draggable:hover td {
+  background: rgba(91, 140, 255, 0.06);
+}
+.team-row-dragging {
+  opacity: 0.45;
+}
+.team-row-drop-target td {
+  background: rgba(91, 140, 255, 0.15);
+}
+
 /* Tables */
 .table-wrap { overflow-x: auto; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }

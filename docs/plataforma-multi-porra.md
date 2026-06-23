@@ -5,9 +5,10 @@ Eurocopa, Nations League…) sin afectar a la porra actual del Mundial 2026.
 
 > Estado: **Fase 1 en curso**. Al 2026-06-23 el dashboard `admin-next/` ya cubre
 > login admin, crear/listar porras, detalle por porra, jugadores, grupos,
-> equipos con bandera ligada, ordenados por grupo y editables, generación y
+> equipos con bandera ligada, ordenados por grupo y editables, con arrastre
+> dentro del mismo grupo, generación y
 > reset de partidos de grupo por jornadas, mini-porra editable, orden manual de
-> partidos y avance de estado.
+> partidos con arrastre en fase de grupos y avance de estado.
 
 ## 1. Origen y objetivo
 
@@ -77,7 +78,7 @@ porras                → nombre, tipo de evento, estado (borrador/abierta/en ju
                         config de puntuación (jsonb), config de cruces (jsonb),
                         flags de features activas (mejores terceros, goleadores,
                         estadísticas, directo…)
-porra_teams           → equipos del evento (nombre, bandera/emoji)
+porra_teams           → equipos del evento (nombre, bandera/emoji, orden por grupo)
 porra_groups          → grupos (A, B…) y qué equipos van en cada uno
 porra_matches         → partidos: fase (grupo/cruce), grupo, equipo1, equipo2,
                         fecha, resultado_real (lo mete el admin), goleadores (opc.)
@@ -128,7 +129,7 @@ Regla: si una pestaña no tiene con qué alimentarse, no se muestra en esa porra
 | Fase | Qué | Resultado |
 |---|---|---|
 | 0 ✅ | Modelo de datos en Supabase (tablas nuevas + RLS), sin UI | Hecho: `supabase/platform-schema.sql` (migración `20260623000000`) |
-| 1 🚧 | Dashboard MVP: crear porra, configurar y operar manualmente | En curso: app `admin-next/` (Vite + supabase-js). Hecho: login admin, crear/listar porras, detalle por porra, gestión de jugadores/grupos/equipos con bandera ligada, ordenados por grupo y editables/partidos, mini-porra editable, generación y reset automático de partidos de grupo por jornadas con fecha inicial opcional y días entre jornadas, orden manual de partidos y ciclo `draft → open → playing → closed` |
+| 1 🚧 | Dashboard MVP: crear porra, configurar y operar manualmente | En curso: app `admin-next/` (Vite + supabase-js). Hecho: login admin, crear/listar porras, detalle por porra, gestión de jugadores/grupos/equipos con bandera ligada, ordenados por grupo y editables con arrastre dentro del mismo grupo, partidos, mini-porra editable, generación y reset automático de partidos de grupo por jornadas con fecha inicial opcional y días entre jornadas, orden manual de partidos con botones y arrastre en fase de grupos, y ciclo `draft → open → playing → closed` |
 | 2 | Predicciones de jugadores + clasificación pública | Porra de grupos jugable |
 | 3 | Mini-porras + cruces configurables | Porra completa |
 | 4 | Entrada de resultados + cálculo automático + vistas en vivo | Operativa de torneo |

@@ -49,12 +49,13 @@ El dashboard en `admin-next/` tiene:
 - ✅ Crear porra (nombre, slug auto, tipo de evento, deadline, features)
 - ✅ Listar porras del admin
 - ✅ Vista de detalle por porra: añadir/borrar grupos, equipos y partidos
-- ✅ Gestión de jugadores: añadir por email, listar y eliminar
+- ✅ Gestión de jugadores: añadir por nombre y email, listar y eliminar; si el email no existe en Auth, el panel crea la cuenta y la enlaza
 - ✅ Equipos con bandera ligada desde catálogo, con opción de equipo personalizado
-- ✅ Tabla de equipos ordenada por grupo y edición inline de equipos
+- ✅ Tabla de equipos ordenada por grupo, con edición inline y arrastre dentro del mismo grupo
 - ✅ Generación automática de partidos de fase de grupos por jornadas desde grupos + equipos
 - ✅ Reset de fase de grupos para regenerar esa estructura si algo sale mal
 - ✅ Organización manual de partidos con botones subir/bajar usando `porra_matches.position`
+- ✅ Reordenación por arrastre de las filas de fase de grupos
 - ✅ Estructura de partidos: jornadas, orden manual y fechas
 - ✅ Mini-porra editable desde el detalle de la porra: preguntas, puntos, tipo y opciones
 - ✅ Ciclo de estado de porra: `draft → open → playing → closed`
@@ -73,7 +74,7 @@ El dashboard en `admin-next/` tiene:
 
 | Archivo | Qué hace |
 |---------|----------|
-| `admin-next/src/main.js` | Toda la lógica: auth, renders, handlers, event delegation, catálogo de equipos y generación de partidos |
+| `admin-next/src/main.js` | Toda la lógica: auth, renders, handlers, event delegation, catálogo de equipos, generación y ordenación de partidos |
 | `admin-next/src/styles.css` | Tema oscuro, tablas, formularios inline |
 | `admin-next/index.html` | Esqueleto: `<header class="topbar">`, `<main id="app">`, `<div id="session">` |
 | `admin-next/vite.config.js` | `base: './'` |
@@ -123,7 +124,7 @@ function esc(value) { ... }   // XSS safe
 ```
 porras              → nombre, slug, event_type, status, owner (uuid), predictions_deadline,
                       scoring (jsonb), features (jsonb)
-porra_teams         → porra_id, name, flag, group_id
+porra_teams         → porra_id, name, flag, group_id, position
 porra_groups        → porra_id, name
 porra_matches       → porra_id, team1_id, team2_id, phase, group_label, kickoff, status,
                       score_home, score_away, slot (jornada), position (orden)
