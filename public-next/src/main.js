@@ -6,6 +6,14 @@ const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw';
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
+const PORRA_STATUS_LABELS = {
+  draft: 'Borrador',
+  open: 'Abierta',
+  live: 'En juego',
+  playing: 'En juego',
+  closed: 'Cerrada'
+};
+
 // ---------------------------------------------------------------------------
 // Estado
 // ---------------------------------------------------------------------------

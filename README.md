@@ -1,8 +1,33 @@
 # Porrazo 2026
 
-Proyecto web estático generado desde `PORRA MUNDIAL 2026 VILLAVERDE.xlsx`.
+Proyecto web de porra deportiva. Empezó como la porra del **Mundial 2026**
+(app estática generada desde `PORRA MUNDIAL 2026 VILLAVERDE.xlsx`) y ahora
+incluye además una **plataforma multi-porra** para crear porras de futuros
+eventos sin tocar la del Mundial. Son tres apps en el mismo repo que comparten
+el mismo proyecto Supabase.
 
-## Qué incluye
+## Estructura del repo
+
+```
+/                  → App del Mundial 2026 (legacy, Vite + JS vanilla)
+  index.html         entrada de la app legacy
+  src/app.js         lógica principal (cálculo, API, UI, overrides)
+  src/styles.css     estilos (tema oscuro) — fuente de verdad del aspecto
+  src/lib/           lógica pura reutilizable (porra-core, team-stats, …)
+  data/porra-data.js window.PORRA_DATA (22 jugadores, 72 partidos)
+admin-next/        → Dashboard del admin de la plataforma multi-porra
+  src/main.js        crear/configurar/operar porras (sin framework)
+public-next/       → App pública y de jugador de la plataforma multi-porra
+  src/main.js        vista por slug /p/<slug>, login jugador, editar mi porra
+  src/styles.css     reusa la paleta y clases de la app legacy
+supabase/          → SQL, migrations, Edge Functions y scripts de utilidad
+docs/              → Documentación técnica detallada
+```
+
+> La app legacy del Mundial **no se toca** salvo bug crítico; toda la
+> plataforma nueva vive en `admin-next/`, `public-next/` y las tablas `porra_*`.
+
+## Qué incluye (app legacy del Mundial)
 
 - `index.html`: aplicación principal.
 - `src/app.js`: lógica de cálculo, API, localStorage e interfaz.
@@ -456,7 +481,18 @@ Sistema nuevo (en construcción) para que el admin pueda crear porras de futuros
 
 - **Fase 0 (hecha)**: modelo de datos en Supabase. Tablas `porra_*` (porras, equipos, grupos, partidos, jugadores, predicciones, mini-porra y cruces) más `platform_admins`, todas con `porra_id` y aisladas del legacy. Esquema base en `supabase/platform-schema.sql` (migración `20260623000000`).
 - **Fase 1 (en marcha)**: dashboard en `admin-next/` con login admin, crear/listar porras, borrar porras en borrador, detalle por porra, asistente guiado para crear grupos y equipos de fase de grupos, catálogo de equipos con bandera ligada, tabla de equipos ordenada por grupo, editable y reordenable por arrastre dentro del mismo grupo, bloqueo de equipos repetidos en toda la porra, generación de partidos de grupo al final con fecha opcional, reset de partidos de grupo por jornadas con fecha inicial opcional y días entre jornadas, y reaparición del asistente al resetear para regenerar la misma fase de grupos. El asistente, la sección de jugadores, la sección de partidos y la mini-porra se quedan visibles, plegables y editables tras guardar, y al re-guardar actualizan la estructura y vuelven a regenerar los partidos de grupo. Además, la fecha/hora de cada partido se puede editar inline desde la tabla de partidos. La porra también se puede devolver a borrador desde cualquier estado. En la tabla de jugadores se muestra también la contraseña temporal cuando se crea una cuenta nueva en Auth. También hay orden manual con subir/bajar y arrastre en los partidos de fase de grupos, e invitación y borrado de jugadores. Al invitar jugadores se pide nombre visible y email; si el email todavía no tiene cuenta en Auth, el panel la crea automáticamente y enlaza ese usuario a la porra. Esta pantalla queda orientada a estructura, calendario y configuración de la mini-porra; la carga de resultados reales se decidirá aparte.
-- **Migración y función de soporte actual**: `supabase/migrations/20260623023000_admin_next_players_email_optional.sql` añade el soporte de `email` en `porra_players` y la RPC `pp_add_player_by_email(...)`; la Edge Function `supabase/functions/admin-next-add-player/` crea la cuenta Auth si falta y la enlaza a la porra.
+- **Fase 2 (en marcha)**: app pública y de jugador en `public-next/` (Vite + supabase-js, JS vanilla), separada del legacy y del dashboard admin. Se abre una porra por slug en `/p/<slug>` (o `?slug=<slug>`). El menú **replica el de la app del Mundial** reutilizando su misma paleta y clases CSS. Pestañas ya funcionales: **Clasificación porra**, **Editar mi porra** (solo con jugador logueado), **Partidos** (agrupados por jornada → grupo, con marcador grande y "Ver/Ocultar goleadores"), **Clasificación de grupos**, **Equipos** (layout de dos columnas con buscador y detalle de estadísticas con barras, reutilizando `src/lib/team-stats.js`) y **Detalle de jugador**. El resto de pestañas (Histórico, Mini-porra, Cruces, Mejores terceros, Máximos goleadores, Probabilidades, Estadísticas, Comparador) aparecen como placeholder "próximamente". El login de jugador usa Supabase Auth (email/password, cuenta enlazada por `porra_players.user_id`) y "Editar mi porra" guarda en `porra_predictions` solo si la porra está `open` y antes del `predictions_deadline`. Cálculo de puntos y clasificación reutilizan `src/lib/porra-core.js`.
+- **Migración y función de soporte actual**: `supabase/migrations/20260623023000_admin_next_players_email_optional.sql` añade el soporte de `email` en `porra_players` y la RPC `pp_add_player_by_email(...)`; la Edge Function `supabase/functions/admin-next-add-player/` crea la cuenta Auth si falta y la enlaza a la porra. La migración `supabase/migrations/20260623040000_player_write_predictions.sql` añade las funciones `pp_is_player`/`pp_predictions_open` y las políticas RLS que permiten a cada jugador escribir **sus propias** predicciones (`porra_predictions`, `porra_mini_answers`, `porra_knockout_picks`).
+
+### Cómo arrancar cada app en local
+
+| App | Carpeta | Comando | URL |
+|-----|---------|---------|-----|
+| Mundial 2026 (legacy) | `/` | `npm run dev` | `http://localhost:5173/porra-mundial-web/` |
+| Dashboard admin | `admin-next/` | `cd admin-next && npm run dev` | `http://localhost:5174` |
+| App pública / jugador | `public-next/` | `cd public-next && npm run dev` | `http://localhost:5175/p/<slug>` |
+
+Las tres apps comparten el mismo proyecto Supabase pero son independientes: el legacy usa `window.PORRA_DATA` y las tablas sin prefijo; admin-next y public-next usan las tablas `porra_*`.
 
 Planteamiento completo y fases en [docs/plataforma-multi-porra.md](./docs/plataforma-multi-porra.md).
 
