@@ -243,6 +243,9 @@ async function loadPorra() {
     group_id: m.group_id ?? m.group_label ?? null,
     // normalize: porra_matches uses phase; some older code uses stage
     stage: m.stage ?? m.phase ?? null,
+    // normalize: porra_matches uses team1_id/team2_id; render code uses team1/team2
+    team1: m.team1 ?? m.team1_id ?? null,
+    team2: m.team2 ?? m.team2_id ?? null,
   }));
   state.players = players.data || [];
   state.predictions = predictions.data || [];
