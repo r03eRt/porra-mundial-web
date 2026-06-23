@@ -112,6 +112,7 @@ const state = {
   players: [],
   miniQuestions: [],
   editingTeamId: null,
+  editingMatchId: null,
   editingMiniQuestionId: null,
   playerMessage: '',
   draggingMatchId: null,
@@ -131,6 +132,14 @@ const $session = document.getElementById('session');
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function toDatetimeLocalValue(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
 function slugify(value) {
@@ -581,6 +590,9 @@ async function loadDetail(porraId) {
   if (state.editingTeamId && !state.teams.find(team => team.team_id === state.editingTeamId)) {
     state.editingTeamId = null;
   }
+  if (state.editingMatchId && !state.matches.find(match => match.match_id === state.editingMatchId)) {
+    state.editingMatchId = null;
+  }
   if (state.editingMiniQuestionId && !state.miniQuestions.find(question => question.question_id === state.editingMiniQuestionId)) {
     state.editingMiniQuestionId = null;
   }
@@ -750,6 +762,20 @@ function renderDetail() {
     const matchday = m.slot ? `J${m.slot}` : '—';
     const draggable = isGroupMatch(m) ? 'true' : 'false';
     const draggingClass = state.draggingMatchId === m.match_id ? ' match-row-dragging' : '';
+    if (state.editingMatchId === m.match_id) {
+      return `<tr>
+        <td colspan="6">
+          <form class="inline-form edit-match-form" data-id="${esc(m.match_id)}">
+            <label style="flex:1">Fecha/hora
+              <input name="kickoff" type="datetime-local" value="${esc(toDatetimeLocalValue(m.kickoff))}" />
+            </label>
+            <button type="submit" class="btn-secondary btn-sm">Guardar</button>
+            <button type="button" class="btn-secondary btn-sm cancel-edit-match">Cancelar</button>
+            <button type="button" class="btn-danger btn-sm del-match" data-id="${esc(m.match_id)}">✕</button>
+          </form>
+        </td>
+      </tr>`;
+    }
     return `<tr class="${isGroupMatch(m) ? `match-row-draggable${draggingClass}` : `match-row${draggingClass}`}" data-match-id="${esc(m.match_id)}" data-match-phase="${esc(phaseKey)}" draggable="${draggable}">
       <td>${esc(matchday)}</td>
       <td>${esc(phase)}</td>
@@ -757,6 +783,7 @@ function renderDetail() {
       <td>${t2 ? `${esc(t2.flag || flagForTeam(t2.name))} ${esc(t2.name)}` : '—'}</td>
       <td>${esc(when)}</td>
       <td>
+        <button type="button" class="btn-secondary btn-sm edit-match" data-id="${esc(m.match_id)}">Editar fecha</button>
         <button type="button" class="btn-secondary btn-sm move-match" data-id="${esc(m.match_id)}" data-dir="up" ${index === 0 ? 'disabled' : ''}>↑</button>
         <button type="button" class="btn-secondary btn-sm move-match" data-id="${esc(m.match_id)}" data-dir="down" ${index === state.matches.length - 1 ? 'disabled' : ''}>↓</button>
         <button type="button" class="btn-danger btn-sm del-match" data-id="${esc(m.match_id)}">✕</button>
@@ -1462,6 +1489,44 @@ function cancelEditTeam() {
   render();
 }
 
+function startEditMatch(matchId) {
+  state.editingMatchId = matchId;
+  state.detailError = '';
+  render();
+}
+
+function cancelEditMatch() {
+  state.editingMatchId = null;
+  state.detailError = '';
+  render();
+}
+
+async function handleEditMatch(form) {
+  const matchId = form.dataset.id;
+  const fd = new FormData(form);
+  const kickoffRaw = String(fd.get('kickoff') || '').trim();
+  const kickoff = kickoffRaw ? new Date(kickoffRaw).toISOString() : null;
+  if (kickoffRaw && Number.isNaN(new Date(kickoffRaw).getTime())) {
+    state.detailError = 'La fecha del partido no es válida.';
+    render();
+    return;
+  }
+  const { error } = await supabase.from('porra_matches')
+    .update({
+      kickoff
+    })
+    .eq('porra_id', state.currentPorra.id)
+    .eq('match_id', matchId);
+  if (error) {
+    state.detailError = error.message;
+    render();
+    return;
+  }
+  state.editingMatchId = null;
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
 async function handleEditTeam(form) {
   const teamId = form.dataset.id;
   const fd = new FormData(form);
@@ -1789,6 +1854,7 @@ document.addEventListener('submit', e => {
   if (e.target.id === 'addGroupForm') { e.preventDefault(); handleAddGroup(e.target); }
   if (e.target.id === 'addTeamForm')  { e.preventDefault(); handleAddTeam(e.target); }
   if (e.target.classList.contains('edit-team-form')) { e.preventDefault(); handleEditTeam(e.target); }
+  if (e.target.classList.contains('edit-match-form')) { e.preventDefault(); handleEditMatch(e.target); }
   if (e.target.id === 'addMatchForm') { e.preventDefault(); handleAddMatch(e.target); }
   if (e.target.id === 'generateGroupMatchesForm') { e.preventDefault(); handleGenerateGroupMatches(e.target); }
   if (e.target.id === 'addMiniQuestionForm') { e.preventDefault(); handleAddMiniQuestion(e.target); }
@@ -1887,6 +1953,8 @@ document.addEventListener('click', e => {
   if (e.target.classList.contains('open-porra')) openPorra(e.target.dataset.id);
   if (e.target.classList.contains('delete-porra')) deletePorra(e.target.dataset.id);
   if (e.target.classList.contains('del-player')) deletePlayer(e.target.dataset.id);
+  if (e.target.classList.contains('edit-match'))  startEditMatch(e.target.dataset.id);
+  if (e.target.classList.contains('cancel-edit-match')) cancelEditMatch();
   if (e.target.classList.contains('edit-team'))  startEditTeam(e.target.dataset.id);
   if (e.target.classList.contains('cancel-edit-team')) cancelEditTeam();
   if (e.target.classList.contains('del-team'))   deleteTeam(e.target.dataset.id);

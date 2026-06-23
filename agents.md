@@ -60,6 +60,7 @@ El dashboard en `admin-next/` tiene:
 - ✅ Si se resetea la fase de grupos, el asistente reaparece para regenerar los mismos partidos a partir de la estructura guardada
 - ✅ Reset de fase de grupos para regenerar esa estructura si algo sale mal
 - ✅ Organización manual de partidos con botones subir/bajar usando `porra_matches.position`
+- ✅ Edición inline de la fecha de cada partido desde la sección de partidos
 - ✅ Reordenación por arrastre de las filas de fase de grupos
 - ✅ Estructura de partidos: jornadas, orden manual y fechas
 - ✅ Sección de partidos plegable desde la cabecera, igual que el asistente de grupos
