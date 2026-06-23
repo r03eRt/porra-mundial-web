@@ -3,6 +3,7 @@ import {
   scorePrediction, historyPositionChange,
   calculateBestCurrentStreak, pickNextPendingMatch
 } from '../../src/lib/porra-core.js';
+import { parseScore } from '../../src/lib/statistics-utils.js';
 import { calculateTeamStats, TEAM_DETAIL_METRICS } from '../../src/lib/team-stats.js';
 
 const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
@@ -27,6 +28,120 @@ const KNOCKOUT_STAGE_META = {
 };
 
 const KNOCKOUT_STAGE_ORDER = ['r32', 'r16', 'qf', 'sf', 'final', 'champion'];
+
+const KNOCKOUT_TEMPLATES = {
+  euro_8: {
+    id: 'euro_8',
+    label: 'Eurocopa 1980-1992 (8 equipos)',
+    teams: 8,
+    groups: ['A', 'B'],
+    knockout: [
+      { id: 'F', round: 'final', home: 'A1', away: 'B1' }
+    ]
+  },
+  euro_16: {
+    id: 'euro_16',
+    label: 'Eurocopa 1996-2012 (16 equipos)',
+    teams: 16,
+    groups: ['A', 'B', 'C', 'D'],
+    knockout: [
+      { id: 'QF1', round: 'qf', home: 'A1', away: 'B2' },
+      { id: 'QF2', round: 'qf', home: 'B1', away: 'A2' },
+      { id: 'QF3', round: 'qf', home: 'C1', away: 'D2' },
+      { id: 'QF4', round: 'qf', home: 'D1', away: 'C2' },
+      { id: 'SF1', round: 'sf', home: 'W:QF1', away: 'W:QF3' },
+      { id: 'SF2', round: 'sf', home: 'W:QF2', away: 'W:QF4' },
+      { id: 'F', round: 'final', home: 'W:SF1', away: 'W:SF2' }
+    ]
+  },
+  euro_24: {
+    id: 'euro_24',
+    label: 'Eurocopa 2016-2028 (24 equipos)',
+    teams: 24,
+    groups: ['A', 'B', 'C', 'D', 'E', 'F'],
+    thirdPlaceQualifiers: 4,
+    knockout: [
+      { id: 'R16_1', round: 'r16', home: 'B1', away: '3A/B/C/D' },
+      { id: 'R16_2', round: 'r16', home: 'A1', away: 'C2' },
+      { id: 'R16_3', round: 'r16', home: 'F1', away: '3A/B/C' },
+      { id: 'R16_4', round: 'r16', home: 'D2', away: 'E2' },
+      { id: 'R16_5', round: 'r16', home: 'E1', away: '3A/B/C/D' },
+      { id: 'R16_6', round: 'r16', home: 'D1', away: 'F2' },
+      { id: 'R16_7', round: 'r16', home: 'C1', away: '3D/E/F' },
+      { id: 'R16_8', round: 'r16', home: 'A2', away: 'B2' },
+      { id: 'QF1', round: 'qf', home: 'W:R16_1', away: 'W:R16_2' },
+      { id: 'QF2', round: 'qf', home: 'W:R16_3', away: 'W:R16_4' },
+      { id: 'QF3', round: 'qf', home: 'W:R16_5', away: 'W:R16_6' },
+      { id: 'QF4', round: 'qf', home: 'W:R16_7', away: 'W:R16_8' },
+      { id: 'SF1', round: 'sf', home: 'W:QF1', away: 'W:QF2' },
+      { id: 'SF2', round: 'sf', home: 'W:QF3', away: 'W:QF4' },
+      { id: 'F', round: 'final', home: 'W:SF1', away: 'W:SF2' }
+    ]
+  },
+  worldcup_32: {
+    id: 'worldcup_32',
+    label: 'Mundial 32 equipos (1998-2022)',
+    teams: 32,
+    groups: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'],
+    knockout: [
+      { id: 'R16-1', round: 'r16', home: 'A1', away: 'B2' },
+      { id: 'R16-2', round: 'r16', home: 'C1', away: 'D2' },
+      { id: 'R16-3', round: 'r16', home: 'E1', away: 'F2' },
+      { id: 'R16-4', round: 'r16', home: 'G1', away: 'H2' },
+      { id: 'R16-5', round: 'r16', home: 'B1', away: 'A2' },
+      { id: 'R16-6', round: 'r16', home: 'D1', away: 'C2' },
+      { id: 'R16-7', round: 'r16', home: 'F1', away: 'E2' },
+      { id: 'R16-8', round: 'r16', home: 'H1', away: 'G2' },
+      { id: 'QF1', round: 'qf', home: 'W:R16-1', away: 'W:R16-2' },
+      { id: 'QF2', round: 'qf', home: 'W:R16-3', away: 'W:R16-4' },
+      { id: 'QF3', round: 'qf', home: 'W:R16-5', away: 'W:R16-6' },
+      { id: 'QF4', round: 'qf', home: 'W:R16-7', away: 'W:R16-8' },
+      { id: 'SF1', round: 'sf', home: 'W:QF1', away: 'W:QF2' },
+      { id: 'SF2', round: 'sf', home: 'W:QF3', away: 'W:QF4' },
+      { id: 'F', round: 'final', home: 'W:SF1', away: 'W:SF2' }
+    ]
+  },
+  worldcup_48: {
+    id: 'worldcup_48',
+    label: 'Mundial 2026 (48 equipos)',
+    teams: 48,
+    groups: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'],
+    thirdPlaceQualifiers: 8,
+    knockout: [
+      { id: 'R32-1', round: 'r32', home: '2A', away: '2B' },
+      { id: 'R32-2', round: 'r32', home: '1E', away: '3A/B/C/D/F' },
+      { id: 'R32-3', round: 'r32', home: '1F', away: '2C' },
+      { id: 'R32-4', round: 'r32', home: '1C', away: '2F' },
+      { id: 'R32-5', round: 'r32', home: '1I', away: '3C/D/F/G/H' },
+      { id: 'R32-6', round: 'r32', home: '2E', away: '2I' },
+      { id: 'R32-7', round: 'r32', home: '1A', away: '3C/E/F/H/I' },
+      { id: 'R32-8', round: 'r32', home: '1L', away: '3E/H/I/J/K' },
+      { id: 'R32-9', round: 'r32', home: '1D', away: '3B/E/F/I/J' },
+      { id: 'R32-10', round: 'r32', home: '1G', away: '3A/E/H/I/J' },
+      { id: 'R32-11', round: 'r32', home: '2K', away: '2L' },
+      { id: 'R32-12', round: 'r32', home: '1H', away: '2J' },
+      { id: 'R32-13', round: 'r32', home: '1B', away: '3E/F/G/I/J' },
+      { id: 'R32-14', round: 'r32', home: '1J', away: '2H' },
+      { id: 'R32-15', round: 'r32', home: '1K', away: '3D/E/I/J/L' },
+      { id: 'R32-16', round: 'r32', home: '2D', away: '2G' },
+      { id: 'R16-1', round: 'r16', home: 'W:R32-2', away: 'W:R32-5' },
+      { id: 'R16-2', round: 'r16', home: 'W:R32-1', away: 'W:R32-3' },
+      { id: 'R16-3', round: 'r16', home: 'W:R32-4', away: 'W:R32-6' },
+      { id: 'R16-4', round: 'r16', home: 'W:R32-7', away: 'W:R32-8' },
+      { id: 'R16-5', round: 'r16', home: 'W:R32-11', away: 'W:R32-12' },
+      { id: 'R16-6', round: 'r16', home: 'W:R32-9', away: 'W:R32-10' },
+      { id: 'R16-7', round: 'r16', home: 'W:R32-14', away: 'W:R32-13' },
+      { id: 'R16-8', round: 'r16', home: 'W:R32-15', away: 'W:R32-16' },
+      { id: 'QF1', round: 'qf', home: 'W:R16-1', away: 'W:R16-2' },
+      { id: 'QF2', round: 'qf', home: 'W:R16-3', away: 'W:R16-4' },
+      { id: 'QF3', round: 'qf', home: 'W:R16-5', away: 'W:R16-6' },
+      { id: 'QF4', round: 'qf', home: 'W:R16-7', away: 'W:R16-8' },
+      { id: 'SF1', round: 'sf', home: 'W:QF1', away: 'W:QF2' },
+      { id: 'SF2', round: 'sf', home: 'W:QF3', away: 'W:QF4' },
+      { id: 'F', round: 'final', home: 'W:SF1', away: 'W:SF2' }
+    ]
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Estado
@@ -150,6 +265,11 @@ function predictionFor(playerId, matchId) {
   return state.predictions.find(p => p.player_id === playerId && p.match_id === matchId) || null;
 }
 
+function predictedResultFor(playerId, matchId) {
+  const parsed = parseScore(predictionFor(playerId, matchId)?.score);
+  return parsed ? { home: parsed[0], away: parsed[1] } : null;
+}
+
 function showAppToast(message, duration = 2400) {
   const text = String(message ?? '').trim();
   if (!text) return;
@@ -234,6 +354,244 @@ function computeGroupStandingsByMatches(groupId) {
   );
 }
 
+function computePredictedGroupStandings(playerId, groupId) {
+  const matches = state.matches.filter(match => match.stage === 'group' && (match.group_id ?? match.group_label) === groupId);
+  const teams = state.teams.filter(team => String(team.group_id ?? '') === String(groupId));
+  const teamIds = teams.length
+    ? teams.map(team => team.team_id)
+    : [...new Set(matches.flatMap(match => [match.team1_id ?? match.team1, match.team2_id ?? match.team2]).filter(Boolean))];
+  const rows = teamIds.map((team, index) => {
+    const teamMeta = state.teams.find(item => item.team_id === team) || null;
+    return {
+      group: groupId,
+      team: teamMeta ? teamMeta.name : team,
+      teamId: teamMeta ? teamMeta.team_id : team,
+      idx: Number(teamMeta?.position) || index,
+      pj: 0,
+      g: 0,
+      e: 0,
+      p: 0,
+      gf: 0,
+      gc: 0,
+      pts: 0
+    };
+  });
+  const byTeam = new Map(rows.map(row => [row.team, row]));
+  const byTeamId = new Map(rows.map(row => [row.teamId, row]));
+
+  for (const match of matches) {
+    const result = predictedResultFor(playerId, match.match_id);
+    if (!result) continue;
+    const home = byTeamId.get(match.team1_id ?? match.team1) || byTeam.get(teamName(match.team1_id ?? match.team1));
+    const away = byTeamId.get(match.team2_id ?? match.team2) || byTeam.get(teamName(match.team2_id ?? match.team2));
+    if (!home || !away) continue;
+    home.pj++;
+    away.pj++;
+    home.gf += result.home;
+    home.gc += result.away;
+    away.gf += result.away;
+    away.gc += result.home;
+    if (result.home > result.away) {
+      home.pts += 3;
+      home.g++;
+      away.p++;
+    } else if (result.away > result.home) {
+      away.pts += 3;
+      away.g++;
+      home.p++;
+    } else {
+      home.pts++;
+      away.pts++;
+      home.e++;
+      away.e++;
+    }
+  }
+
+  return rows.sort((a, b) =>
+    b.pts - a.pts ||
+    ((b.gf - b.gc) - (a.gf - a.gc)) ||
+    (b.gf - a.gf) ||
+    (a.idx - b.idx)
+  );
+}
+
+// Letras de grupo reales de la porra (A, B, C…), ordenadas.
+function porraGroupLetters() {
+  const letters = state.groups.length
+    ? state.groups.map(group => String(group.group_id ?? group.name ?? '').trim().toUpperCase())
+    : [...new Set(state.teams.map(team => String(team.group_id ?? '').trim().toUpperCase()))];
+  return letters.filter(Boolean).sort();
+}
+
+// ¿La plantilla encaja con la estructura real de grupos de la porra?
+// (mismos grupos y, si aplica, mismos terceros). Evita cargar un bracket de
+// otro formato cuando el templateId no está guardado o no concuerda.
+function templateFitsStructure(template) {
+  if (!template?.groups?.length) return false;
+  const actual = porraGroupLetters();
+  if (!actual.length) return false;
+  const expected = [...template.groups].map(g => String(g).toUpperCase()).sort();
+  return actual.length === expected.length &&
+    actual.every((letter, index) => letter === expected[index]);
+}
+
+// Elige la plantilla cuyos grupos coinciden exactamente con los de la porra.
+function templateByStructure() {
+  const matches = Object.values(KNOCKOUT_TEMPLATES).filter(templateFitsStructure);
+  if (!matches.length) return null;
+  // Si varias encajan (mismo nº de grupos), prefiere la que NO use terceros
+  // cuando la porra no tiene terceros declarados, y la de menos equipos.
+  return matches.sort((a, b) =>
+    (a.thirdPlaceQualifiers || 0) - (b.thirdPlaceQualifiers || 0) ||
+    (a.teams || 0) - (b.teams || 0)
+  )[0];
+}
+
+function knockoutTemplateForPorra() {
+  const eventKey = String(state.porra?.event_type || '').trim().toLowerCase();
+  const templateId = String(state.porra?.scoring?.knockout?.templateId || '').trim().toLowerCase();
+
+  // 1) templateId explícito y existente → manda, salvo que no encaje con la
+  //    estructura real (porra mal tipada). En ese caso, se corrige por estructura.
+  const explicit = templateId ? KNOCKOUT_TEMPLATES[templateId] : null;
+  if (explicit && templateFitsStructure(explicit)) return explicit;
+
+  // 2) Sin templateId válido (o no encaja): elige por la estructura de grupos.
+  const byStructure = templateByStructure();
+  if (byStructure) return byStructure;
+
+  // 3) Fallback al comportamiento previo por tipo de evento.
+  if (explicit) return explicit;
+  if (eventKey === 'worldcup') return KNOCKOUT_TEMPLATES.worldcup_48;
+  if (eventKey === 'euro') return KNOCKOUT_TEMPLATES.euro_24;
+  return null;
+}
+
+function knockoutTemplateMatches() {
+  return knockoutTemplateForPorra()?.knockout || [];
+}
+
+function knockoutTemplateRoundMatches(stageKey) {
+  return knockoutTemplateMatches()
+    .filter(match => normalizeKnockoutStageKey(match.round) === stageKey);
+}
+
+function parseThirdPlaceGroups(token) {
+  const text = String(token || '').trim().toUpperCase();
+  if (!/^3[A-L](?:\/[A-L])+$/.test(text)) return [];
+  return text.slice(1).split('/');
+}
+
+function buildPredictedThirdPlaceAssignments(playerId) {
+  const template = knockoutTemplateForPorra();
+  if (!template?.thirdPlaceQualifiers) return new Map();
+
+  const standingsByGroup = predictedStandingsByPlayer(playerId);
+  const thirdPlaceByGroup = new Map();
+  for (const groupId of template.groups || []) {
+    const standings = standingsByGroup.get(groupId) || [];
+    if (standings[2]) thirdPlaceByGroup.set(groupId, standings[2]);
+  }
+
+  const bestThirds = [...thirdPlaceByGroup.values()]
+    .filter(Boolean)
+    .sort((a, b) =>
+      b.pts - a.pts ||
+      ((b.gf - b.gc) - (a.gf - a.gc)) ||
+      (b.gf - a.gf) ||
+      a.team.localeCompare(b.team, 'es')
+    )
+    .slice(0, template.thirdPlaceQualifiers);
+  const bestThirdGroups = new Set(bestThirds.map(row => row.group).filter(Boolean));
+  const assignments = new Map();
+  const used = new Set();
+
+  for (const fixture of template.knockout || []) {
+    for (const side of ['home', 'away']) {
+      const groups = parseThirdPlaceGroups(fixture[side]);
+      if (!groups.length) continue;
+      const candidates = groups.filter(group => bestThirdGroups.has(group) && !used.has(group));
+      const selectedGroup = candidates[0] || groups.find(group => !used.has(group)) || groups[0];
+      const thirdRow = thirdPlaceByGroup.get(selectedGroup);
+      if (thirdRow) {
+        assignments.set(`${fixture.id}:${side}`, thirdRow.team);
+        used.add(selectedGroup);
+      }
+    }
+  }
+
+  return assignments;
+}
+
+function resolveTemplateToken(token, playerId, context = {}) {
+  const raw = String(token || '').trim();
+  if (!raw) return '';
+
+  const directTeam = teamByToken(raw);
+  if (directTeam) return directTeam.name;
+
+  const groupSeed = raw.match(/^([A-Z]+)([12])$/);
+  if (groupSeed) {
+    const standings = context.standingsByGroup?.get(groupSeed[1]) || [];
+    return standings[Number(groupSeed[2]) - 1]?.team || raw;
+  }
+
+  const thirdGroups = parseThirdPlaceGroups(raw);
+  if (thirdGroups.length) {
+    const assigned = context.thirdPlaceAssignments?.get(`${context.fixtureId}:${context.side}`);
+    if (assigned) return assigned;
+    for (const groupId of thirdGroups) {
+      const thirdRow = context.thirdPlaceByGroup?.get(groupId);
+      if (thirdRow?.team) return thirdRow.team;
+    }
+    return raw;
+  }
+
+  return raw;
+}
+
+function predictedStandingsByPlayer(playerId) {
+  const groups = state.groups.length
+    ? state.groups.map(group => group.group_id ?? group.name).filter(Boolean)
+    : [...new Set(state.teams.map(team => team.group_id).filter(Boolean))];
+  const result = new Map();
+  for (const groupId of groups) {
+    result.set(String(groupId), computePredictedGroupStandings(playerId, String(groupId)));
+  }
+  return result;
+}
+
+function resolvePlayerGroupSeed(token, playerId, standingsByGroup = predictedStandingsByPlayer(playerId)) {
+  const raw = String(token || '').trim();
+  if (!raw) return '';
+
+  const directTeam = teamByToken(raw);
+  if (directTeam) return directTeam.name;
+
+  const groupSeed = raw.match(/^([A-Z]+)([12])$/);
+  if (groupSeed) {
+    const standings = standingsByGroup.get(groupSeed[1]) || [];
+    return standings[Number(groupSeed[2]) - 1]?.team || raw;
+  }
+
+  return raw;
+}
+
+function knockoutRoundMatches(stageKey) {
+  return knockoutMatches()
+    .filter(match => normalizeKnockoutStageKey(match.round_key) === stageKey)
+    .sort((a, b) =>
+      Number(a.position || 0) - Number(b.position || 0) ||
+      String(a.match_id || '').localeCompare(String(b.match_id || ''), 'es')
+    );
+}
+
+function knockoutFixtureTeam(match, side) {
+  if (side === 'home') return match.home ?? match.team1_id ?? match.team1 ?? '';
+  if (side === 'away') return match.away ?? match.team2_id ?? match.team2 ?? '';
+  return '';
+}
+
 function resolveKnockoutSeed(token, seen = new Set()) {
   const raw = String(token || '').trim();
   if (!raw) return '';
@@ -294,6 +652,26 @@ function knockoutStages() {
     return [...structure, { key: 'champion', label: KNOCKOUT_STAGE_META.champion.label, teams: 1, points: scoring.champion }];
   }
 
+  const template = knockoutTemplateForPorra();
+  if (template?.knockout?.length) {
+    const counts = { r32: 0, r16: 0, qf: 0, sf: 0, final: 0 };
+    for (const match of template.knockout) {
+      const roundKey = normalizeKnockoutStageKey(match.round);
+      if (counts[roundKey] != null) counts[roundKey] += 1;
+    }
+    const derived = KNOCKOUT_STAGE_ORDER
+      .filter(key => key !== 'champion' && counts[key] > 0)
+      .map(key => ({
+        key,
+        label: KNOCKOUT_STAGE_META[key].label,
+        teams: counts[key] * 2,
+        points: scoring[key]
+      }));
+    if (derived.length) {
+      return [...derived, { key: 'champion', label: KNOCKOUT_STAGE_META.champion.label, teams: 1, points: scoring.champion }];
+    }
+  }
+
   const derived = KNOCKOUT_STAGE_ORDER
     .filter(key => key !== 'champion')
     .map(key => {
@@ -334,27 +712,165 @@ function knockoutStagePicks(playerId, stageKey, expectedTeams = 0) {
   return Array.from({ length: size }, (_, index) => picks[index] || '');
 }
 
+function uniqueTeamList(teams) {
+  const seen = new Set();
+  return teams.filter(team => {
+    const key = knockoutTeamKey(team);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function predictedQualifiedTeams(playerId) {
+  const template = knockoutTemplateForPorra();
+  const standingsByGroup = predictedStandingsByPlayer(playerId);
+  const teams = [];
+  const thirdPlaceRows = [];
+
+  for (const groupId of template?.groups || [...standingsByGroup.keys()]) {
+    const standings = standingsByGroup.get(groupId) || [];
+    if (standings[0]?.team) teams.push(standings[0].team);
+    if (standings[1]?.team) teams.push(standings[1].team);
+    if (standings[2]?.team) thirdPlaceRows.push(standings[2]);
+  }
+
+  const thirdPlaceQualifiers = Number(template?.thirdPlaceQualifiers || 0);
+  if (thirdPlaceQualifiers > 0) {
+    const bestThirds = thirdPlaceRows
+      .filter(Boolean)
+      .sort((a, b) =>
+        b.pts - a.pts ||
+        ((b.gf - b.gc) - (a.gf - a.gc)) ||
+        (b.gf - a.gf) ||
+        String(a.team).localeCompare(String(b.team), 'es')
+      )
+      .slice(0, thirdPlaceQualifiers);
+    teams.push(...bestThirds.map(row => row.team));
+  }
+
+  return uniqueTeamList(teams);
+}
+
+// Token "W:<id>" → índice de ese partido dentro de su ronda en la plantilla.
+// Permite seguir el cableado real del bracket (p. ej. R16-1 = W:R32-2 + W:R32-5),
+// en vez de asumir que cada cruce se alimenta de las dos posiciones contiguas.
+function templateFixtureIndexById(matchId) {
+  const target = String(matchId || '').trim().toUpperCase();
+  if (!target) return -1;
+  const fixtures = knockoutTemplateMatches();
+  const fixture = fixtures.find(m => String(m.id || '').toUpperCase() === target);
+  if (!fixture) return -1;
+  const roundKey = normalizeKnockoutStageKey(fixture.round);
+  const roundFixtures = fixtures.filter(m => normalizeKnockoutStageKey(m.round) === roundKey);
+  return roundFixtures.findIndex(m => String(m.id || '').toUpperCase() === target);
+}
+
+// Equipos que pueden ganar un cruce de una ronda > 0: los ganadores que el
+// jugador ya tenga puestos en los dos cruces que lo alimentan según la plantilla.
+// Si la plantilla no usa "W:" (o no hay plantilla), cae a posiciones contiguas.
+function feedersForKnockoutMatch(stageKey, matchIndex, bracket, previousStageKey) {
+  const previousRound = bracket?.[previousStageKey] || [];
+  const stageFixtures = knockoutTemplateRoundMatches(stageKey);
+  const fixture = stageFixtures[matchIndex];
+  const winnerTokens = fixture
+    ? ['home', 'away']
+        .map(side => String(knockoutFixtureTeam(fixture, side) || '').match(/^W:(.+)$/i)?.[1])
+        .filter(Boolean)
+    : [];
+
+  if (winnerTokens.length === 2) {
+    return winnerTokens.map(id => previousRound[templateFixtureIndexById(id)] || '');
+  }
+
+  // Fallback: cruces contiguos (plantillas con bracket adyacente o sin "W:").
+  const pairIndex = matchIndex * 2;
+  return [previousRound[pairIndex], previousRound[pairIndex + 1]];
+}
+
+function allowedTeamsForKnockoutSlot(playerId, stageKey, slot, bracket) {
+  const roundStages = knockoutRoundStages();
+  const stageIndex = roundStages.findIndex(stage => stage.key === stageKey);
+  if (stageIndex < 0) return [];
+
+  if (stageIndex === 0) {
+    const templateMatches = knockoutTemplateRoundMatches(stageKey);
+    const matchIndex = Math.floor((Number(slot) - 1) / 2);
+    const fixture = templateMatches[matchIndex];
+    if (!fixture) return predictedQualifiedTeams(playerId);
+    const side = Number(slot) % 2 === 1 ? 'home' : 'away';
+    const context = {
+      standingsByGroup: predictedStandingsByPlayer(playerId),
+      thirdPlaceByGroup: new Map(),
+      thirdPlaceAssignments: buildPredictedThirdPlaceAssignments(playerId),
+      fixtureId: fixture.id,
+      side
+    };
+    const token = knockoutFixtureTeam(fixture, side);
+    return uniqueTeamList([resolveTemplateToken(token, playerId, context)].filter(Boolean));
+  }
+
+  const previousStage = roundStages[stageIndex - 1];
+  const matchIndex = Number(slot) - 1;
+  return uniqueTeamList(
+    feedersForKnockoutMatch(stageKey, matchIndex, bracket, previousStage.key).filter(Boolean)
+  );
+}
+
+function allowedTeamsForChampionSlot(playerId, bracket, finalStageKey) {
+  return uniqueTeamList((bracket?.[finalStageKey] || []).filter(Boolean));
+}
+
 function buildPlayerKnockoutBracket(playerId) {
   const roundStages = knockoutRoundStages();
   if (!roundStages.length) return {};
 
   const bracket = {};
+  const standingsByGroup = predictedStandingsByPlayer(playerId);
+  const template = knockoutTemplateForPorra();
+  const thirdPlaceByGroup = new Map();
+  if (template?.thirdPlaceQualifiers) {
+    for (const groupId of template.groups || []) {
+      const standings = standingsByGroup.get(groupId) || [];
+      if (standings[2]) thirdPlaceByGroup.set(groupId, standings[2]);
+    }
+  }
+  const thirdPlaceAssignments = buildPredictedThirdPlaceAssignments(playerId);
   const firstStage = roundStages[0];
-  bracket[firstStage.key] = knockoutStagePicks(playerId, firstStage.key, firstStage.teams);
+  const firstStageMatches = knockoutRoundMatches(firstStage.key);
+  const sourceMatches = firstStageMatches.length ? firstStageMatches : knockoutTemplateRoundMatches(firstStage.key);
+  const firstStageDefaults = sourceMatches.flatMap((match, index) => [
+    resolveTemplateToken(knockoutFixtureTeam(match, 'home'), playerId, {
+      standingsByGroup,
+      thirdPlaceByGroup,
+      thirdPlaceAssignments,
+      fixtureId: match.match_id || match.id || `${firstStage.key}:${index}`,
+      side: 'home'
+    }),
+    resolveTemplateToken(knockoutFixtureTeam(match, 'away'), playerId, {
+      standingsByGroup,
+      thirdPlaceByGroup,
+      thirdPlaceAssignments,
+      fixtureId: match.match_id || match.id || `${firstStage.key}:${index}`,
+      side: 'away'
+    })
+  ]);
+  bracket[firstStage.key] = firstStageDefaults.map(team => team || '');
 
-  let previousRound = bracket[firstStage.key];
+  let previousStageKey = firstStage.key;
   for (const stage of roundStages.slice(1)) {
     const selectedTeams = knockoutStagePicks(playerId, stage.key, stage.teams);
-    const selectedKeys = new Set(selectedTeams.map(knockoutTeamKey).filter(Boolean));
-
+    const matchCount = Math.floor((bracket[previousStageKey] || []).length / 2);
     bracket[stage.key] = [];
-    for (let index = 0; index < previousRound.length; index += 2) {
-      const pair = [previousRound[index], previousRound[index + 1]];
-      const winner = pair.find(team => selectedKeys.has(knockoutTeamKey(team))) || selectedTeams[index / 2] || '';
+    for (let matchIndex = 0; matchIndex < matchCount; matchIndex += 1) {
+      const feeders = feedersForKnockoutMatch(stage.key, matchIndex, bracket, previousStageKey);
+      const allowed = uniqueTeamList(feeders.filter(Boolean));
+      const saved = selectedTeams[matchIndex] || '';
+      const winner = allowed.some(team => knockoutTeamKey(team) === knockoutTeamKey(saved)) ? saved : '';
       bracket[stage.key].push(winner);
     }
 
-    previousRound = bracket[stage.key];
+    previousStageKey = stage.key;
   }
 
   return bracket;
@@ -561,6 +1077,30 @@ async function refreshKnockoutPicksFromState() {
   state.knockoutPicks = data || [];
 }
 
+// Re-renderiza solo la pestaña de cruces conservando lo que el usuario haya
+// dejado escrito en otros selects sin guardar todavía. `skipKey` es el
+// `stageKey:slot` que se acaba de guardar/limpiar (ese sí toma el valor de la BD).
+function rerenderKnockoutPreservingDrafts(skipKey = '') {
+  if (state.tab !== 'knockout') { render(); return; }
+
+  const drafts = new Map();
+  document.querySelectorAll('[data-knockout-input]').forEach(select => {
+    const key = select.getAttribute('data-knockout-input');
+    if (key && key !== skipKey) drafts.set(key, select.value);
+  });
+
+  renderKnockout();
+
+  drafts.forEach((value, key) => {
+    const select = document.querySelector(`[data-knockout-input="${CSS.escape(key)}"]`);
+    if (!select || select.disabled) return;
+    // Solo restaura si la opción sigue siendo válida en la nueva estructura.
+    if ([...select.options].some(option => option.value === value)) {
+      select.value = value;
+    }
+  });
+}
+
 function knockoutEditOpen() {
   return Boolean(state.myPlayerId) &&
     state.porra.status === 'open' &&
@@ -582,6 +1122,12 @@ async function saveKnockoutPick(stageKey, slot) {
     showAppToast('Necesitas entrar para guardar tus cruces.');
     return;
   }
+  const stageIndex = knockoutRoundStages().findIndex(stage => stage.key === normalizeKnockoutStageKey(stageKey));
+  if (stageIndex === 0) {
+    if (status) status.textContent = 'Ronda automática.';
+    showAppToast('Los cruces iniciales se generan automáticamente desde la fase de grupos.');
+    return;
+  }
   if (!knockoutEditOpen()) {
     if (status) status.textContent = 'Edición cerrada.';
     showAppToast('La porra no está abierta o ya pasó el deadline.');
@@ -589,9 +1135,18 @@ async function saveKnockoutPick(stageKey, slot) {
   }
 
   const team = knockoutInputValue(stageKey, slot);
+  const currentBracket = buildPlayerKnockoutBracket(state.myPlayerId);
+  const allowedTeams = stageKey === 'champion'
+    ? allowedTeamsForChampionSlot(state.myPlayerId, currentBracket, knockoutRoundStages().at(-1)?.key || '')
+    : allowedTeamsForKnockoutSlot(state.myPlayerId, stageKey, slot, currentBracket);
   if (status) status.textContent = 'Guardando…';
   if (!team) {
     await clearKnockoutPick(stageKey, slot);
+    return;
+  }
+  if (!allowedTeams.some(option => knockoutTeamKey(option) === knockoutTeamKey(team))) {
+    if (status) status.textContent = 'Opción no válida.';
+    showAppToast('Esa selección no es válida para este tramo.', 3600);
     return;
   }
 
@@ -612,7 +1167,7 @@ async function saveKnockoutPick(stageKey, slot) {
   }
 
   await refreshKnockoutPicksFromState();
-  render();
+  rerenderKnockoutPreservingDrafts(`${stageKey}:${slot}`);
   const nextStatus = knockoutRowStatus(stageKey, slot);
   if (nextStatus) nextStatus.textContent = 'Guardado ✓';
   showAppToast('Cruce guardado.');
@@ -646,7 +1201,7 @@ async function clearKnockoutPick(stageKey, slot) {
   }
 
   await refreshKnockoutPicksFromState();
-  render();
+  rerenderKnockoutPreservingDrafts(`${stageKey}:${slot}`);
   const nextStatus = knockoutRowStatus(stageKey, slot);
   if (nextStatus) nextStatus.textContent = 'Borrado.';
   showAppToast('Cruce borrado.');
@@ -1542,17 +2097,25 @@ function renderKnockoutRound(stage, teams, stageScore, { matchOffset = 0, side =
   `;
 }
 
-function renderKnockoutEditorPick(stageKey, slot, active) {
+function renderKnockoutEditorPick(stageKey, slot, active, allowedTeams = []) {
   const disabled = knockoutEditOpen() ? '' : ' disabled';
+  const selected = String(active || '').trim();
+  const options = uniqueTeamList([
+    ...allowedTeams,
+    selected
+  ].filter(Boolean));
   return `
     <div class="bracket-team knockout-edit-team">
-      <input
-        data-knockout-input="${esc(`${stageKey}:${slot}`)}"
-        list="knockoutTeamOptions"
-        value="${esc(active)}"
-        placeholder="Selección"
-        ${disabled}
-      />
+      <div class="knockout-edit-label">
+        <span class="bracket-flag">${teamFlag(selected) || '🏳️'}</span>
+        <span class="knockout-edit-label-text">${esc(selected || 'Por definir')}</span>
+      </div>
+      <select data-knockout-input="${esc(`${stageKey}:${slot}`)}"${disabled}>
+        <option value="">Por definir</option>
+        ${options.map(option => `
+          <option value="${esc(option)}"${option === selected ? ' selected' : ''}>${teamFlag(option) || '🏳️'} ${esc(option)}</option>
+        `).join('')}
+      </select>
       <div class="knockout-edit-actions">
         <button type="button" class="primary" data-save-knockout="${esc(`${stageKey}:${slot}`)}"${disabled}>Guardar</button>
         <button type="button" data-clear-knockout="${esc(`${stageKey}:${slot}`)}"${disabled}>Limpiar</button>
@@ -1562,18 +2125,37 @@ function renderKnockoutEditorPick(stageKey, slot, active) {
   `;
 }
 
-function renderKnockoutEditorRound(stage, teams, { matchOffset = 0, slotOffset = 0, side = 'left' } = {}) {
+function renderKnockoutEditorRound(stage, teams, bracket, { matchOffset = 0, slotOffset = 0, side = 'left' } = {}) {
+  const stageIndex = knockoutRoundStages().findIndex(item => item.key === stage.key);
   const matches = [];
   for (let index = 0; index < teams.length; index += 2) {
     const firstSlot = slotOffset + index + 1;
     const secondSlot = slotOffset + index + 2;
-    const firstActive = knockoutPickFor(state.myPlayerId, stage.key, firstSlot)?.team || '';
-    const secondActive = knockoutPickFor(state.myPlayerId, stage.key, secondSlot)?.team || '';
+    const firstActive = teams[index] || '';
+    const secondActive = teams[index + 1] || '';
+    if (stageIndex === 0) {
+      matches.push(`
+        <article class="bracket-match ${side === 'right' ? 'right-side' : ''}">
+          <span class="bracket-match-number">Cruce ${matchOffset + index / 2 + 1}</span>
+          ${renderBracketTeam(firstActive, knockoutPredictionStatus(firstActive, {
+            teams: new Set([knockoutTeamKey(firstActive)]),
+            complete: Boolean(firstActive)
+          }))}
+          ${renderBracketTeam(secondActive, knockoutPredictionStatus(secondActive, {
+            teams: new Set([knockoutTeamKey(secondActive)]),
+            complete: Boolean(secondActive)
+          }))}
+        </article>
+      `);
+      continue;
+    }
+    const firstAllowed = allowedTeamsForKnockoutSlot(state.myPlayerId, stage.key, firstSlot, bracket);
+    const secondAllowed = allowedTeamsForKnockoutSlot(state.myPlayerId, stage.key, secondSlot, bracket);
     matches.push(`
       <article class="bracket-match ${side === 'right' ? 'right-side' : ''}">
         <span class="bracket-match-number">Cruce ${matchOffset + index / 2 + 1}</span>
-        ${renderKnockoutEditorPick(stage.key, firstSlot, firstActive)}
-        ${renderKnockoutEditorPick(stage.key, secondSlot, secondActive)}
+        ${renderKnockoutEditorPick(stage.key, firstSlot, firstActive, firstAllowed)}
+        ${renderKnockoutEditorPick(stage.key, secondSlot, secondActive, secondAllowed)}
       </article>
     `);
   }
@@ -1613,10 +2195,13 @@ function renderKnockoutFinal(finalStage, finalTeams, champion, finalScore, champ
   `;
 }
 
-function renderKnockoutEditorFinal(finalStage, finalTeams) {
-  const finalist1 = knockoutPickFor(state.myPlayerId, finalStage.key, 1)?.team || '';
-  const finalist2 = knockoutPickFor(state.myPlayerId, finalStage.key, 2)?.team || '';
+function renderKnockoutEditorFinal(finalStage, finalTeams, bracket) {
+  const finalist1 = finalTeams[0] || '';
+  const finalist2 = finalTeams[1] || '';
   const champion = knockoutPickFor(state.myPlayerId, 'champion', 1)?.team || '';
+  const finalistOptions1 = allowedTeamsForKnockoutSlot(state.myPlayerId, finalStage.key, 1, bracket);
+  const finalistOptions2 = allowedTeamsForKnockoutSlot(state.myPlayerId, finalStage.key, 2, bracket);
+  const championOptions = allowedTeamsForChampionSlot(state.myPlayerId, bracket, finalStage.key);
   return `
     <section class="bracket-round bracket-final-round knockout-edit-round">
       <div class="bracket-round-head">
@@ -1627,12 +2212,12 @@ function renderKnockoutEditorFinal(finalStage, finalTeams) {
       <div class="bracket-matches">
         <article class="bracket-match">
           <span class="bracket-match-number">${esc(finalStage.label)}</span>
-          ${renderKnockoutEditorPick(finalStage.key, 1, finalist1 || finalTeams[0] || '')}
-          ${renderKnockoutEditorPick(finalStage.key, 2, finalist2 || finalTeams[1] || '')}
+          ${renderKnockoutEditorPick(finalStage.key, 1, finalist1, finalistOptions1)}
+          ${renderKnockoutEditorPick(finalStage.key, 2, finalist2, finalistOptions2)}
         </article>
         <article class="bracket-match champion-card knockout-edit-champion">
           <span class="trophy" aria-hidden="true">★</span>
-          ${renderKnockoutEditorPick('champion', 1, champion)}
+          ${renderKnockoutEditorPick('champion', 1, champion, championOptions)}
         </article>
       </div>
     </section>
@@ -1738,21 +2323,19 @@ function renderKnockout() {
               : 'Edición cerrada (la porra no está abierta o pasó el deadline).'}</span>
           </div>
         </div>
-        <datalist id="knockoutTeamOptions">
-          ${state.teams.map(team => `<option value="${esc(team.name)}">${esc(team.flag || '')} ${esc(team.name)}</option>`).join('')}
-        </datalist>
         <div class="bracket-wrap">
           <div class="bracket-title">
             <span>Editando cruces de</span>
             <strong>${esc(playerName(state.myPlayerId))}</strong>
           </div>
+          <p class="hint">Los cruces iniciales se generan automáticamente a partir de tus resultados de grupos. Después puedes completar los equipos que van pasando.</p>
           <div class="bracket bracket-editor" style="${bracketGridStyle(halfRounds.length)}">
             ${leftRounds.map(({ stage, teams, matchOffset, slotOffset }) =>
-              renderKnockoutEditorRound(stage, (ownBracket[stage.key] || []).slice(0, (ownBracket[stage.key] || []).length / 2), { matchOffset, slotOffset })
+              renderKnockoutEditorRound(stage, (ownBracket[stage.key] || []).slice(0, (ownBracket[stage.key] || []).length / 2), ownBracket, { matchOffset, slotOffset })
             ).join('')}
-            ${renderKnockoutEditorFinal(finalStage, ownFinalTeams)}
+            ${renderKnockoutEditorFinal(finalStage, ownFinalTeams, ownBracket)}
             ${rightRounds.map(({ stage, matchOffset, slotOffset }) =>
-              renderKnockoutEditorRound(stage, (ownBracket[stage.key] || []).slice((ownBracket[stage.key] || []).length / 2), {
+              renderKnockoutEditorRound(stage, (ownBracket[stage.key] || []).slice((ownBracket[stage.key] || []).length / 2), ownBracket, {
                 matchOffset,
                 slotOffset,
                 side: 'right'

@@ -1264,7 +1264,7 @@ function renderDetail() {
     const draggingClass = state.draggingMatchId === m.match_id ? ' match-row-dragging' : '';
     if (state.editingMatchId === m.match_id) {
       return `<tr>
-        <td colspan="6">
+        <td colspan="7">
           <form class="inline-form edit-match-form" data-id="${esc(m.match_id)}">
             <label style="flex:1">Fecha/hora
               <input name="kickoff" type="datetime-local" value="${esc(toDatetimeLocalValue(m.kickoff))}" />
@@ -1276,11 +1276,23 @@ function renderDetail() {
         </td>
       </tr>`;
     }
+    const result = matchResult(m);
+    const resultCell = `
+      <form class="inline-result-form" data-id="${esc(m.match_id)}">
+        <input name="home" type="number" min="0" step="1" inputmode="numeric"
+          value="${result ? esc(result.home) : ''}" placeholder="–" aria-label="Goles local" />
+        <span class="result-sep">-</span>
+        <input name="away" type="number" min="0" step="1" inputmode="numeric"
+          value="${result ? esc(result.away) : ''}" placeholder="–" aria-label="Goles visitante" />
+        <button type="submit" class="btn-secondary btn-sm" title="Guardar resultado">✓</button>
+        ${result ? `<button type="button" class="btn-secondary btn-sm clear-result" data-id="${esc(m.match_id)}" title="Borrar resultado">✕</button>` : ''}
+      </form>`;
     return `<tr class="${isGroupMatch(m) ? `match-row-draggable${draggingClass}` : `match-row${draggingClass}`}" data-match-id="${esc(m.match_id)}" data-match-phase="${esc(phaseKey)}" draggable="${draggable}">
       <td>${esc(matchday)}</td>
       <td>${esc(phase)}</td>
       <td>${esc(matchTeamLabel(team1Id))}</td>
       <td>${esc(matchTeamLabel(team2Id))}</td>
+      <td class="result-cell">${resultCell}</td>
       <td>${esc(when)}</td>
       <td>
         <button type="button" class="btn-secondary btn-sm edit-match" data-id="${esc(m.match_id)}">Editar fecha</button>
@@ -1462,7 +1474,7 @@ function renderDetail() {
       <div class="match-section-body${state.matchSectionCollapsed ? ' is-collapsed' : ''}">
         ${state.matches.length
           ? `<div class="table-wrap"><table class="data-table">
-              <thead><tr><th>Jornada</th><th>Fase</th><th>Local</th><th>Visitante</th><th>Fecha</th><th>Orden</th></tr></thead>
+              <thead><tr><th>Jornada</th><th>Fase</th><th>Local</th><th>Visitante</th><th>Resultado</th><th>Fecha</th><th>Orden</th></tr></thead>
               <tbody data-match-dropzone="group">${matchRows}</tbody>
             </table></div>`
           : `<p class="muted">Sin partidos todavía.</p>`}
@@ -2093,6 +2105,61 @@ async function handleEditMatch(form) {
   render();
 }
 
+async function handleSetResult(form) {
+  const matchId = form.dataset.id;
+  const fd = new FormData(form);
+  const homeRaw = String(fd.get('home') || '').trim();
+  const awayRaw = String(fd.get('away') || '').trim();
+
+  // Si ambos están vacíos, equivale a borrar el resultado.
+  if (homeRaw === '' && awayRaw === '') {
+    await clearMatchResult(matchId);
+    return;
+  }
+  if (homeRaw === '' || awayRaw === '') {
+    state.detailError = 'Introduce ambos marcadores (local y visitante).';
+    render();
+    return;
+  }
+  const home = Number(homeRaw);
+  const away = Number(awayRaw);
+  if (!Number.isInteger(home) || !Number.isInteger(away) || home < 0 || away < 0) {
+    state.detailError = 'Los marcadores deben ser números enteros no negativos.';
+    render();
+    return;
+  }
+
+  // Escribe ambos pares de columnas para que cualquier lector (admin/public)
+  // resuelva el resultado: prefieren score_* y caen a result_*.
+  const { error } = await supabase.from('porra_matches')
+    .update({ result_home: home, result_away: away, score_home: home, score_away: away })
+    .eq('porra_id', state.currentPorra.id)
+    .eq('match_id', matchId);
+  if (error) {
+    state.detailError = error.message;
+    render();
+    return;
+  }
+  state.detailError = '';
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+async function clearMatchResult(matchId) {
+  const { error } = await supabase.from('porra_matches')
+    .update({ result_home: null, result_away: null, score_home: null, score_away: null })
+    .eq('porra_id', state.currentPorra.id)
+    .eq('match_id', matchId);
+  if (error) {
+    state.detailError = error.message;
+    render();
+    return;
+  }
+  state.detailError = '';
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
 async function handleEditTeam(form) {
   const teamId = form.dataset.id;
   const fd = new FormData(form);
@@ -2481,6 +2548,7 @@ document.addEventListener('submit', e => {
   if (e.target.id === 'addTeamForm')  { e.preventDefault(); handleAddTeam(e.target); }
   if (e.target.classList.contains('edit-team-form')) { e.preventDefault(); handleEditTeam(e.target); }
   if (e.target.classList.contains('edit-match-form')) { e.preventDefault(); handleEditMatch(e.target); }
+  if (e.target.classList.contains('inline-result-form')) { e.preventDefault(); handleSetResult(e.target); }
   if (e.target.id === 'addMatchForm') { e.preventDefault(); handleAddMatch(e.target); }
   if (e.target.id === 'generateGroupMatchesForm') { e.preventDefault(); handleGenerateGroupMatches(e.target); }
   if (e.target.id === 'generateKnockoutMatchesForm') { e.preventDefault(); handleGenerateKnockoutMatches(e.target); }
@@ -2588,6 +2656,7 @@ document.addEventListener('click', e => {
   if (e.target.classList.contains('del-team'))   deleteTeam(e.target.dataset.id);
   if (e.target.classList.contains('del-group'))  deleteGroup(e.target.dataset.id);
   if (e.target.classList.contains('del-match'))  deleteMatch(e.target.dataset.id);
+  if (e.target.classList.contains('clear-result')) clearMatchResult(e.target.dataset.id);
   if (e.target.id === 'resetGroupMatchesBtn')     resetGroupMatches();
   if (e.target.id === 'resetKnockoutMatchesBtn')  resetKnockoutMatches();
   if (e.target.classList.contains('move-match')) moveMatch(e.target.dataset.id, e.target.dataset.dir);

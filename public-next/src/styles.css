@@ -101,6 +101,9 @@ main{padding:24px clamp(16px,4vw,56px) 52px}
 .bracket-editor .bracket-team,.knockout-edit-champion .bracket-team{display:grid;gap:8px;padding:10px 9px}
 .bracket-editor .bracket-team + .bracket-team{border-top:1px solid var(--border)}
 .bracket-editor .bracket-team input{width:100%;min-width:0}
+.bracket-editor .bracket-team select{width:100%;min-width:0}
+.knockout-edit-label{display:flex;align-items:center;gap:8px;min-height:20px;font-size:12px;color:var(--muted)}
+.knockout-edit-label-text{color:var(--text);font-weight:700}
 .knockout-edit-actions{display:flex;gap:8px;flex-wrap:wrap}
 .knockout-edit-actions button{flex:1;padding:8px 10px}
 .knockout-edit-status{min-height:1em}
@@ -122,7 +125,7 @@ tr:hover td{background:#111c33}
 .table-center{text-align:center}
 
 /* --- Clasificación de grupos --- */
-.group-standings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 16px}
+.group-standings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 16px;width:50%}
 .group-standing{min-width:0}
 .group-standing h3{margin:0 0 10px;color:var(--accent2)}
 .group-standing table{font-size:14px}
@@ -200,7 +203,7 @@ form.login label{display:grid;gap:8px;margin-bottom:12px;color:var(--muted);font
 .error{color:var(--danger);font-size:13px;min-height:1em}
 code{background:#0e1629;padding:2px 6px;border-radius:6px}
 
-@media (max-width:1100px){.group-standings-grid{grid-template-columns:1fr}.matchday-groups{grid-template-columns:1fr}}
+@media (max-width:1100px){.group-standings-grid{grid-template-columns:1fr;width:100%}.matchday-groups{grid-template-columns:1fr}}
 @media (max-width:760px){.hero{display:block}.session{justify-content:flex-start;margin-top:14px}.match-grid{grid-template-columns:1fr}}
 @media (max-width:760px){.mini-answer-card,.mini-answer-form{grid-template-columns:1fr}.mini-answer-actions{justify-content:flex-start}.mini-answer-status{min-width:0}}
 @media (max-width:760px){.knockout-player-picker{width:100%}.knockout-player-picker select{width:100%}}

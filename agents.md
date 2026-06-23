@@ -1,6 +1,7 @@
-# agents.md — Handoff para agentes de código (Codex, Claude, etc.)
+# agents.md — Handoff para agentes de código (Claude Code)
 
 > Este documento es la fuente de verdad para cualquier agente que continúe el trabajo en este repo.
+> Está pensado para Claude Code como agente principal.
 > Léelo antes de tocar cualquier archivo. Está sincronizado con `CLAUDE.md`.
 
 ## Contexto del proyecto
@@ -62,6 +63,7 @@ El dashboard en `admin-next/` tiene:
 - ✅ Reset de fase de grupos para regenerar esa estructura si algo sale mal
 - ✅ Organización manual de partidos con botones subir/bajar usando `porra_matches.position`
 - ✅ Edición inline de la fecha de cada partido desde la sección de partidos
+- ✅ Entrada manual del resultado real de cada partido inline (columna «Resultado»; `handleSetResult`/`clearMatchResult` escriben `result_home`/`result_away` + `score_home`/`score_away`). Es el fallback de la fuente automática por API
 - ✅ La porra se puede devolver a borrador desde cualquier estado
 - ✅ Reordenación por arrastre de las filas de fase de grupos
 - ✅ Estructura de partidos: jornadas, orden manual y fechas
@@ -85,11 +87,13 @@ El dashboard en `admin-next/` tiene:
 - ✅ Tarjetas de accesos rápidos (`#summary`/`.cards`) encima del menú: último partido + goleadores, siguiente partido + pronóstico más elegido, partidos con resultado, líder ⭐, purria 💩, mejor racha 🔥. Reusa `pickNextPendingMatch` y `calculateBestCurrentStreak` de la lib
 - ✅ Mini-porra: tarjetas resumen + clasificación mini ordenada con buscador + tabla de respuestas por pregunta + tabla final de pronósticos de todos los jugadores con puntos. Lee `porra_mini_questions`/`porra_mini_answers`/`porra_mini_results`. Puntuación `scoreMiniAnswer` (clon de la legacy): variantes con `|`, y en número `+N` = "al menos N"
 - ✅ "Mis resultados" de la mini-porra son editables si la porra está `open` y antes del deadline, con guardado/borrado por pregunta
-- ✅ Cruces: cuadro de cruces estilo legacy con selector de participante, puntuación por ronda, campeón y edición manual de los cruces propios si la porra está `open`
+- ✅ Cruces: cuadro de cruces estilo legacy con selector de participante, puntuación por ronda, campeón y edición manual de los cruces propios si la porra está `open`; la primera ronda se genera automáticamente desde la clasificación de grupos que haya pronosticado ese jugador y la edición empieza en el siguiente tramo, con bandera y opciones filtradas por ronda previa
 - ⬜ Pendiente: columna Mov. real (necesita histórico/snapshots, hoy "se mantiene")
 - ✅ RLS de escritura del jugador aplicada: migración `supabase/migrations/20260623040000_player_write_predictions.sql` (funciones `pp_is_player`, `pp_predictions_open`; políticas `… player write` en `porra_predictions`/`porra_mini_answers`/`porra_knockout_picks`). Script suelto equivalente: `supabase/platform-player-write.sql`
-- ⬜ Clasificación de grupos calculada, entrada de resultados reales por el admin
+- ✅ Entrada de resultados reales por el admin (manual, inline en `admin-next/`); las vistas públicas ya los leen vía `matchResult` (`score_* ?? result_*`)
+- ⬜ Clasificación de grupos calculada
 - ⬜ Mini-porra configurable, cruces configurables
+- ⬜ Fuente automática de resultados por API por evento (hoy solo Mundial 2026 legacy vía Edge Functions; ver «Fuente de resultados» en README)
 
 ### public-next — cómo arrancarlo
 
@@ -202,6 +206,6 @@ npm run dev          # → http://localhost:5174 (5173 ya ocupado)
 1. **Pulir Fase 1 con pruebas reales**:
    - Revisar ergonomía de creación de porra completa.
    - Ajustar edición de fechas si hace falta más granularidad por partido o por jornada.
-   - Decidir en qué pantalla irá la carga de resultados reales del torneo.
+   - ✅ Carga de resultados reales: entrada manual inline en la tabla de partidos (columna «Resultado»). Pendiente: fuente automática por API por evento.
 
 2. **Vista pública** (`/p/<slug>`) — Fase 2, app separada en `supabase-next/` o carpeta nueva.

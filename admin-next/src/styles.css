@@ -302,5 +302,16 @@ button:disabled { opacity: 0.6; cursor: default; }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table code { font-size: 0.8rem; }
 
+/* Resultado inline por partido */
+.result-cell { white-space: nowrap; }
+.inline-result-form { display: inline-flex; align-items: center; gap: 0.3rem; margin: 0; }
+.inline-result-form input[type="number"] {
+  width: 3rem; text-align: center; padding: 0.2rem 0.3rem; font-size: 0.9rem;
+  -moz-appearance: textfield;
+}
+.inline-result-form input[type="number"]::-webkit-outer-spin-button,
+.inline-result-form input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.inline-result-form .result-sep { color: var(--muted); font-weight: 600; }
+
 .muted { color: var(--muted); }
 .error { color: var(--error); font-size: 0.85rem; }
