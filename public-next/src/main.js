@@ -213,6 +213,29 @@ function readSlug() {
 // ---------------------------------------------------------------------------
 // Carga de datos
 // ---------------------------------------------------------------------------
+
+// PostgREST aplica un tope server-side (`db-max-rows`, 1000 por defecto) que
+// NINGÚN `.limit(n)` del cliente puede superar: pide 5000 y devuelve 1000 igual.
+// Con 22+ jugadores, `porra_knockout_picks` (63 filas/jugador = 1386+) y
+// `porra_predictions` pasan de 1000, así que la carga se truncaba y los
+// jugadores más allá del corte salían sin pronósticos (cuadro de cruces
+// derivado de semillas en vez de sus picks). Paginamos en bloques de 1000.
+async function fetchAllRows(table, porraId, pageSize = 1000) {
+  const rows = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('*')
+      .eq('porra_id', porraId)
+      .range(from, from + pageSize - 1);
+    if (error) { console.error(`fetchAllRows(${table})`, error.message); break; }
+    if (!data || !data.length) break;
+    rows.push(...data);
+    if (data.length < pageSize) break;
+  }
+  return rows;
+}
+
 async function loadPorra() {
   state.slug = readSlug();
   if (!state.slug) return;
@@ -229,14 +252,21 @@ async function loadPorra() {
     supabase.from('porra_groups').select('*').eq('porra_id', id).order('position'),
     supabase.from('porra_matches').select('*').eq('porra_id', id).order('position'),
     supabase.from('porra_players').select('*').eq('porra_id', id).order('position'),
-    supabase.from('porra_predictions').select('*').eq('porra_id', id),
-    supabase.from('porra_knockout_picks').select('*').eq('porra_id', id),
+    fetchAllRows('porra_predictions', id),
+    fetchAllRows('porra_knockout_picks', id),
     supabase.from('porra_mini_questions').select('*').eq('porra_id', id).order('position'),
-    supabase.from('porra_mini_answers').select('*').eq('porra_id', id),
+    fetchAllRows('porra_mini_answers', id),
     supabase.from('porra_mini_results').select('*').eq('porra_id', id)
   ]);
-  state.teams = teams.data || [];
   state.groups = groups.data || [];
+  // Normalize: resolve team.group_id UUID → group letter so filtering by
+  // group letter works consistently across matches (which store group_label)
+  // and teams (which store group_id as UUID FK).
+  const groupNameById = new Map(state.groups.map(g => [String(g.group_id), String(g.name ?? g.group_id)]));
+  state.teams = (teams.data || []).map(t => ({
+    ...t,
+    group_id: groupNameById.get(String(t.group_id)) ?? t.group_id
+  }));
   state.matches = (matches.data || []).map(m => ({
     ...m,
     // normalize: porra_matches uses group_label; legacy uses group_id
@@ -248,10 +278,10 @@ async function loadPorra() {
     team2: m.team2 ?? m.team2_id ?? null,
   }));
   state.players = players.data || [];
-  state.predictions = predictions.data || [];
-  state.knockoutPicks = knockoutPicks.data || [];
+  state.predictions = predictions || [];
+  state.knockoutPicks = knockoutPicks || [];
   state.miniQuestions = miniQuestions.data || [];
-  state.miniAnswers = miniAnswers.data || [];
+  state.miniAnswers = miniAnswers || [];
   state.miniResults = miniResults.data || [];
 
   await refreshSession();
@@ -342,12 +372,20 @@ function knockoutTeamKey(value) {
     .replace(/\s+/g, ' ');
 }
 
+// Parses group seeds in both letter-first (A2) and number-first (2A) formats.
+// Returns { letter: 'A', pos: 2 } or null.
+function parseGroupSeed(raw) {
+  const m = raw.match(/^([A-Z]+)([12])$|^([12])([A-Z]+)$/);
+  if (!m) return null;
+  return { letter: m[1] || m[4], pos: Number(m[2] || m[3]) };
+}
+
 function knockoutSeedLabel(token) {
   const raw = String(token || '').trim();
   const winnerMatch = raw.match(/^W:(.+)$/i);
   if (winnerMatch) return `Ganador ${winnerMatch[1].toUpperCase()}`;
-  const groupSeed = raw.match(/^([A-Z]+)([12])$/);
-  if (groupSeed) return `${groupSeed[1]}${groupSeed[2]}`;
+  const seed = parseGroupSeed(raw);
+  if (seed) return `${seed.letter}${seed.pos}`;
   return raw;
 }
 
@@ -452,7 +490,7 @@ function computePredictedGroupStandings(playerId, groupId) {
 // Letras de grupo reales de la porra (A, B, C…), ordenadas.
 function porraGroupLetters() {
   const letters = state.groups.length
-    ? state.groups.map(group => String(group.group_id ?? group.name ?? '').trim().toUpperCase())
+    ? state.groups.map(group => String(group.name ?? group.group_id ?? '').trim().toUpperCase())
     : [...new Set(state.teams.map(team => String(team.group_id ?? '').trim().toUpperCase()))];
   return letters.filter(Boolean).sort();
 }
@@ -564,10 +602,10 @@ function resolveTemplateToken(token, playerId, context = {}) {
   const directTeam = teamByToken(raw);
   if (directTeam) return directTeam.name;
 
-  const groupSeed = raw.match(/^([A-Z]+)([12])$/);
-  if (groupSeed) {
-    const standings = context.standingsByGroup?.get(groupSeed[1]) || [];
-    return standings[Number(groupSeed[2]) - 1]?.team || raw;
+  const seed = parseGroupSeed(raw);
+  if (seed) {
+    const standings = context.standingsByGroup?.get(seed.letter) || [];
+    return standings[seed.pos - 1]?.team || raw;
   }
 
   const thirdGroups = parseThirdPlaceGroups(raw);
@@ -586,7 +624,7 @@ function resolveTemplateToken(token, playerId, context = {}) {
 
 function predictedStandingsByPlayer(playerId) {
   const groups = state.groups.length
-    ? state.groups.map(group => group.group_id ?? group.name).filter(Boolean)
+    ? state.groups.map(group => group.name ?? group.group_id).filter(Boolean)
     : [...new Set(state.teams.map(team => team.group_id).filter(Boolean))];
   const result = new Map();
   for (const groupId of groups) {
@@ -602,10 +640,10 @@ function resolvePlayerGroupSeed(token, playerId, standingsByGroup = predictedSta
   const directTeam = teamByToken(raw);
   if (directTeam) return directTeam.name;
 
-  const groupSeed = raw.match(/^([A-Z]+)([12])$/);
-  if (groupSeed) {
-    const standings = standingsByGroup.get(groupSeed[1]) || [];
-    return standings[Number(groupSeed[2]) - 1]?.team || raw;
+  const seed = parseGroupSeed(raw);
+  if (seed) {
+    const standings = standingsByGroup.get(seed.letter) || [];
+    return standings[seed.pos - 1]?.team || raw;
   }
 
   return raw;
@@ -635,10 +673,10 @@ function resolveKnockoutSeed(token, seen = new Set()) {
   const directTeam = teamByToken(raw);
   if (directTeam) return directTeam.team_id;
 
-  const groupSeed = raw.match(/^([A-Z]+)([12])$/);
-  if (groupSeed) {
-    const standings = computeGroupStandingsByMatches(groupSeed[1]);
-    return standings[Number(groupSeed[2]) - 1]?.team || raw;
+  const seed = parseGroupSeed(raw);
+  if (seed) {
+    const standings = computeGroupStandingsByMatches(seed.letter);
+    return standings[seed.pos - 1]?.team || raw;
   }
 
   const winnerSeed = raw.match(/^W:(.+)$/i);
@@ -871,25 +909,34 @@ function buildPlayerKnockoutBracket(playerId) {
   }
   const thirdPlaceAssignments = buildPredictedThirdPlaceAssignments(playerId);
   const firstStage = roundStages[0];
-  const firstStageMatches = knockoutRoundMatches(firstStage.key);
-  const sourceMatches = firstStageMatches.length ? firstStageMatches : knockoutTemplateRoundMatches(firstStage.key);
-  const firstStageDefaults = sourceMatches.flatMap((match, index) => [
-    resolveTemplateToken(knockoutFixtureTeam(match, 'home'), playerId, {
-      standingsByGroup,
-      thirdPlaceByGroup,
-      thirdPlaceAssignments,
-      fixtureId: match.match_id || match.id || `${firstStage.key}:${index}`,
-      side: 'home'
-    }),
-    resolveTemplateToken(knockoutFixtureTeam(match, 'away'), playerId, {
-      standingsByGroup,
-      thirdPlaceByGroup,
-      thirdPlaceAssignments,
-      fixtureId: match.match_id || match.id || `${firstStage.key}:${index}`,
-      side: 'away'
-    })
-  ]);
-  bracket[firstStage.key] = firstStageDefaults.map(team => team || '');
+
+  // Prefer explicit first-round picks if the player has a full set saved
+  // (e.g. legacy import where DIECISEISAVOS slots 1-32 were stored explicitly).
+  // Otherwise fall back to deriving from group-stage predictions.
+  const explicitFirst = knockoutStagePicks(playerId, firstStage.key, 0).filter(Boolean);
+  if (explicitFirst.length >= firstStage.teams) {
+    bracket[firstStage.key] = Array.from({ length: firstStage.teams }, (_, i) => explicitFirst[i] || '');
+  } else {
+    const firstStageMatches = knockoutRoundMatches(firstStage.key);
+    const sourceMatches = firstStageMatches.length ? firstStageMatches : knockoutTemplateRoundMatches(firstStage.key);
+    const firstStageDefaults = sourceMatches.flatMap((match, index) => [
+      resolveTemplateToken(knockoutFixtureTeam(match, 'home'), playerId, {
+        standingsByGroup,
+        thirdPlaceByGroup,
+        thirdPlaceAssignments,
+        fixtureId: match.match_id || match.id || `${firstStage.key}:${index}`,
+        side: 'home'
+      }),
+      resolveTemplateToken(knockoutFixtureTeam(match, 'away'), playerId, {
+        standingsByGroup,
+        thirdPlaceByGroup,
+        thirdPlaceAssignments,
+        fixtureId: match.match_id || match.id || `${firstStage.key}:${index}`,
+        side: 'away'
+      })
+    ]);
+    bracket[firstStage.key] = firstStageDefaults.map(team => team || '');
+  }
 
   let previousStageKey = firstStage.key;
   for (const stage of roundStages.slice(1)) {
@@ -897,11 +944,11 @@ function buildPlayerKnockoutBracket(playerId) {
     const matchCount = Math.floor((bracket[previousStageKey] || []).length / 2);
     bracket[stage.key] = [];
     for (let matchIndex = 0; matchIndex < matchCount; matchIndex += 1) {
-      const feeders = feedersForKnockoutMatch(stage.key, matchIndex, bracket, previousStageKey);
-      const allowed = uniqueTeamList(feeders.filter(Boolean));
       const saved = selectedTeams[matchIndex] || '';
-      const winner = allowed.some(team => knockoutTeamKey(team) === knockoutTeamKey(saved)) ? saved : '';
-      bracket[stage.key].push(winner);
+      // Use the saved pick directly — the allowed check was too strict for
+      // imported data where slot numbering may differ from the template wiring.
+      // Validation only makes sense in the interactive editor.
+      bracket[stage.key].push(saved);
     }
 
     previousStageKey = stage.key;
@@ -1004,10 +1051,9 @@ function championPickFor(playerId) {
 }
 
 function refreshPredictionsFromState() {
-  return supabase.from('porra_predictions')
-    .select('*').eq('porra_id', state.porra.id)
-    .then(({ data }) => {
-      state.predictions = data || [];
+  return fetchAllRows('porra_predictions', state.porra.id)
+    .then(rows => {
+      state.predictions = rows;
     });
 }
 
@@ -1120,9 +1166,7 @@ async function clearMiniAnswer(questionId) {
 }
 
 async function refreshKnockoutPicksFromState() {
-  const { data } = await supabase.from('porra_knockout_picks')
-    .select('*').eq('porra_id', state.porra.id);
-  state.knockoutPicks = data || [];
+  state.knockoutPicks = await fetchAllRows('porra_knockout_picks', state.porra.id);
 }
 
 // Re-renderiza solo la pestaña de cruces conservando lo que el usuario haya
@@ -1703,7 +1747,7 @@ function renderGroupStandings() {
     : [...new Set(state.matches.filter(m => m.stage === 'group').map(m => m.group_id).filter(Boolean))]
         .map(group_id => ({ group_id, name: group_id }));
   const inner = groups.map(grp => {
-    const rows = computeGroupStandings(grp.group_id);
+    const rows = computeGroupStandings(grp.name ?? grp.group_id);
     return `
       <section class="group-standing">
         <h3>Grupo ${esc(grp.name || grp.group_id)}</h3>
@@ -1740,7 +1784,7 @@ function calculateBestThirds() {
 
   return groups
     .map((grp, groupIndex) => {
-      const rows = computeGroupStandings(grp.group_id);
+      const rows = computeGroupStandings(grp.name ?? grp.group_id);
       if (!rows[2]) return null;
       return { ...rows[2], group: grp.name || grp.group_id, groupIndex };
     })
@@ -2245,9 +2289,7 @@ function miniAnswerStatus(questionId) {
 }
 
 async function refreshMiniAnswersFromState() {
-  const { data } = await supabase.from('porra_mini_answers')
-    .select('*').eq('porra_id', state.porra.id);
-  state.miniAnswers = data || [];
+  state.miniAnswers = await fetchAllRows('porra_mini_answers', state.porra.id);
 }
 
 async function saveMiniAnswerRow(questionId, value) {
@@ -2895,7 +2937,7 @@ function simulateOneTournament(rng) {
 
   // 2. Clasificaciones simuladas de grupo
   const groupIds = state.groups.length
-    ? state.groups.map(g => g.group_id)
+    ? state.groups.map(g => g.name ?? g.group_id)
     : [...new Set(state.matches.filter(m => m.stage === 'group').map(m => m.group_id).filter(Boolean))];
 
   const standingsByGroup = new Map();
@@ -2933,10 +2975,10 @@ function simulateOneTournament(rng) {
     if (!raw) return '';
     const directTeam = teamByToken(raw);
     if (directTeam) return directTeam.name;
-    const groupSeed = raw.match(/^([A-Z]+)([12])$/);
-    if (groupSeed) {
-      const standings = standingsByGroup.get(groupSeed[1]) || [];
-      return standings[Number(groupSeed[2]) - 1]?.team || raw;
+    const seed = parseGroupSeed(raw);
+    if (seed) {
+      const standings = standingsByGroup.get(seed.letter) || [];
+      return standings[seed.pos - 1]?.team || raw;
     }
     const thirdGroups = parseThirdPlaceGroups(raw);
     if (thirdGroups.length) {
