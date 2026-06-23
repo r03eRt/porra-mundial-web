@@ -481,7 +481,7 @@ Sistema nuevo (en construcción) para que el admin pueda crear porras de futuros
 
 - **Fase 0 (hecha)**: modelo de datos en Supabase. Tablas `porra_*` (porras, equipos, grupos, partidos, jugadores, predicciones, mini-porra y cruces) más `platform_admins`, todas con `porra_id` y aisladas del legacy. Esquema base en `supabase/platform-schema.sql` (migración `20260623000000`).
 - **Fase 1 (en marcha)**: dashboard en `admin-next/` con login admin, crear/listar porras, borrar porras en borrador, detalle por porra, asistente guiado para crear grupos y equipos de fase de grupos, catálogo de equipos con bandera ligada, tabla de equipos ordenada por grupo, editable y reordenable por arrastre dentro del mismo grupo, bloqueo de equipos repetidos en toda la porra, generación de partidos de grupo al final con fecha opcional, reset de partidos de grupo por jornadas con fecha inicial opcional y días entre jornadas, y reaparición del asistente al resetear para regenerar la misma fase de grupos. El asistente, la sección de jugadores, la sección de partidos y la mini-porra se quedan visibles, plegables y editables tras guardar, y al re-guardar actualizan la estructura y vuelven a regenerar los partidos de grupo. Además, la fecha/hora de cada partido se puede editar inline desde la tabla de partidos. La porra también se puede devolver a borrador desde cualquier estado. En la tabla de jugadores se muestra también la contraseña temporal cuando se crea una cuenta nueva en Auth. También hay orden manual con subir/bajar y arrastre en los partidos de fase de grupos, e invitación y borrado de jugadores. Al invitar jugadores se pide nombre visible y email; si el email todavía no tiene cuenta en Auth, el panel la crea automáticamente y enlaza ese usuario a la porra. Esta pantalla queda orientada a estructura, calendario y configuración de la mini-porra; la carga de resultados reales se decidirá aparte.
-- **Fase 2 (en marcha)**: app pública y de jugador en `public-next/` (Vite + supabase-js, JS vanilla), separada del legacy y del dashboard admin. Se abre una porra por slug en `/p/<slug>` (o `?slug=<slug>`). El menú **replica el de la app del Mundial** reutilizando su misma paleta y clases CSS. Pestañas ya funcionales: **Clasificación porra**, **Editar mi porra** (solo con jugador logueado), **Partidos** (agrupados por jornada → grupo, con marcador grande y "Ver/Ocultar goleadores"), **Clasificación de grupos**, **Equipos** (layout de dos columnas con buscador y detalle de estadísticas con barras, reutilizando `src/lib/team-stats.js`) y **Detalle de jugador**. El resto de pestañas (Histórico, Mini-porra, Cruces, Mejores terceros, Máximos goleadores, Probabilidades, Estadísticas, Comparador) aparecen como placeholder "próximamente". El login de jugador usa Supabase Auth (email/password, cuenta enlazada por `porra_players.user_id`) y "Editar mi porra" guarda en `porra_predictions` solo si la porra está `open` y antes del `predictions_deadline`. Cálculo de puntos y clasificación reutilizan `src/lib/porra-core.js`.
+- **Fase 2 (en marcha)**: app pública y de jugador en `public-next/` (Vite + supabase-js, JS vanilla), separada del legacy y del dashboard admin. Se abre una porra por slug en `/p/<slug>` (o `?slug=<slug>`). El menú **replica el de la app del Mundial** reutilizando su misma paleta y clases CSS. Pestañas ya funcionales: **Clasificación porra**, **Editar mi porra** (solo con jugador logueado), **Partidos** (agrupados por jornada → grupo, con marcador grande y "Ver/Ocultar goleadores"), **Clasificación de grupos**, **Equipos** (layout de dos columnas con buscador y detalle de estadísticas con barras, reutilizando `src/lib/team-stats.js`) y **Detalle de jugador**. El resto de pestañas (Histórico, Mini-porra, Cruces, Mejores terceros, Máximos goleadores, Probabilidades, Estadísticas, Comparador) aparecen como placeholder "próximamente". También se muestran las **tarjetas de accesos rápidos** encima del menú (último partido, siguiente partido, partidos con resultado, líder, purria y mejor racha) como en la app del Mundial. La clasificación replica las mismas columnas y comportamiento de la legacy (medallas, columna Mov., Total/1ª fase/Exactos/Aciertos/Cruces/Campeón, cabeceras ordenables y buscador). El login de jugador usa Supabase Auth (email/password, cuenta enlazada por `porra_players.user_id`) y "Editar mi porra" guarda en `porra_predictions` solo si la porra está `open` y antes del `predictions_deadline`. Cálculo de puntos, racha y resumen reutilizan `src/lib/porra-core.js`. Ver el desglose por sección más abajo.
 - **Migración y función de soporte actual**: `supabase/migrations/20260623023000_admin_next_players_email_optional.sql` añade el soporte de `email` en `porra_players` y la RPC `pp_add_player_by_email(...)`; la Edge Function `supabase/functions/admin-next-add-player/` crea la cuenta Auth si falta y la enlaza a la porra. La migración `supabase/migrations/20260623040000_player_write_predictions.sql` añade las funciones `pp_is_player`/`pp_predictions_open` y las políticas RLS que permiten a cada jugador escribir **sus propias** predicciones (`porra_predictions`, `porra_mini_answers`, `porra_knockout_picks`).
 
 ### Cómo arrancar cada app en local
@@ -493,6 +493,35 @@ Sistema nuevo (en construcción) para que el admin pueda crear porras de futuros
 | App pública / jugador | `public-next/` | `cd public-next && npm run dev` | `http://localhost:5175/p/<slug>` |
 
 Las tres apps comparten el mismo proyecto Supabase pero son independientes: el legacy usa `window.PORRA_DATA` y las tablas sin prefijo; admin-next y public-next usan las tablas `porra_*`.
+
+### public-next — qué muestra cada sección y de dónde saca los datos
+
+Todas las secciones leen de las tablas `porra_*` (filtradas por la porra del slug) y reutilizan la lógica pura de `src/lib/` (sin reescribirla). Los resultados reales de los partidos (`porra_matches.result_home`/`result_away`) los introduce el admin; mientras estén vacíos, puntos y tablas salen a cero pero la estructura es la misma.
+
+**Accesos rápidos (tarjetas de resumen, encima del menú)** — siempre visibles:
+
+| Tarjeta | Qué muestra | De dónde sale |
+|---------|-------------|---------------|
+| Último partido | Marcador del último partido jugado + goleadores | `porra_matches` con resultado, ordenado por `kickoff`; goleadores de `porra_matches.scorers` |
+| Siguiente partido | Próximo partido pendiente, fecha y "pronóstico más elegido" con nº de votos | `pickNextPendingMatch` (lib) sobre `porra_matches` sin resultado; votos contando `porra_predictions` |
+| Partidos con resultado | Contador `jugados/total` de fase de grupos | `porra_matches` (stage `group`) |
+| Líder actual ⭐ | Primero de la clasificación y sus puntos | clasificación calculada (ver abajo) |
+| El purria 💩 | Último de la clasificación | clasificación calculada |
+| Mejor racha 🔥 | Jugador con más aciertos seguidos | `calculateBestCurrentStreak` (lib) sobre predicciones y resultados |
+
+**Pestañas:**
+
+| Pestaña | Estado | Qué muestra | De dónde sale |
+|---------|--------|-------------|---------------|
+| Clasificación porra | ✅ | Tabla ordenable con medallas (🥇🥈🥉 y 💩 el último), Mov. (cambio de posición), Participante, Total, 1ª fase, Exactos, Aciertos, Cruces y Campeón (bandera). Buscador de participante | `porra_players` + `porra_predictions` puntuados con `scorePrediction` (lib) sobre `porra_matches`; Campeón de `porra_knockout_picks`; Mov. con `historyPositionChange` (lib) |
+| ✏️ Editar mi porra | ✅ | Formulario de marcadores de fase de grupos del jugador logueado | guarda en `porra_predictions` (solo si la porra está `open` y antes del `predictions_deadline`) |
+| Partidos | ✅ | Partidos agrupados por jornada (`slot`) → grupo, con marcador grande y "Ver/Ocultar goleadores" | `porra_matches` (resultado y `scorers`) |
+| Clasificación grupos | ✅ | Una tabla por grupo (PJ/G/E/P/GF/GC/DG/Pts), top-2 resaltado | `porra_matches` con resultado (puntos 3/1/0, desempate Pts→DG→GF) |
+| Equipos | ✅ | Lista con buscador + detalle de un equipo: resumen y 12 stats con barras de progreso | `src/lib/team-stats.js` (`calculateTeamStats`, `TEAM_DETAIL_METRICS`) sobre `porra_matches` |
+| Detalle jugador | ✅ | Selector de jugador + su pronóstico vs resultado y puntos por partido, con total | `porra_predictions` del jugador + `scorePrediction` |
+| Histórico, Mini-porra, Cruces, Mejores terceros, Máximos goleadores, Probabilidades, Estadísticas, Comparador | ⬜ | Placeholder "próximamente" | — (se irán portando) |
+
+Login de jugador: Supabase Auth (email/password), cuenta enlazada por `porra_players.user_id`. La pestaña "Editar mi porra" solo aparece con sesión de jugador.
 
 Planteamiento completo y fases en [docs/plataforma-multi-porra.md](./docs/plataforma-multi-porra.md).
 

@@ -79,6 +79,9 @@ El dashboard en `admin-next/` tiene:
 - ✅ Aspecto idéntico a la legacy: `public-next/src/styles.css` reusa la paleta y las clases de `src/styles.css` (`.hero`, `.tabs`, `.panel`, `.table-wrap`, `.rank-1/2/3`, `.points`, `.matchdays`/`.match-card`/`.match-goals`, `.group-standings-grid`, `.teams-layout`/`.team-chart-card`)
 - ✅ Partidos como la legacy: agrupados por jornada (`slot`) → grupo, `match-card` con marcador grande y "Ver/Ocultar goleadores" (lee `porra_matches.scorers`)
 - ✅ Equipos como la legacy: layout de dos columnas (lista con buscador + detalle con tarjetas y barras). Reusa `src/lib/team-stats.js` (`calculateTeamStats`, `TEAM_DETAIL_METRICS`)
+- ✅ Clasificación como la legacy: medallas (🥇🥈🥉 / 💩 último), columna Mov. (`historyPositionChange`), Total/1ª fase/Exactos/Aciertos/Cruces/Campeón, cabeceras ordenables (`sortableHeader`/`sortRankingRows`) y buscador. Campeón de `porra_knockout_picks`
+- ✅ Tarjetas de accesos rápidos (`#summary`/`.cards`) encima del menú: último partido + goleadores, siguiente partido + pronóstico más elegido, partidos con resultado, líder ⭐, purria 💩, mejor racha 🔥. Reusa `pickNextPendingMatch` y `calculateBestCurrentStreak` de la lib
+- ⬜ Pendiente: columna Mov. real (necesita histórico/snapshots, hoy "se mantiene"); puntos de Cruces (sin lógica de knockout todavía)
 - ✅ RLS de escritura del jugador aplicada: migración `supabase/migrations/20260623040000_player_write_predictions.sql` (funciones `pp_is_player`, `pp_predictions_open`; políticas `… player write` en `porra_predictions`/`porra_mini_answers`/`porra_knockout_picks`). Script suelto equivalente: `supabase/platform-player-write.sql`
 - ⬜ Clasificación de grupos calculada, entrada de resultados reales por el admin
 - ⬜ Mini-porra configurable, cruces configurables

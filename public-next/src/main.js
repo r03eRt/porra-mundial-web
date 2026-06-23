@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
-import { scorePrediction } from '../../src/lib/porra-core.js';
+import {
+  scorePrediction, historyPositionChange,
+  calculateBestCurrentStreak, pickNextPendingMatch
+} from '../../src/lib/porra-core.js';
 import { calculateTeamStats, TEAM_DETAIL_METRICS } from '../../src/lib/team-stats.js';
 
 const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
@@ -25,6 +28,7 @@ const state = {
   matches: [],
   players: [],
   predictions: [],     // todas las predicciones de la porra (lectura pública)
+  knockoutPicks: [],   // pronósticos de cruces (para columna Campeón)
   session: null,       // sesión Supabase Auth
   myPlayerId: null,    // player_id del usuario logueado en esta porra (o null)
   tab: 'ranking',
@@ -32,7 +36,9 @@ const state = {
   playerDetailId: null, // jugador seleccionado en "Detalle jugador"
   matchGoalsExpanded: {}, // { match_id: true } goleadores desplegados
   selectedTeamId: null, // equipo seleccionado en "Equipos"
-  teamsQuery: ''         // texto del buscador de equipos
+  teamsQuery: '',        // texto del buscador de equipos
+  rankingQuery: '',      // buscador de participante en Clasificación
+  rankingSort: { key: 'position', direction: 'asc' } // orden de la tabla
 };
 
 // ---------------------------------------------------------------------------
@@ -58,18 +64,20 @@ async function loadPorra() {
   state.porra = porra;
 
   const id = porra.id;
-  const [teams, groups, matches, players, predictions] = await Promise.all([
+  const [teams, groups, matches, players, predictions, knockoutPicks] = await Promise.all([
     supabase.from('porra_teams').select('*').eq('porra_id', id).order('position'),
     supabase.from('porra_groups').select('*').eq('porra_id', id).order('position'),
     supabase.from('porra_matches').select('*').eq('porra_id', id).order('position'),
     supabase.from('porra_players').select('*').eq('porra_id', id).order('position'),
-    supabase.from('porra_predictions').select('*').eq('porra_id', id)
+    supabase.from('porra_predictions').select('*').eq('porra_id', id),
+    supabase.from('porra_knockout_picks').select('*').eq('porra_id', id)
   ]);
   state.teams = teams.data || [];
   state.groups = groups.data || [];
   state.matches = matches.data || [];
   state.players = players.data || [];
   state.predictions = predictions.data || [];
+  state.knockoutPicks = knockoutPicks.data || [];
 
   await refreshSession();
 }
@@ -107,23 +115,67 @@ function predictionFor(playerId, matchId) {
   return state.predictions.find(p => p.player_id === playerId && p.match_id === matchId) || null;
 }
 
+// Campeón que predijo el jugador (porra_knockout_picks, stage final). '' si no.
+function championPickFor(playerId) {
+  const pick = state.knockoutPicks.find(k =>
+    k.player_id === playerId && (k.stage === '1º' || k.stage === 'final' || k.stage === 'champion'));
+  return pick && pick.team ? pick.team : '';
+}
+
+// Puntos de cruces del jugador. Sin lógica de cruces todavía → 0 (columna lista).
+function knockoutPointsFor(/* playerId */) { return 0; }
+
+// Devuelve filas con todas las columnas de la clasificación legacy.
 function computeRanking() {
   const scoring = scoringConfig();
   const groupMatches = state.matches.filter(m => m.stage === 'group');
-  return state.players.map(player => {
-    let points = 0, exact = 0, sign = 0;
+  const rows = state.players.map(player => {
+    let groupPoints = 0, exacts = 0, signs = 0;
     for (const match of groupMatches) {
       const result = matchResult(match);
       if (!result) continue;
       const pred = predictionFor(player.player_id, match.match_id);
       if (!pred) continue;
       const r = scorePrediction({ score: pred.score }, result, scoring);
-      points += r.points;
-      if (r.exact) exact++;
-      else if (r.sign) sign++;
+      groupPoints += r.points;
+      if (r.exact) exacts++;
+      else if (r.sign) signs++;
     }
-    return { player, points, exact, sign };
-  }).sort((a, b) => b.points - a.points || b.exact - a.exact);
+    const knockoutPoints = knockoutPointsFor(player.player_id);
+    return {
+      id: player.player_id,
+      player,
+      name: player.name,
+      groupPoints,
+      exacts,
+      signs,
+      hits: signs + exacts,
+      knockoutPoints,
+      total: groupPoints + knockoutPoints,
+      championPick: championPickFor(player.player_id)
+    };
+  }).sort((a, b) => b.total - a.total || b.exacts - a.exacts || a.name.localeCompare(b.name, 'es'));
+  // posición 1..n tras el orden por defecto
+  rows.forEach((r, i) => { r.position = i + 1; });
+  return rows;
+}
+
+function sortRankingRows(rows, sort) {
+  const dir = sort.direction === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const f = a[sort.key], s = b[sort.key];
+    const cmp = typeof f === 'string'
+      ? String(f).localeCompare(String(s), 'es', { sensitivity: 'base' })
+      : Number(f) - Number(s);
+    return cmp * dir || a.position - b.position;
+  });
+}
+
+function sortableHeader(key, label, className = '') {
+  const sort = state.rankingSort;
+  const active = sort.key === key;
+  const indicator = active ? (sort.direction === 'asc' ? '▲' : '▼') : '';
+  return `<th class="${className}"><button type="button" class="sort-button ${className} ${active ? 'active' : ''} ${active ? sort.direction : ''}" data-sort-key="${key}"><span>${indicator}</span>${label}</button></th>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +194,7 @@ function render() {
   const $sub = document.getElementById('porra-subtitle');
   if ($sub) $sub.textContent = PORRA_STATUS_LABELS[state.porra.status] || '';
   renderSessionBar();
+  renderSummary();
 
   // Si la pestaña activa ya no es visible (p.ej. logout en "Mi porra"), volver a ranking
   if (!visibleTabs().some(t => t.key === state.tab)) state.tab = 'ranking';
@@ -228,28 +281,154 @@ function renderTabs() {
   ).join('');
 }
 
+// Pronóstico más elegido para un partido (entre las predicciones guardadas).
+function mostChosenPredictionFor(match) {
+  const counts = new Map();
+  for (const p of state.predictions) {
+    if (p.match_id !== match.match_id) continue;
+    const s = String(p.score || '').trim();
+    if (!s) continue;
+    counts.set(s, (counts.get(s) || 0) + 1);
+  }
+  const entries = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'));
+  if (!entries.length) return null;
+  return { score: entries[0][0], votes: entries[0][1] };
+}
+
+// Chips de goleadores para la tarjeta de resumen (mismo estilo que la legacy).
+function summaryGoalChips(m) {
+  const goals = goalBreakdown(m);
+  if (!goals) return '';
+  const all = [
+    ...goals.team1.map(g => ({ ...g, flag: teamFlag(m.team1) })),
+    ...goals.team2.map(g => ({ ...g, flag: teamFlag(m.team2) }))
+  ];
+  if (!all.length) return '';
+  return `<div class="live-event-list last-match-events">${all.map(g => {
+    const icon = g.ownGoal ? '↺' : (g.penalty ? '🎯' : '⚽');
+    return `<span class="live-event-chip goal"><span class="live-event-icon">${icon}</span><span>${esc(g.name)} ${g.flag}</span><span class="live-event-minute">${g.minute ? esc(String(g.minute)) + "'" : ''}</span></span>`;
+  }).join('')}</div>`;
+}
+
+function renderSummary() {
+  const $summary = document.getElementById('summary');
+  if (!$summary) return;
+  const groupMatches = state.matches.filter(m => m.stage === 'group');
+  const playedMatches = groupMatches.filter(m => matchResult(m));
+  const ranking = computeRanking();
+  const ts = m => (m.kickoff ? new Date(m.kickoff).getTime() : Number.MAX_SAFE_INTEGER);
+
+  // último partido jugado (por fecha)
+  const lastPlayed = [...playedMatches].sort((a, b) => ts(a) - ts(b)).at(-1) || null;
+  // siguiente partido pendiente
+  const nextMatch = pickNextPendingMatch(groupMatches, m => matchResult(m), ts);
+  const mostChosen = nextMatch ? mostChosenPredictionFor(nextMatch) : null;
+  // mejor racha actual
+  const bestStreak = calculateBestCurrentStreak(
+    state.players,
+    [...playedMatches].sort((a, b) => ts(a) - ts(b)),
+    (match, player) => { const p = predictionFor(player.player_id, match.match_id); return p ? { score: p.score } : null; },
+    match => matchResult(match),
+    scoringConfig()
+  );
+  const leader = ranking[0];
+  const purria = ranking.length ? ranking[ranking.length - 1] : null;
+
+  const cards = [];
+
+  // último partido
+  if (lastPlayed) {
+    const r = matchResult(lastPlayed);
+    cards.push(`
+      <article class="card next-match-card last-match-card">
+        <b>${teamFlag(lastPlayed.team1)} ${esc(teamName(lastPlayed.team1))}<span class="next-match-separator">-</span>${teamFlag(lastPlayed.team2)} ${esc(teamName(lastPlayed.team2))}</b>
+        <strong class="last-match-score">${r.home} - ${r.away}</strong>
+        <span>último partido</span>
+        ${summaryGoalChips(lastPlayed)}
+      </article>`);
+  }
+
+  // siguiente partido
+  if (nextMatch) {
+    cards.push(`
+      <article class="card next-match-card">
+        <b>${teamFlag(nextMatch.team1)} ${esc(teamName(nextMatch.team1))}<span class="next-match-separator">-</span>${teamFlag(nextMatch.team2)} ${esc(teamName(nextMatch.team2))}</b>
+        <span>siguiente partido</span>
+        <span class="card-detail">${esc(matchScheduleText(nextMatch))}</span>
+        ${mostChosen ? `<span class="card-detail">Pronóstico más elegido: ${esc(mostChosen.score)} · ${mostChosen.votes} voto${mostChosen.votes === 1 ? '' : 's'}</span>` : ''}
+      </article>`);
+  }
+
+  // partidos con resultado
+  cards.push(`<article class="card"><b>${playedMatches.length}/${groupMatches.length}</b><span>partidos con resultado</span></article>`);
+
+  // líder y purria
+  cards.push(`<article class="card summary-leader"><b>⭐ ${leader ? esc(leader.name) : '-'}</b><span>líder actual</span>${leader ? `<span class="card-detail">${leader.total} puntos</span>` : ''}</article>`);
+  cards.push(`<article class="card summary-leader"><b>💩 ${purria ? esc(purria.name) : '-'}</b><span>el purria</span></article>`);
+
+  // mejor racha
+  cards.push(`
+    <article class="card summary-leader">
+      <b>${bestStreak ? '🔥 ' + esc(bestStreak.player.name) : '-'}</b>
+      <span>${bestStreak ? 'mejor racha actual' : 'sin rachas activas'}</span>
+      ${bestStreak ? `<span class="card-detail">${bestStreak.streak} acierto${bestStreak.streak === 1 ? '' : 's'} seguido${bestStreak.streak === 1 ? '' : 's'}</span>` : ''}
+    </article>`);
+
+  $summary.innerHTML = cards.join('');
+}
+
 function renderRanking() {
-  const rows = computeRanking();
-  const played = state.matches.filter(m => m.stage === 'group' && matchResult(m)).length;
+  const MEDALS = ['🥇', '🥈', '🥉'];
+  const features = state.porra.features || {};
+  const showKnockout = features.knockout !== false; // por defecto se muestra
+  const ranking = computeRanking();
+  const total = ranking.length;
+  const q = (state.rankingQuery || '').toLowerCase();
+  const rows = sortRankingRows(
+    ranking.filter(r => r.name.toLowerCase().includes(q)),
+    state.rankingSort
+  );
+
+  // columnas opcionales según features
+  const head = `
+    <tr>
+      ${sortableHeader('position', '#', 'table-center')}
+      <th class="table-center">Mov.</th>
+      ${sortableHeader('name', 'Participante')}
+      ${sortableHeader('total', 'Total', 'table-center')}
+      ${sortableHeader('groupPoints', '1ª fase', 'table-center')}
+      ${sortableHeader('exacts', 'Exactos', 'table-center')}
+      ${sortableHeader('hits', 'Aciertos', 'table-center')}
+      ${showKnockout ? sortableHeader('knockoutPoints', 'Cruces', 'table-center') : ''}
+      ${showKnockout ? sortableHeader('championPick', 'Campeón', 'table-center') : ''}
+    </tr>`;
+  const colspan = 7 + (showKnockout ? 2 : 0);
+
   $app.innerHTML = `
     <div class="panel">
       <div class="panel-head">
-        <h2>Clasificación porra</h2>
-        <span class="hint">${played} partido(s) de grupo con resultado</span>
+        <h2>Clasificación porra principal</h2>
+        <input type="search" data-action="ranking-search" placeholder="Buscar participante…" value="${esc(state.rankingQuery || '')}" />
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th class="table-center">#</th><th>Participante</th><th class="table-center">Puntos</th><th class="table-center">Exactos</th><th class="table-center">Signo</th></tr></thead>
-          <tbody>
-            ${rows.map((r, i) => `
-              <tr class="${i < 3 ? 'rank-' + (i + 1) : ''}">
-                <td class="ranking-position">${i + 1}</td>
-                <td class="${r.player.player_id === state.myPlayerId ? 'standing-team' : ''}">${esc(r.player.name)}${r.player.player_id === state.myPlayerId ? ' <span class="pill">tú</span>' : ''}</td>
-                <td class="table-center points">${r.points}</td>
-                <td class="table-center">${r.exact}</td>
-                <td class="table-center">${r.sign}</td>
-              </tr>`).join('') || `<tr><td colspan="5" class="empty-state">Sin jugadores todavía.</td></tr>`}
-          </tbody>
+          <thead>${head}</thead>
+          <tbody>${rows.map(r => {
+            const mov = historyPositionChange(r, null); // sin histórico aún → "Se mantiene"
+            const posCell = MEDALS[r.position - 1] || (r.position === total ? '💩' : r.position);
+            return `
+              <tr class="${r.position <= 3 ? 'rank-' + r.position : ''}">
+                <td class="ranking-position">${posCell}</td>
+                <td class="table-center ${mov.className}" title="${mov.label}">${mov.symbol}${mov.delta ? ' ' + mov.delta : ''}</td>
+                <td class="standing-team">${esc(r.name)}${r.id === state.myPlayerId ? ' <span class="pill">tú</span>' : ''}</td>
+                <td class="table-center points">${r.total}</td>
+                <td class="table-center">${r.groupPoints}</td>
+                <td class="table-center">${r.exacts}</td>
+                <td class="table-center">${r.hits}</td>
+                ${showKnockout ? `<td class="table-center">${r.knockoutPoints}</td>` : ''}
+                ${showKnockout ? `<td class="table-center" title="${r.championPick ? esc(teamName(r.championPick)) : 'Sin campeón'}">${r.championPick ? teamFlag(r.championPick) || '🏳️' : '-'}</td>` : ''}
+              </tr>`;
+          }).join('') || `<tr><td colspan="${colspan}" class="empty-state">Sin participantes todavía.</td></tr>`}</tbody>
         </table>
       </div>
     </div>`;
@@ -607,6 +786,17 @@ document.addEventListener('click', async (e) => {
   const teamBtn = e.target.closest('[data-team-select]');
   if (teamBtn) { state.selectedTeamId = teamBtn.dataset.teamSelect; render(); return; }
 
+  const sortBtn = e.target.closest('[data-sort-key]');
+  if (sortBtn) {
+    const key = sortBtn.dataset.sortKey;
+    const s = state.rankingSort;
+    // posición/total/etc. numéricos: por defecto desc; #/nombre asc. Toggle al repetir.
+    if (s.key === key) s.direction = s.direction === 'asc' ? 'desc' : 'asc';
+    else { s.key = key; s.direction = (key === 'position' || key === 'name') ? 'asc' : 'desc'; }
+    render();
+    return;
+  }
+
   const action = e.target.closest('[data-action]')?.dataset.action;
   if (!action) return;
 
@@ -625,12 +815,22 @@ document.addEventListener('input', (e) => {
   const input = e.target.closest('.score-input');
   if (input) { state.myDraft[input.dataset.match] = input.value.trim(); return; }
 
-  const search = e.target.closest('[data-action="teams-search"]');
-  if (search) {
-    state.teamsQuery = search.value;
-    const caret = search.selectionStart;
+  const teamsSearch = e.target.closest('[data-action="teams-search"]');
+  if (teamsSearch) {
+    state.teamsQuery = teamsSearch.value;
+    const caret = teamsSearch.selectionStart;
     render();
     const again = document.querySelector('[data-action="teams-search"]');
+    if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch {} }
+    return;
+  }
+
+  const rankSearch = e.target.closest('[data-action="ranking-search"]');
+  if (rankSearch) {
+    state.rankingQuery = rankSearch.value;
+    const caret = rankSearch.selectionStart;
+    render();
+    const again = document.querySelector('[data-action="ranking-search"]');
     if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch {} }
   }
 });
