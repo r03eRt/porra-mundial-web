@@ -116,6 +116,11 @@ const state = {
   playerMessage: '',
   draggingMatchId: null,
   draggingTeamId: null,
+  groupSetupDraft: null,
+  groupSetupCollapsed: false,
+  matchSectionCollapsed: false,
+  playerSectionCollapsed: false,
+  miniSectionCollapsed: false,
   detailError: '',
   error: ''
 };
@@ -188,6 +193,33 @@ function miniOptionsToText(options) {
   return Array.isArray(options) ? options.join('\n') : String(options || '');
 }
 
+function normalizeTeamName(value) {
+  return String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function porraHasTeamName(name, ignoreTeamId = null) {
+  const normalized = normalizeTeamName(name);
+  if (!normalized) return false;
+  return state.teams.some(team => team.team_id !== ignoreTeamId && normalizeTeamName(team.name) === normalized);
+}
+
+function renderCatalogTeamOptions(selectedValue = '', { includeCustom = true } = {}) {
+  const selected = String(selectedValue || '');
+  const options = [
+    `<option value="">Selecciona un equipo</option>`,
+    ...TEAM_CATALOG.map(team => {
+      const selectedAttr = team.name === selected ? ' selected' : '';
+      return `<option value="${esc(team.name)}"${selectedAttr}>${esc(team.flag)} ${esc(team.name)}</option>`;
+    })
+  ];
+  if (includeCustom) options.push(`<option value="__custom"${selected === '__custom' ? ' selected' : ''}>Personalizado</option>`);
+  return options.join('');
+}
+
 function sortedTeams() {
   return [...state.teams].sort((a, b) => {
     const groupA = teamGroupName(a);
@@ -212,6 +244,86 @@ function nextTeamPosition(groupId) {
       .filter(team => (team.group_id ?? '') === (groupId ?? ''))
       .map(team => Number(team.position) || 0)
   ) + 1;
+}
+
+function defaultGroupName(index) {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  return letters[index] || `G${index + 1}`;
+}
+
+function buildGroupSetupDraft(groupCount, teamsPerGroup) {
+  const groups = Array.from({ length: groupCount }, (_, groupIndex) => ({
+    group_id: defaultGroupName(groupIndex),
+    name: defaultGroupName(groupIndex),
+    teams: Array.from({ length: teamsPerGroup }, () => ({ catalog: '', name: '', flag: '' }))
+  }));
+  return {
+    groupCount,
+    teamsPerGroup,
+    groups,
+    firstKickoff: '',
+    daysBetween: 4
+  };
+}
+
+function buildGroupSetupDraftFromState() {
+  const groups = [...state.groups]
+    .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+    .map(group => {
+      const teams = state.teams
+        .filter(team => team.group_id === group.group_id)
+        .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+        .map(team => {
+          const matchedCatalog = TEAM_CATALOG.find(item => normalizeTeamName(item.name) === normalizeTeamName(team.name));
+          return {
+            catalog: matchedCatalog?.name || '__custom',
+            name: matchedCatalog ? '' : team.name,
+            flag: team.flag || flagForTeam(team.name)
+          };
+        });
+      return {
+        group_id: group.group_id,
+        name: group.name,
+        teams
+      };
+    });
+
+  const teamsPerGroup = Math.max(0, ...groups.map(group => group.teams.length));
+  return {
+    groupCount: groups.length,
+    teamsPerGroup,
+    groups,
+    firstKickoff: '',
+    daysBetween: 4
+  };
+}
+
+function clearGroupSetupDraft() {
+  state.groupSetupDraft = null;
+}
+
+function canUseGroupSetupDraft() {
+  return Boolean(state.groupSetupDraft && state.groupSetupDraft.groups.length);
+}
+
+function toggleGroupSetupCollapsed() {
+  state.groupSetupCollapsed = !state.groupSetupCollapsed;
+  render();
+}
+
+function toggleMatchSectionCollapsed() {
+  state.matchSectionCollapsed = !state.matchSectionCollapsed;
+  render();
+}
+
+function togglePlayerSectionCollapsed() {
+  state.playerSectionCollapsed = !state.playerSectionCollapsed;
+  render();
+}
+
+function toggleMiniSectionCollapsed() {
+  state.miniSectionCollapsed = !state.miniSectionCollapsed;
+  render();
 }
 
 function groupMatchKey(groupId, team1Id, team2Id) {
@@ -461,6 +573,11 @@ async function loadDetail(porraId) {
   state.matches = matchesRes.data || [];
   state.players = playersRes.data || [];
   state.miniQuestions = miniRes.data || [];
+  if (state.groups.length || state.teams.length) {
+    state.groupSetupDraft = buildGroupSetupDraftFromState();
+  } else {
+    state.groupSetupDraft = null;
+  }
   if (state.editingTeamId && !state.teams.find(team => team.team_id === state.editingTeamId)) {
     state.editingTeamId = null;
   }
@@ -522,7 +639,12 @@ function renderPorraList() {
             <strong>${esc(p.name)}</strong>
             <span class="muted"> · ${esc(p.event_type)} · ${esc(porraStatusLabel(p.status))}</span>
           </div>
-          <button type="button" class="btn-secondary open-porra" data-id="${esc(p.id)}">&rarr; Gestionar</button>
+          <div class="porra-actions">
+            <button type="button" class="btn-secondary open-porra" data-id="${esc(p.id)}">&rarr; Gestionar</button>
+            ${normalizePorraStatus(p.status) === 'draft'
+              ? `<button type="button" class="btn-danger delete-porra" data-id="${esc(p.id)}">Borrar borrador</button>`
+              : ''}
+          </div>
         </li>`).join('')
     : `<li class="muted">Aún no hay porras. Crea la primera.</li>`;
 
@@ -561,6 +683,8 @@ function renderDetail() {
   const p = state.currentPorra;
   const nextStatus = nextPorraStatus(p.status);
   const orderedTeams = sortedTeams();
+  const draft = state.groupSetupDraft || (state.groups.length || state.teams.length ? buildGroupSetupDraftFromState() : null);
+  const groupSetupCollapsed = Boolean(draft) && state.groupSetupCollapsed;
 
   const playersRows = state.players.map(player => `
     <tr>
@@ -611,8 +735,6 @@ function renderDetail() {
 
   const teamOptions = orderedTeams.map(t =>
     `<option value="${esc(t.team_id)}">${esc(t.flag || flagForTeam(t.name))} ${esc(t.name)}</option>`).join('');
-  const catalogTeamOptions = TEAM_CATALOG.map(t =>
-    `<option value="${esc(t.name)}">${esc(t.flag)} ${esc(t.name)}</option>`).join('');
 
   // Matches table
   const matchRows = state.matches.map((m, index) => {
@@ -683,6 +805,83 @@ function renderDetail() {
     </tr>`;
   }).join('');
 
+  const groupSetupSection = (() => {
+    if (!draft) {
+      return `
+        <section class="card group-setup-card">
+          <h2>Asistente de fase de grupos</h2>
+          <p class="muted">Te obliga a definir la estructura antes de seguir: primero el número de grupos y equipos por grupo, luego los nombres de los equipos y la fecha opcional de la jornada inicial.</p>
+          <form id="startGroupSetupForm" class="form inline-form">
+            <label>Grupos
+              <input name="groupCount" type="number" min="1" value="8" required />
+            </label>
+            <label>Equipos por grupo
+              <input name="teamsPerGroup" type="number" min="2" value="4" required />
+            </label>
+            <button type="submit">Preparar plantilla</button>
+          </form>
+          <span class="error" id="groupSetupError"></span>
+        </section>`;
+    }
+
+    const groupForms = draft.groups.map((group, groupIndex) => `
+      <fieldset class="group-setup-block">
+        <legend>Grupo ${esc(group.name)}</legend>
+        <div class="group-setup-grid">
+          ${group.teams.map((team, teamIndex) => `
+            <div class="group-setup-team-card">
+              <label>Equipo ${teamIndex + 1}
+                <select name="group_${groupIndex}_team_${teamIndex}_catalog" class="group-setup-team-select" required>
+                  ${renderCatalogTeamOptions(team.catalog, { includeCustom: true })}
+                </select>
+              </label>
+              <div class="group-setup-team-preview muted" data-team-preview>Elige un equipo para ver la bandera</div>
+              <div class="group-setup-custom-fields is-hidden">
+                <label>Nombre personalizado
+                  <input name="group_${groupIndex}_team_${teamIndex}_name" type="text" value="${esc(team.name)}" placeholder="Nombre del equipo" disabled />
+                </label>
+                <label>Bandera personalizada
+                  <input name="group_${groupIndex}_team_${teamIndex}_flag" type="text" value="${esc(team.flag)}" placeholder="Emoji o bandera" disabled />
+                </label>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </fieldset>
+    `).join('');
+
+    return `
+      <section class="card group-setup-card">
+        <div class="group-setup-header">
+          <div>
+            <h2>Asistente de fase de grupos</h2>
+            <p class="muted">Plantilla preparada: ${draft.groupCount} grupos con ${draft.teamsPerGroup} equipos por grupo. Puedes seguir editándola como si todavía no se hubiese guardado.</p>
+          </div>
+          <button type="button" id="toggleGroupSetupBtn" class="btn-secondary btn-sm">
+            ${groupSetupCollapsed ? 'Abrir' : 'Contraer'}
+          </button>
+        </div>
+        <div class="group-setup-body${groupSetupCollapsed ? ' is-collapsed' : ''}">
+          <form id="saveGroupSetupForm" class="form">
+            <div class="match-row">
+              <label>Fecha inicial de la jornada 1 (opcional)
+                <input name="firstKickoff" type="datetime-local" value="${esc(draft.firstKickoff)}" />
+              </label>
+              <label>Días entre jornadas
+                <input name="daysBetween" type="number" min="1" value="${esc(draft.daysBetween)}" />
+              </label>
+            </div>
+            ${groupForms}
+            <div class="match-row">
+              <button type="submit">Guardar y regenerar partidos</button>
+              <button type="button" class="btn-secondary" id="cancelGroupSetupBtn">Cancelar asistente</button>
+            </div>
+            <span class="error" id="groupSetupError"></span>
+          </form>
+        </div>
+      </section>`;
+  })();
+
   return `
     <div class="detail-header">
       <button type="button" id="backBtn" class="btn-secondary">&larr; Volver</button>
@@ -692,150 +891,136 @@ function renderDetail() {
       <button type="button" id="advanceStatusBtn" class="btn-secondary" ${nextStatus ? '' : 'disabled'}>
         ${nextStatus ? `Pasar a ${esc(porraStatusLabel(nextStatus).toLowerCase())}` : 'Porra cerrada'}
       </button>
+      ${normalizePorraStatus(p.status) === 'draft'
+        ? `<button type="button" id="deletePorraBtn" class="btn-danger">Borrar borrador</button>`
+        : ''}
     </div>
     ${state.detailError ? `<p class="error">${esc(state.detailError)}</p>` : ''}
+    ${groupSetupSection}
 
-    <section class="card">
-      <h2>Jugadores <span class="muted">(${state.players.length})</span></h2>
-      ${state.players.length
-        ? `<div class="table-wrap"><table class="data-table">
-            <thead><tr><th>Nombre</th><th>Email</th><th>ID jugador</th><th>Alta</th><th></th></tr></thead>
-            <tbody>${playersRows}</tbody>
-          </table></div>`
-        : `<p class="muted">Sin jugadores todavía.</p>`}
-      <form id="addPlayerForm" class="form inline-form" style="margin-top:.75rem">
-        <input name="displayName" type="text" placeholder="Nombre visible" required style="flex:1" />
-        <input name="email" type="email" placeholder="jugador@correo.com" required style="flex:1" />
-        <button type="submit">+ Añadir jugador</button>
-      </form>
-      <span class="error" id="playerError"></span>
-      ${state.playerMessage ? `<span class="muted" id="playerMessage" style="display:block;margin-top:.35rem">${esc(state.playerMessage)}</span>` : ''}
+    <section class="card player-section-card">
+      <div class="section-collapsible-header">
+        <h2>Jugadores <span class="muted">(${state.players.length})</span></h2>
+        <button type="button" id="togglePlayerSectionBtn" class="btn-secondary btn-sm">
+          ${state.playerSectionCollapsed ? 'Abrir' : 'Contraer'}
+        </button>
+      </div>
+      <div class="section-collapsible-body${state.playerSectionCollapsed ? ' is-collapsed' : ''}">
+        ${state.players.length
+          ? `<div class="table-wrap"><table class="data-table">
+              <thead><tr><th>Nombre</th><th>Email</th><th>ID jugador</th><th>Alta</th><th></th></tr></thead>
+              <tbody>${playersRows}</tbody>
+            </table></div>`
+          : `<p class="muted">Sin jugadores todavía.</p>`}
+        <form id="addPlayerForm" class="form inline-form" style="margin-top:.75rem">
+          <input name="displayName" type="text" placeholder="Nombre visible" required style="flex:1" />
+          <input name="email" type="email" placeholder="jugador@correo.com" required style="flex:1" />
+          <button type="submit">+ Añadir jugador</button>
+        </form>
+        <span class="error" id="playerError"></span>
+        ${state.playerMessage ? `<span class="muted" id="playerMessage" style="display:block;margin-top:.35rem">${esc(state.playerMessage)}</span>` : ''}
+      </div>
     </section>
 
-    <section class="card">
-      <h2>Grupos</h2>
-      ${state.groups.length
-        ? `<ul class="group-chips">${state.groups.map(g =>
-            `<li>${esc(g.name)} <button type="button" class="btn-danger btn-sm del-group" data-id="${esc(g.group_id)}">✕</button></li>`
-          ).join('')}</ul>`
-        : `<p class="muted">Sin grupos todavía.</p>`}
-      <form id="addGroupForm" class="form inline-form">
-        <input name="groupName" type="text" placeholder="A" maxlength="10" style="width:80px" required />
-        <button type="submit">+ Añadir grupo</button>
-      </form>
+    <section class="card match-section-card">
+      <div class="match-section-header">
+        <h2>Partidos <span class="muted">(${state.matches.length})</span></h2>
+        <button type="button" id="toggleMatchSectionBtn" class="btn-secondary btn-sm">
+          ${state.matchSectionCollapsed ? 'Abrir' : 'Contraer'}
+        </button>
+      </div>
+      <div class="match-section-body${state.matchSectionCollapsed ? ' is-collapsed' : ''}">
+        ${state.matches.length
+          ? `<div class="table-wrap"><table class="data-table">
+              <thead><tr><th>Jornada</th><th>Fase</th><th>Local</th><th>Visitante</th><th>Fecha</th><th>Orden</th></tr></thead>
+              <tbody data-match-dropzone="group">${matchRows}</tbody>
+            </table></div>`
+          : `<p class="muted">Sin partidos todavía.</p>`}
+        <form id="generateGroupMatchesForm" class="form inline-form" style="margin-top:.75rem">
+          <label>Fecha inicial (opcional)
+            <input name="firstKickoff" type="datetime-local" />
+          </label>
+          <label>Días entre jornadas
+            <input name="daysBetween" type="number" min="1" value="4" />
+          </label>
+          <button type="submit">Generar fase de grupos</button>
+        </form>
+        <button type="button" id="resetGroupMatchesBtn" class="btn-danger" style="margin-top:.5rem">
+          Resetear fase de grupos
+        </button>
+        <p class="muted" style="margin-top:.5rem">También puedes arrastrar las filas de fase de grupos para reordenarlas.</p>
+        <p class="muted" style="margin-top:.5rem">Borra solo los partidos de fase de grupos para poder regenerarlos desde cero.</p>
+        <form id="addMatchForm" class="form match-form" style="margin-top:.75rem">
+          <div class="match-row">
+            <label>Fase
+              <select name="phase" id="matchPhase">
+                <option value="group">Fase de grupos</option>
+                ${knockoutOpts}
+              </select>
+            </label>
+            <label id="matchGroupLabel">Grupo
+              <select name="groupLabel">${groupOptMatch}</select>
+            </label>
+          </div>
+          <div class="match-row">
+            <label>Local
+              <select name="team1" required>
+                <option value="">— equipo —</option>
+                ${teamOptions}
+              </select>
+            </label>
+            <label>Visitante
+              <select name="team2" required>
+                <option value="">— equipo —</option>
+                ${teamOptions}
+              </select>
+            </label>
+            <label>Fecha/hora
+              <input name="kickoff" type="datetime-local" />
+            </label>
+          </div>
+          <button type="submit">+ Añadir partido</button>
+          <span class="error" id="matchError"></span>
+        </form>
+      </div>
     </section>
 
-    <section class="card">
-      <h2>Equipos <span class="muted">(${state.teams.length})</span></h2>
-      ${state.teams.length
-        ? `<div class="table-wrap"><table class="data-table">
-            <thead><tr><th></th><th>Nombre</th><th>Grupo</th><th></th></tr></thead>
-            <tbody data-team-dropzone="groups">${teamsRows}</tbody>
-          </table></div>`
-        : `<p class="muted">Sin equipos todavía.</p>`}
-      <form id="addTeamForm" class="form inline-form" style="margin-top:.75rem">
-        <select name="catalogTeam" id="catalogTeam" style="flex:1" required>
-          <option value="">Equipo</option>
-          ${catalogTeamOptions}
-          <option value="__custom">Personalizado</option>
-        </select>
-        <input name="flag" id="customTeamFlag" type="text" placeholder="Bandera" style="width:80px;display:none" />
-        <input name="teamName" id="customTeamName" type="text" placeholder="Nombre del equipo" style="flex:1;display:none" />
-        <select name="groupId" style="width:120px">
-          <option value="">Sin grupo</option>
-          ${groupOptions}
-        </select>
-        <button type="submit">+ Añadir</button>
-      </form>
-      <p class="muted" style="margin-top:.5rem">Puedes arrastrar los equipos dentro del mismo grupo para cambiar su orden.</p>
-      <span class="error" id="teamError"></span>
-    </section>
-
-    <section class="card">
-      <h2>Partidos <span class="muted">(${state.matches.length})</span></h2>
-      ${state.matches.length
-        ? `<div class="table-wrap"><table class="data-table">
-            <thead><tr><th>Jornada</th><th>Fase</th><th>Local</th><th>Visitante</th><th>Fecha</th><th>Orden</th></tr></thead>
-            <tbody data-match-dropzone="group">${matchRows}</tbody>
-          </table></div>`
-        : `<p class="muted">Sin partidos todavía.</p>`}
-      <form id="generateGroupMatchesForm" class="form inline-form" style="margin-top:.75rem">
-        <label>Fecha inicial (opcional)
-          <input name="firstKickoff" type="datetime-local" />
-        </label>
-        <label>Días entre jornadas
-          <input name="daysBetween" type="number" min="1" value="4" />
-        </label>
-        <button type="submit">Generar fase de grupos</button>
-      </form>
-      <button type="button" id="resetGroupMatchesBtn" class="btn-danger" style="margin-top:.5rem">
-        Resetear fase de grupos
-      </button>
-      <p class="muted" style="margin-top:.5rem">También puedes arrastrar las filas de fase de grupos para reordenarlas.</p>
-      <p class="muted" style="margin-top:.5rem">Borra solo los partidos de fase de grupos para poder regenerarlos desde cero.</p>
-      <form id="addMatchForm" class="form match-form" style="margin-top:.75rem">
-        <div class="match-row">
-          <label>Fase
-            <select name="phase" id="matchPhase">
-              <option value="group">Fase de grupos</option>
-              ${knockoutOpts}
-            </select>
+    <section class="card mini-section-card">
+      <div class="section-collapsible-header">
+        <h2>Mini-porra <span class="muted">(${state.miniQuestions.length})</span></h2>
+        <button type="button" id="toggleMiniSectionBtn" class="btn-secondary btn-sm">
+          ${state.miniSectionCollapsed ? 'Abrir' : 'Contraer'}
+        </button>
+      </div>
+      <div class="section-collapsible-body${state.miniSectionCollapsed ? ' is-collapsed' : ''}">
+        ${state.miniQuestions.length
+          ? `<div class="table-wrap"><table class="data-table">
+              <thead><tr><th>#</th><th>Pregunta</th><th>Puntos</th><th>Tipo</th><th>Opciones</th><th></th></tr></thead>
+              <tbody>${miniQuestionRows}</tbody>
+            </table></div>`
+          : `<p class="muted">Sin preguntas de mini-porra todavía.</p>`}
+        <form id="addMiniQuestionForm" class="form mini-form" style="margin-top:.75rem">
+          <label>Pregunta
+            <input name="question" type="text" placeholder="¿Quién marcará el primer gol?" required />
           </label>
-          <label id="matchGroupLabel">Grupo
-            <select name="groupLabel">${groupOptMatch}</select>
+          <div class="match-row">
+            <label>Puntos
+              <input name="points" type="number" min="0" step="1" value="0" required />
+            </label>
+            <label>Tipo de campo
+              <select name="fieldType">
+                ${miniFieldTypeOptions('text')}
+              </select>
+            </label>
+          </div>
+          <label>Opciones, una por línea
+            <textarea name="options" rows="3" placeholder="Opcional"></textarea>
           </label>
-        </div>
-        <div class="match-row">
-          <label>Local
-            <select name="team1" required>
-              <option value="">— equipo —</option>
-              ${teamOptions}
-            </select>
-          </label>
-          <label>Visitante
-            <select name="team2" required>
-              <option value="">— equipo —</option>
-              ${teamOptions}
-            </select>
-          </label>
-          <label>Fecha/hora
-            <input name="kickoff" type="datetime-local" />
-          </label>
-        </div>
-        <button type="submit">+ Añadir partido</button>
-        <span class="error" id="matchError"></span>
-      </form>
-    </section>
-
-    <section class="card">
-      <h2>Mini-porra <span class="muted">(${state.miniQuestions.length})</span></h2>
-      ${state.miniQuestions.length
-        ? `<div class="table-wrap"><table class="data-table">
-            <thead><tr><th>#</th><th>Pregunta</th><th>Puntos</th><th>Tipo</th><th>Opciones</th><th></th></tr></thead>
-            <tbody>${miniQuestionRows}</tbody>
-          </table></div>`
-        : `<p class="muted">Sin preguntas de mini-porra todavía.</p>`}
-      <form id="addMiniQuestionForm" class="form mini-form" style="margin-top:.75rem">
-        <label>Pregunta
-          <input name="question" type="text" placeholder="¿Quién marcará el primer gol?" required />
-        </label>
-        <div class="match-row">
-          <label>Puntos
-            <input name="points" type="number" min="0" step="1" value="0" required />
-          </label>
-          <label>Tipo de campo
-            <select name="fieldType">
-              ${miniFieldTypeOptions('text')}
-            </select>
-          </label>
-        </div>
-        <label>Opciones, una por línea
-          <textarea name="options" rows="3" placeholder="Opcional"></textarea>
-        </label>
-        <button type="submit">+ Añadir pregunta</button>
-        <span class="error" id="miniError"></span>
-      </form>
-      <p class="muted" style="margin-top:.5rem">Las opciones se guardan como una lista en Supabase; si no aplican a la pregunta, puedes dejarlo vacío.</p>
+          <button type="submit">+ Añadir pregunta</button>
+          <span class="error" id="miniError"></span>
+        </form>
+        <p class="muted" style="margin-top:.5rem">Las opciones se guardan como una lista en Supabase; si no aplican a la pregunta, puedes dejarlo vacío.</p>
+      </div>
     </section>`;
 }
 
@@ -903,6 +1088,11 @@ function wireDetail() {
   }
   catalogTeam?.addEventListener('change', toggleCustomTeam);
   toggleCustomTeam();
+
+  document.querySelectorAll('.group-setup-team-select').forEach(select => {
+    select.addEventListener('change', () => syncGroupSetupCustomFields(select.closest('.card') || document));
+  });
+  syncGroupSetupCustomFields();
 }
 
 // ── Handlers ───────────────────────────────────────────────────────────────────
@@ -953,12 +1143,54 @@ async function handleCreate(form) {
 async function openPorra(id) {
   state.currentPorra = state.porras.find(p => p.id === id) || null;
   state.playerMessage = '';
+  state.groupSetupCollapsed = false;
+  state.matchSectionCollapsed = false;
+  state.playerSectionCollapsed = false;
+  state.miniSectionCollapsed = false;
+  clearGroupSetupDraft();
   if (!state.currentPorra) return;
   await loadDetail(id);
   render();
 }
 
+async function deletePorra(porraId) {
+  const porra = state.porras.find(item => item.id === porraId);
+  if (!porra) return;
+  if (normalizePorraStatus(porra.status) !== 'draft') {
+    state.detailError = 'Solo se pueden borrar las porras en borrador.';
+    render();
+    return;
+  }
+  const label = porra.name || porra.slug || porra.id;
+  if (!window.confirm(`Vas a borrar el borrador "${label}". Esta acción no se puede deshacer. ¿Continuar?`)) return;
+
+  const { error } = await supabase
+    .from('porras')
+    .delete()
+    .eq('id', porraId);
+  if (error) {
+    state.detailError = error.message;
+    render();
+    return;
+  }
+  if (state.currentPorra?.id === porraId) {
+    state.currentPorra = null;
+  }
+  state.groupSetupCollapsed = false;
+  state.matchSectionCollapsed = false;
+  state.playerSectionCollapsed = false;
+  state.miniSectionCollapsed = false;
+  clearGroupSetupDraft();
+  await loadPorras();
+  render();
+}
+
 async function handleAddGroup(form) {
+  if (canUseGroupSetupDraft() || (!state.groups.length && !state.teams.length)) {
+    state.detailError = 'Usa el asistente de fase de grupos para crear la estructura inicial.';
+    render();
+    return;
+  }
   const name = String(new FormData(form).get('groupName') || '').trim().toUpperCase();
   if (!name) return;
   const { error } = await supabase.from('porra_groups').insert({
@@ -972,7 +1204,224 @@ async function handleAddGroup(form) {
   render();
 }
 
+async function handleStartGroupSetup(form) {
+  const errorEl = document.getElementById('groupSetupError');
+  const fd = new FormData(form);
+  const groupCount = Math.max(1, Number(fd.get('groupCount') || 0) || 0);
+  const teamsPerGroup = Math.max(2, Number(fd.get('teamsPerGroup') || 0) || 0);
+  if (!groupCount || !teamsPerGroup) {
+    errorEl.textContent = 'Indica cuántos grupos y cuántos equipos por grupo habrá.';
+    return;
+  }
+  state.groupSetupDraft = buildGroupSetupDraft(groupCount, teamsPerGroup);
+  state.groupSetupCollapsed = false;
+  state.detailError = '';
+  render();
+}
+
+function cancelGroupSetup() {
+  clearGroupSetupDraft();
+  state.groupSetupCollapsed = false;
+  render();
+}
+
+function syncGroupSetupCustomFields(root = document) {
+  const selects = [...root.querySelectorAll('.group-setup-team-select')];
+  const selectedNames = new Set();
+  let duplicateMessage = '';
+
+  for (const select of selects) {
+    const value = String(select.value || '');
+    if (!value || value === '__custom') continue;
+    const normalized = normalizeTeamName(value);
+    if (selectedNames.has(normalized)) {
+      select.value = '';
+      duplicateMessage = `El equipo "${value}" ya está usado en otro grupo.`;
+      continue;
+    }
+    selectedNames.add(normalized);
+  }
+
+  for (const select of selects) {
+    const card = select.closest('.group-setup-team-card');
+    if (!card) continue;
+    const customFields = card.querySelector('.group-setup-custom-fields');
+    const preview = card.querySelector('[data-team-preview]');
+    const isCustom = select.value === '__custom';
+    if (customFields) {
+      customFields.classList.toggle('is-hidden', !isCustom);
+      customFields.querySelectorAll('input').forEach(input => {
+        input.disabled = !isCustom;
+        input.required = isCustom && input.name.endsWith('_name');
+      });
+    }
+
+    const selectedLabel = select.options[select.selectedIndex]?.textContent?.trim() || '';
+    if (preview) {
+      if (!select.value) {
+        preview.textContent = 'Elige un equipo para ver la bandera';
+      } else if (isCustom) {
+        preview.textContent = 'Personalizado: añade nombre y bandera';
+      } else {
+        preview.textContent = selectedLabel;
+      }
+    }
+
+    select.querySelectorAll('option').forEach(option => {
+      if (!option.value || option.value === '__custom') {
+        option.disabled = false;
+        return;
+      }
+      const normalized = normalizeTeamName(option.value);
+      option.disabled = selectedNames.has(normalized) && normalized !== normalizeTeamName(select.value);
+    });
+  }
+
+  const errorEl = document.getElementById('groupSetupError');
+  if (errorEl) {
+    if (duplicateMessage) errorEl.textContent = duplicateMessage;
+    else if (String(errorEl.textContent || '').startsWith('El equipo "')) errorEl.textContent = '';
+  }
+}
+
+async function handleSaveGroupSetup(form) {
+  const errorEl = document.getElementById('groupSetupError');
+  const fd = new FormData(form);
+  const draft = state.groupSetupDraft;
+  if (!draft) {
+    errorEl.textContent = 'No hay asistente activo.';
+    return;
+  }
+
+  const firstKickoffRaw = String(fd.get('firstKickoff') || '');
+  const daysBetweenRaw = String(fd.get('daysBetween') || '');
+  draft.firstKickoff = firstKickoffRaw;
+  draft.daysBetween = Math.max(1, Number(daysBetweenRaw) || 4);
+
+  const existingGroups = [...state.groups]
+    .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0));
+  const existingTeamsByGroup = new Map(
+    existingGroups.map(group => [
+      group.group_id,
+      state.teams
+        .filter(team => team.group_id === group.group_id)
+        .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+    ])
+  );
+  const groupRows = [];
+  const teamRows = [];
+  const teamNames = new Set();
+  let setupError = '';
+
+  for (const [groupIndex, group] of draft.groups.entries()) {
+    const groupName = String(group.name || defaultGroupName(groupIndex)).trim().toUpperCase();
+    const existingGroup = existingGroups[groupIndex];
+    const groupId = existingGroup?.group_id || groupName;
+    groupRows.push({
+      porra_id: state.currentPorra.id,
+      group_id: groupId,
+      name: groupName,
+      position: groupIndex + 1
+    });
+
+    const existingTeams = existingTeamsByGroup.get(groupId) || [];
+    for (const [teamIndex] of group.teams.entries()) {
+      const catalogTeam = String(fd.get(`group_${groupIndex}_team_${teamIndex}_catalog`) || '').trim();
+      const customName = String(fd.get(`group_${groupIndex}_team_${teamIndex}_name`) || '').trim();
+      const customFlag = String(fd.get(`group_${groupIndex}_team_${teamIndex}_flag`) || '').trim();
+      const name = catalogTeam === '__custom' ? customName : catalogTeam;
+      const flag = catalogTeam === '__custom'
+        ? (customFlag || flagForTeam(customName))
+        : flagForTeam(catalogTeam);
+      if (!catalogTeam) {
+        setupError = `Elige un equipo para la posición ${teamIndex + 1} del grupo ${groupName}.`;
+        break;
+      }
+      if (catalogTeam === '__custom' && !name) {
+        setupError = `Falta el nombre personalizado del equipo ${teamIndex + 1} del grupo ${groupName}.`;
+        break;
+      }
+      const normalizedName = name.toUpperCase();
+      if (teamNames.has(normalizedName)) {
+        setupError = `El equipo "${name}" está repetido.`;
+        break;
+      }
+      teamNames.add(normalizedName);
+      const existingTeam = existingTeams[teamIndex];
+      teamRows.push({
+        porra_id: state.currentPorra.id,
+        team_id: existingTeam?.team_id || makeEntityId('team'),
+        name,
+        flag: flag || flagForTeam(name) || null,
+        group_id: groupId,
+        position: teamIndex + 1
+      });
+    }
+    if (setupError) break;
+  }
+
+  if (setupError) {
+    errorEl.textContent = setupError;
+    return;
+  }
+  if (!groupRows.length || !teamRows.length) {
+    errorEl.textContent = 'Debes completar todos los equipos.';
+    return;
+  }
+
+  const { error: groupsError } = await supabase
+    .from('porra_groups')
+    .upsert(groupRows, { onConflict: 'porra_id,group_id' });
+  if (groupsError) {
+    errorEl.textContent = groupsError.message;
+    return;
+  }
+
+  const { error: teamsError } = await supabase
+    .from('porra_teams')
+    .upsert(teamRows, { onConflict: 'porra_id,team_id' });
+  if (teamsError) {
+    errorEl.textContent = teamsError.message;
+    return;
+  }
+
+  const groupMatchIds = state.matches
+    .filter(isGroupMatch)
+    .map(match => match.match_id);
+  if (groupMatchIds.length) {
+    const { error: deleteMatchesError } = await supabase
+      .from('porra_matches')
+      .delete()
+      .eq('porra_id', state.currentPorra.id)
+      .in('match_id', groupMatchIds);
+    if (deleteMatchesError) {
+      errorEl.textContent = deleteMatchesError.message;
+      return;
+    }
+  }
+
+  await loadDetail(state.currentPorra.id);
+  const matchRows = buildGroupMatches(firstKickoffRaw, daysBetweenRaw);
+  if (matchRows.length) {
+    const { error: matchesError } = await supabase.from('porra_matches').insert(matchRows);
+    if (matchesError) {
+      state.detailError = matchesError.message;
+      await loadDetail(state.currentPorra.id);
+      render();
+      return;
+    }
+  }
+
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
 async function handleAddTeam(form) {
+  if (canUseGroupSetupDraft() || (!state.groups.length && !state.teams.length)) {
+    state.detailError = 'Usa el asistente de fase de grupos para crear la estructura inicial.';
+    render();
+    return;
+  }
   const errorEl = document.getElementById('teamError');
   const fd = new FormData(form);
   const catalogTeam = String(fd.get('catalogTeam') || '').trim();
@@ -982,6 +1431,10 @@ async function handleAddTeam(form) {
   const flag = catalogTeam === '__custom' ? (customFlag || flagForTeam(customName)) : flagForTeam(catalogTeam);
   const groupId = String(fd.get('groupId') || '').trim() || null;
   if (!name) return;
+  if (porraHasTeamName(name)) {
+    errorEl.textContent = 'Ese equipo ya existe en la porra.';
+    return;
+  }
   const { error } = await supabase.from('porra_teams').insert({
     porra_id: state.currentPorra.id,
     team_id: makeEntityId('team'),
@@ -1018,6 +1471,11 @@ async function handleEditTeam(form) {
   const existingTeam = state.teams.find(team => team.team_id === teamId);
   if (!name) {
     state.detailError = 'El nombre del equipo es obligatorio.';
+    render();
+    return;
+  }
+  if (porraHasTeamName(name, teamId)) {
+    state.detailError = 'Ese equipo ya existe en la porra.';
     render();
     return;
   }
@@ -1325,6 +1783,9 @@ document.addEventListener('submit', e => {
   if (e.target.id === 'loginForm')    { e.preventDefault(); handleLogin(e.target); }
   if (e.target.id === 'createForm')   { e.preventDefault(); handleCreate(e.target); }
   if (e.target.id === 'addPlayerForm') { e.preventDefault(); handleAddPlayer(e.target); }
+  if (e.target.id === 'startGroupSetupForm') { e.preventDefault(); handleStartGroupSetup(e.target); }
+  if (e.target.id === 'saveGroupSetupForm') { e.preventDefault(); handleSaveGroupSetup(e.target); }
+  if (e.target.id === 'regenerateGroupMatchesForm') { e.preventDefault(); handleGenerateGroupMatches(e.target); }
   if (e.target.id === 'addGroupForm') { e.preventDefault(); handleAddGroup(e.target); }
   if (e.target.id === 'addTeamForm')  { e.preventDefault(); handleAddTeam(e.target); }
   if (e.target.classList.contains('edit-team-form')) { e.preventDefault(); handleEditTeam(e.target); }
@@ -1415,9 +1876,16 @@ document.addEventListener('dragend', () => {
 
 document.addEventListener('click', e => {
   if (e.target.id === 'logoutBtn')              supabase.auth.signOut().then(refreshAuth);
-  if (e.target.id === 'backBtn')                { state.currentPorra = null; state.playerMessage = ''; render(); }
+  if (e.target.id === 'backBtn')                { state.currentPorra = null; state.playerMessage = ''; clearGroupSetupDraft(); state.groupSetupCollapsed = false; state.matchSectionCollapsed = false; state.playerSectionCollapsed = false; state.miniSectionCollapsed = false; render(); }
   if (e.target.id === 'advanceStatusBtn')       advancePorraStatus();
+  if (e.target.id === 'deletePorraBtn')         deletePorra(state.currentPorra?.id);
+  if (e.target.id === 'toggleGroupSetupBtn')     toggleGroupSetupCollapsed();
+  if (e.target.id === 'toggleMatchSectionBtn')   toggleMatchSectionCollapsed();
+  if (e.target.id === 'togglePlayerSectionBtn')  togglePlayerSectionCollapsed();
+  if (e.target.id === 'toggleMiniSectionBtn')    toggleMiniSectionCollapsed();
+  if (e.target.id === 'cancelGroupSetupBtn')     cancelGroupSetup();
   if (e.target.classList.contains('open-porra')) openPorra(e.target.dataset.id);
+  if (e.target.classList.contains('delete-porra')) deletePorra(e.target.dataset.id);
   if (e.target.classList.contains('del-player')) deletePlayer(e.target.dataset.id);
   if (e.target.classList.contains('edit-team'))  startEditTeam(e.target.dataset.id);
   if (e.target.classList.contains('cancel-edit-team')) cancelEditTeam();

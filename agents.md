@@ -48,15 +48,21 @@ El dashboard en `admin-next/` tiene:
 - ✅ Login con Supabase Auth + comprobación `pp_is_admin()`
 - ✅ Crear porra (nombre, slug auto, tipo de evento, deadline, features)
 - ✅ Listar porras del admin
-- ✅ Vista de detalle por porra: añadir/borrar grupos, equipos y partidos
+- ✅ Borrar porras en estado borrador desde la lista o el detalle
+- ✅ Vista de detalle por porra: asistente de fase de grupos, partidos y mini-porra
+- ✅ Vista de detalle por porra: asistente de fase de grupos, jugadores, partidos y mini-porra plegables
 - ✅ Gestión de jugadores: añadir por nombre y email, listar y eliminar; si el email no existe en Auth, el panel crea la cuenta y la enlaza
 - ✅ Equipos con bandera ligada desde catálogo, con opción de equipo personalizado
 - ✅ Tabla de equipos ordenada por grupo, con edición inline y arrastre dentro del mismo grupo
+- ✅ Bloqueo de equipos duplicados en toda la porra, incluido el asistente guiado
 - ✅ Generación automática de partidos de fase de grupos por jornadas desde grupos + equipos
+- ✅ Asistente guiado para crear grupos y equipos por pasos, con selector de equipos con bandera, que se queda visible, plegable y editable tras guardar
+- ✅ Si se resetea la fase de grupos, el asistente reaparece para regenerar los mismos partidos a partir de la estructura guardada
 - ✅ Reset de fase de grupos para regenerar esa estructura si algo sale mal
 - ✅ Organización manual de partidos con botones subir/bajar usando `porra_matches.position`
 - ✅ Reordenación por arrastre de las filas de fase de grupos
 - ✅ Estructura de partidos: jornadas, orden manual y fechas
+- ✅ Sección de partidos plegable desde la cabecera, igual que el asistente de grupos
 - ✅ Mini-porra editable desde el detalle de la porra: preguntas, puntos, tipo y opciones
 - ✅ Ciclo de estado de porra: `draft → open → playing → closed`
 
@@ -125,7 +131,7 @@ function esc(value) { ... }   // XSS safe
 porras              → nombre, slug, event_type, status, owner (uuid), predictions_deadline,
                       scoring (jsonb), features (jsonb)
 porra_teams         → porra_id, name, flag, group_id, position
-porra_groups        → porra_id, name
+porra_groups        → porra_id, name, position
 porra_matches       → porra_id, team1_id, team2_id, phase, group_label, kickoff, status,
                       score_home, score_away, slot (jornada), position (orden)
 porra_players       → porra_id, user_id, display_name, joined_at

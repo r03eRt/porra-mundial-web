@@ -98,6 +98,7 @@ button:disabled { opacity: 0.6; cursor: default; }
 /* Porra list */
 .porra-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .porra-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 0.75rem; background: var(--panel2); border-radius: 9px; }
+.porra-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .porra-row code { color: var(--accent); font-size: 0.85rem; }
 
 /* Detail header */
@@ -159,6 +160,101 @@ button:disabled { opacity: 0.6; cursor: default; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.group-setup-block {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9rem;
+}
+.group-setup-card,
+.match-section-card,
+.player-section-card,
+.mini-section-card {
+  overflow: hidden;
+}
+.group-setup-header,
+.match-section-header,
+.section-collapsible-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.group-setup-header h2,
+.match-section-header h2,
+.section-collapsible-header h2 {
+  margin-bottom: 0.35rem;
+}
+.group-setup-header p,
+.match-section-header p,
+.section-collapsible-header p {
+  margin: 0;
+}
+.group-setup-body.is-collapsed,
+.match-section-body.is-collapsed,
+.section-collapsible-body.is-collapsed {
+  display: none;
+}
+.group-setup-block legend {
+  color: var(--muted);
+  padding: 0 0.35rem;
+  font-size: 0.85rem;
+}
+.group-setup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+.group-setup-summary {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.group-setup-summary li {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+.group-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(91, 140, 255, 0.12);
+  border: 1px solid rgba(91, 140, 255, 0.2);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  margin: 0.15rem 0.2rem 0 0;
+  font-size: 0.85rem;
+}
+.group-setup-team-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel2);
+}
+.group-setup-team-card label {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.group-setup-team-preview {
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+.group-setup-team-card select,
+.group-setup-team-card input {
+  width: 100%;
+}
+.is-hidden {
+  display: none;
 }
 
 /* Match drag and drop */
