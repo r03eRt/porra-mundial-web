@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { scorePrediction } from '../../src/lib/porra-core.js';
+import { calculateTeamStats, TEAM_DETAIL_METRICS } from '../../src/lib/team-stats.js';
 
 const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw';
@@ -20,7 +21,10 @@ const state = {
   myPlayerId: null,    // player_id del usuario logueado en esta porra (o null)
   tab: 'ranking',
   myDraft: {},         // ediciones sin guardar: { match_id: "2-1" }
-  playerDetailId: null // jugador seleccionado en "Detalle jugador"
+  playerDetailId: null, // jugador seleccionado en "Detalle jugador"
+  matchGoalsExpanded: {}, // { match_id: true } goleadores desplegados
+  selectedTeamId: null, // equipo seleccionado en "Equipos"
+  teamsQuery: ''         // texto del buscador de equipos
 };
 
 // ---------------------------------------------------------------------------
@@ -127,6 +131,8 @@ function render() {
   if (!state.porra) { renderNotFound(); return; }
 
   $title.textContent = state.porra.name;
+  const $sub = document.getElementById('porra-subtitle');
+  if ($sub) $sub.textContent = PORRA_STATUS_LABELS[state.porra.status] || '';
   renderSessionBar();
 
   // Si la pestaña activa ya no es visible (p.ej. logout en "Mi porra"), volver a ranking
@@ -149,11 +155,10 @@ function render() {
 
 function renderPlaceholder(tab) {
   $app.innerHTML = `
-    <div class="card">
-      <h2>${esc(tab.label)}</h2>
-      <p class="muted">Esta sección estará disponible próximamente.</p>
-      <p class="muted">En la app del Mundial existe; aquí se irá portando con los
-      datos de esta porra a medida que avance la plataforma.</p>
+    <div class="panel">
+      <div class="panel-head"><h2>${esc(tab.label)}</h2></div>
+      <p class="empty-state">Esta sección estará disponible próximamente.<br>
+      En la app del Mundial existe; aquí se irá portando con los datos de esta porra.</p>
     </div>`;
 }
 
@@ -161,13 +166,13 @@ function renderNoSlug() {
   $title.textContent = 'Porra';
   $tabs.innerHTML = '';
   $session.innerHTML = '';
-  $app.innerHTML = `<div class="card"><p>Abre una porra con la URL <code>/p/&lt;slug&gt;</code>.</p></div>`;
+  $app.innerHTML = `<div class="panel"><p>Abre una porra con la URL <code>/p/&lt;slug&gt;</code>.</p></div>`;
 }
 function renderNotFound() {
   $title.textContent = 'Porra';
   $tabs.innerHTML = '';
   $session.innerHTML = '';
-  $app.innerHTML = `<div class="card"><p>No existe ninguna porra con el slug <strong>${esc(state.slug)}</strong>.</p></div>`;
+  $app.innerHTML = `<div class="panel"><p>No existe ninguna porra con el slug <strong>${esc(state.slug)}</strong>.</p></div>`;
 }
 
 function renderSessionBar() {
@@ -219,44 +224,126 @@ function renderRanking() {
   const rows = computeRanking();
   const played = state.matches.filter(m => m.stage === 'group' && matchResult(m)).length;
   $app.innerHTML = `
-    <div class="card">
-      <h2>Clasificación</h2>
-      <p class="muted">${played} partido(s) de grupo con resultado.</p>
-      <table class="data">
-        <thead><tr><th>#</th><th>Jugador</th><th>Puntos</th><th>Exactos</th><th>Signo</th></tr></thead>
-        <tbody>
-          ${rows.map((r, i) => `
-            <tr class="${r.player.player_id === state.myPlayerId ? 'me' : ''}">
-              <td>${i + 1}</td>
-              <td>${esc(r.player.name)}</td>
-              <td><strong>${r.points}</strong></td>
-              <td>${r.exact}</td>
-              <td>${r.sign}</td>
-            </tr>`).join('') || `<tr><td colspan="5" class="muted">Sin jugadores todavía.</td></tr>`}
-        </tbody>
-      </table>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Clasificación porra</h2>
+        <span class="hint">${played} partido(s) de grupo con resultado</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th class="table-center">#</th><th>Participante</th><th class="table-center">Puntos</th><th class="table-center">Exactos</th><th class="table-center">Signo</th></tr></thead>
+          <tbody>
+            ${rows.map((r, i) => `
+              <tr class="${i < 3 ? 'rank-' + (i + 1) : ''}">
+                <td class="ranking-position">${i + 1}</td>
+                <td class="${r.player.player_id === state.myPlayerId ? 'standing-team' : ''}">${esc(r.player.name)}${r.player.player_id === state.myPlayerId ? ' <span class="pill">tú</span>' : ''}</td>
+                <td class="table-center points">${r.points}</td>
+                <td class="table-center">${r.exact}</td>
+                <td class="table-center">${r.sign}</td>
+              </tr>`).join('') || `<tr><td colspan="5" class="empty-state">Sin jugadores todavía.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
     </div>`;
+}
+
+// Devuelve la jornada del partido (en admin se guarda en slot). Fallback: 1.
+function matchdayOf(m) { return m.slot || 1; }
+
+function matchScheduleText(m) {
+  if (!m.kickoff) return 'Fecha por confirmar';
+  return new Date(m.kickoff).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+// Goleadores: scorers jsonb. Soporta [{name,minute,team,penalty,owngoal}] o
+// {team1:[...],team2:[...]}. Devuelve {team1:[], team2:[]} con la forma legacy.
+function goalBreakdown(m) {
+  const raw = m.scorers;
+  if (!raw) return null;
+  const norm = g => ({
+    name: g.name || g.player || '', minute: g.minute || g.min || '',
+    penalty: Boolean(g.penalty), ownGoal: Boolean(g.owngoal || g.ownGoal)
+  });
+  let team1 = [], team2 = [];
+  if (Array.isArray(raw)) {
+    for (const g of raw) {
+      const t = (g.team === m.team2 || g.side === 'away' || g.side === 2) ? 2 : 1;
+      (t === 2 ? team2 : team1).push(norm(g));
+    }
+  } else if (typeof raw === 'object') {
+    team1 = (raw.team1 || []).map(norm);
+    team2 = (raw.team2 || []).map(norm);
+  }
+  if (!team1.length && !team2.length) return null;
+  return { team1, team2 };
+}
+
+function formatGoalEvent(g) {
+  if (!g.name) return '';
+  const marker = g.ownGoal ? '↺ P.P.' : (g.penalty ? '🎯' : '⚽');
+  const minute = g.minute ? `${esc(String(g.minute))}'` : '';
+  return `<span class="goal-event"><span class="goal-marker">${marker}</span><span>${esc(g.name)}${minute ? ' ' + minute : ''}</span></span>`;
+}
+
+function renderGoalBreakdown(m) {
+  const goals = goalBreakdown(m);
+  if (!goals) return '<div class="match-goals"><span class="goal-empty">Sin goleadores registrados.</span></div>';
+  const lines = [];
+  if (goals.team1.length) lines.push(`<div class="goal-line"><strong>${teamFlag(m.team1)} ${esc(teamName(m.team1))}</strong><div class="goal-events">${goals.team1.map(formatGoalEvent).join('')}</div></div>`);
+  if (goals.team2.length) lines.push(`<div class="goal-line"><strong>${teamFlag(m.team2)} ${esc(teamName(m.team2))}</strong><div class="goal-events">${goals.team2.map(formatGoalEvent).join('')}</div></div>`);
+  return `<div class="match-goals">${lines.join('')}</div>`;
+}
+
+function renderMatchCard(m) {
+  const r = matchResult(m);
+  const expanded = Boolean(state.matchGoalsExpanded[m.match_id]);
+  return `<article class="match-card">
+    <span class="pill">Grupo ${esc(m.group_id || '?')} · ${esc(m.match_id)}</span>
+    <h3 class="teams"><span>${teamFlag(m.team1)} ${esc(teamName(m.team1))}</span><span class="versus">-</span><span>${esc(teamName(m.team2))} ${teamFlag(m.team2)}</span></h3>
+    <div class="match-schedule">${esc(matchScheduleText(m))}</div>
+    <div class="match-score ${r ? '' : 'pending'}">${r ? `${r.home} - ${r.away}` : 'Pendiente'}</div>
+    ${r ? `
+      <div class="match-card-actions">
+        <button type="button" class="match-link-button" data-toggle-goals="${esc(m.match_id)}" aria-expanded="${expanded}">
+          ${expanded ? 'Ocultar goleadores' : 'Ver goleadores'}
+        </button>
+      </div>
+      ${expanded ? renderGoalBreakdown(m) : ''}
+    ` : ''}
+    <div class="source">${r ? 'Resultado introducido por el organizador' : 'Sin resultado todavía'}</div>
+  </article>`;
 }
 
 function renderMatches() {
   const groupMatches = state.matches.filter(m => m.stage === 'group');
-  $app.innerHTML = `
-    <div class="card">
-      <h2>Partidos</h2>
-      <table class="data">
-        <thead><tr><th>Grupo</th><th>Partido</th><th>Resultado</th></tr></thead>
-        <tbody>
-          ${groupMatches.map(m => {
-            const r = matchResult(m);
-            return `<tr>
-              <td>${esc(m.group_id || '')}</td>
-              <td>${teamFlag(m.team1)} ${esc(teamName(m.team1))} – ${esc(teamName(m.team2))} ${teamFlag(m.team2)}</td>
-              <td>${r ? `${r.home} - ${r.away}` : '<span class="muted">pendiente</span>'}</td>
-            </tr>`;
-          }).join('') || `<tr><td colspan="3" class="muted">Sin partidos todavía.</td></tr>`}
-        </tbody>
-      </table>
-    </div>`;
+  const matchdays = [...new Set(groupMatches.map(matchdayOf))].sort((a, b) => a - b);
+
+  $app.innerHTML = `<div class="matchdays">${
+    matchdays.map(day => {
+      const dayMatches = groupMatches.filter(m => matchdayOf(m) === day);
+      const groups = [...new Set(dayMatches.map(m => m.group_id || '—'))].sort();
+      return `
+        <section class="matchday">
+          <div class="matchday-head">
+            <h3>Jornada ${day}</h3>
+            <span>${dayMatches.length} partido(s)</span>
+          </div>
+          <div class="matchday-groups">
+            ${groups.map(g => {
+              const gm = dayMatches.filter(m => (m.group_id || '—') === g);
+              return `
+                <section class="match-group">
+                  <div class="match-group-head">
+                    <h4>Grupo ${esc(g)}</h4>
+                    <span>${gm.length} partido(s)</span>
+                  </div>
+                  <div class="match-grid">${gm.map(renderMatchCard).join('')}</div>
+                </section>`;
+            }).join('')}
+          </div>
+        </section>`;
+    }).join('') || `<p class="empty-state">Sin partidos todavía.</p>`
+  }</div>`;
 }
 
 // --- Clasificación de grupos (puntos reales del torneo) --------------------
@@ -288,43 +375,112 @@ function renderGroupStandings() {
     ? state.groups
     : [...new Set(state.matches.filter(m => m.stage === 'group').map(m => m.group_id).filter(Boolean))]
         .map(group_id => ({ group_id, name: group_id }));
-  $app.innerHTML = groups.map(grp => {
+  const inner = groups.map(grp => {
     const rows = computeGroupStandings(grp.group_id);
     return `
-      <div class="card">
-        <h2>Grupo ${esc(grp.name || grp.group_id)}</h2>
-        <table class="data">
-          <thead><tr><th>#</th><th>Equipo</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>GF</th><th>GC</th><th>DG</th><th>Pts</th></tr></thead>
-          <tbody>
-            ${rows.map((r, i) => `<tr>
-              <td>${i + 1}</td>
-              <td>${teamFlag(r.team)} ${esc(teamName(r.team))}</td>
-              <td>${r.pj}</td><td>${r.g}</td><td>${r.e}</td><td>${r.p}</td>
-              <td>${r.gf}</td><td>${r.gc}</td><td>${r.gf - r.gc}</td>
-              <td><strong>${r.pts}</strong></td>
-            </tr>`).join('') || `<tr><td colspan="10" class="muted">Sin equipos.</td></tr>`}
-          </tbody>
-        </table>
-      </div>`;
-  }).join('') || `<div class="card"><p class="muted">No hay grupos definidos.</p></div>`;
+      <section class="group-standing">
+        <h3>Grupo ${esc(grp.name || grp.group_id)}</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Equipo</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>GF</th><th>GC</th><th>DG</th><th>Pts</th></tr></thead>
+            <tbody>
+              ${rows.map((r, i) => `<tr class="${i < 2 ? 'rank-' + (i + 1) : ''}">
+                <td class="group-position">${i + 1}</td>
+                <td class="standing-team">${teamFlag(r.team)} ${esc(teamName(r.team))}</td>
+                <td>${r.pj}</td><td>${r.g}</td><td>${r.e}</td><td>${r.p}</td>
+                <td>${r.gf}</td><td>${r.gc}</td><td>${r.gf - r.gc}</td>
+                <td class="points">${r.pts}</td>
+              </tr>`).join('') || `<tr><td colspan="10" class="empty-state">Sin equipos.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </section>`;
+  }).join('');
+  $app.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h2>Clasificación de grupos</h2></div>
+      ${inner ? `<div class="group-standings-grid">${inner}</div>` : `<p class="empty-state">No hay grupos definidos.</p>`}
+    </div>`;
 }
 
-// --- Equipos ---------------------------------------------------------------
+// --- Equipos (layout de dos columnas, reusa src/lib/team-stats.js) ---------
+const TEAM_METRIC_BAD = new Set(['goalsAgainst', 'losses', 'failedToScore']);
+
+function renderTeamChart(metric, value, maxValue) {
+  const v = Number(value) || 0;
+  const percent = maxValue > 0 ? Math.min(100, (Math.abs(v) / Math.abs(maxValue)) * 100) : 0;
+  const display = Number.isInteger(v) ? v : v.toFixed(2);
+  return `
+    <article class="team-chart-card">
+      <header><h4>${esc(metric.label)}</h4><span class="metric-value">${display}</span></header>
+      <div class="chart-track"><div class="chart-fill ${TEAM_METRIC_BAD.has(metric.key) ? 'bad' : ''}" style="width:${percent}%"></div></div>
+      <div class="team-detail-subtitle"><span>${percent.toFixed(0)}% del máximo del torneo</span></div>
+    </article>`;
+}
+
 function renderTeams() {
-  const byGroup = new Map();
-  for (const t of state.teams) {
-    const key = t.group_id || '—';
-    if (!byGroup.has(key)) byGroup.set(key, []);
-    byGroup.get(key).push(t);
+  const getResult = m => matchResult(m);
+  const groupMatches = state.matches.filter(m => m.stage === 'group');
+  const teams = [...state.teams].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  if (!teams.length) {
+    $app.innerHTML = `<div class="panel"><div class="panel-head"><h2>Equipos</h2></div><p class="empty-state">No hay equipos todavía.</p></div>`;
+    return;
   }
-  const sections = [...byGroup.entries()].map(([group, teams]) => `
-    <div class="card">
-      <h2>${group === '—' ? 'Sin grupo' : 'Grupo ' + esc(group)}</h2>
-      <ul class="team-list">
-        ${teams.map(t => `<li>${t.flag || '🏳️'} ${esc(t.name)}</li>`).join('')}
-      </ul>
-    </div>`).join('');
-  $app.innerHTML = sections || `<div class="card"><p class="muted">No hay equipos todavía.</p></div>`;
+  const query = (state.teamsQuery || '').toLowerCase();
+  const filtered = teams.filter(t => t.name.toLowerCase().includes(query));
+
+  let selected = teams.find(t => t.team_id === state.selectedTeamId) || teams[0];
+  state.selectedTeamId = selected.team_id;
+
+  const stats = calculateTeamStats(selected.team_id, groupMatches, getResult);
+  const profiles = teams.map(t => calculateTeamStats(t.team_id, groupMatches, getResult));
+  const maxByMetric = Object.fromEntries(TEAM_DETAIL_METRICS.map(metric =>
+    [metric.key, Math.max(...profiles.map(p => Math.abs(Number(p[metric.key]) || 0)), 0)]));
+
+  const summaryCards = [
+    ['Partidos', `${stats.played}/${stats.scheduled}`],
+    ['Victorias', stats.wins],
+    ['Empates', stats.draws],
+    ['Derrotas', stats.losses]
+  ];
+
+  $app.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <div><h2>Equipos</h2><p class="hint">Selecciona una selección para ver su detalle con estadísticas.</p></div>
+        <input type="search" data-action="teams-search" placeholder="Buscar equipo…" value="${esc(state.teamsQuery || '')}" />
+      </div>
+      <div class="teams-layout">
+        <div class="teams-list-panel">
+          <div class="teams-list-head"><h3>Lista de equipos</h3><span class="hint">${filtered.length}/${teams.length}</span></div>
+          <div class="teams-list">
+            ${filtered.map(t => `
+              <button class="team-list-item ${t.team_id === selected.team_id ? 'active' : ''}" type="button" data-team-select="${esc(t.team_id)}">
+                <span>${t.flag || '🏳️'} ${esc(t.name)}</span>
+              </button>`).join('') || `<p class="team-empty">Sin coincidencias.</p>`}
+          </div>
+        </div>
+        <div class="teams-detail">
+          <div class="team-detail-head">
+            <div>
+              <h3>${selected.flag || '🏳️'} ${esc(selected.name)}</h3>
+              <p>Detalle del equipo con estadísticas de la porra y resumen de su rendimiento actual.</p>
+            </div>
+            <div class="team-detail-subtitle">
+              <span>${stats.points} puntos</span><span>${stats.goalsFor} GF</span>
+              <span>${stats.goalsAgainst} GC</span>
+              <span>${stats.goalDifference >= 0 ? '+' : ''}${stats.goalDifference} DG</span>
+            </div>
+          </div>
+          <div class="team-summary-grid">
+            ${summaryCards.map(([label, value]) => `<article class="team-summary-card"><span>${label}</span><b>${value}</b></article>`).join('')}
+          </div>
+          <div class="team-chart-grid">
+            ${TEAM_DETAIL_METRICS.map(metric => renderTeamChart(metric, stats[metric.key], maxByMetric[metric.key])).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`;
 }
 
 // --- Detalle de jugador ----------------------------------------------------
@@ -342,28 +498,34 @@ function renderPlayerDetail() {
     return { m, pred, result, s };
   });
 
+  const total = rows.reduce((acc, r) => acc + (r.s ? r.s.points : 0), 0);
   $app.innerHTML = `
-    <div class="card">
-      <h2>Detalle de jugador</h2>
-      <label class="inline">Jugador:
-        <select data-action="select-player">
-          ${state.players.map(p =>
-            `<option value="${esc(p.player_id)}" ${p.player_id === selected ? 'selected' : ''}>${esc(p.name)}</option>`
-          ).join('')}
-        </select>
-      </label>
-      <table class="data">
-        <thead><tr><th>Grupo</th><th>Partido</th><th>Pronóstico</th><th>Resultado</th><th>Puntos</th></tr></thead>
-        <tbody>
-          ${rows.map(({ m, pred, result, s }) => `<tr>
-            <td>${esc(m.group_id || '')}</td>
-            <td>${teamFlag(m.team1)} ${esc(teamName(m.team1))} – ${esc(teamName(m.team2))} ${teamFlag(m.team2)}</td>
-            <td>${pred?.score ? esc(pred.score) : '<span class="muted">—</span>'}</td>
-            <td>${result ? `${result.home} - ${result.away}` : '<span class="muted">pdte</span>'}</td>
-            <td>${s ? (s.exact ? `<strong>${s.points}</strong> ✔` : (s.sign ? `${s.points} ~` : '0')) : '<span class="muted">—</span>'}</td>
-          </tr>`).join('') || `<tr><td colspan="5" class="muted">Sin partidos.</td></tr>`}
-        </tbody>
-      </table>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Detalle de jugador</h2>
+        <label class="inline">Jugador:
+          <select data-action="select-player">
+            ${state.players.map(p =>
+              `<option value="${esc(p.player_id)}" ${p.player_id === selected ? 'selected' : ''}>${esc(p.name)}</option>`
+            ).join('')}
+          </select>
+        </label>
+      </div>
+      <p class="hint">Total acumulado: <span class="points">${total}</span> puntos.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Grupo</th><th>Partido</th><th>Pronóstico</th><th>Resultado</th><th class="table-center">Puntos</th></tr></thead>
+          <tbody>
+            ${rows.map(({ m, pred, result, s }) => `<tr>
+              <td>${esc(m.group_id || '')}</td>
+              <td>${teamFlag(m.team1)} ${esc(teamName(m.team1))} – ${esc(teamName(m.team2))} ${teamFlag(m.team2)}</td>
+              <td>${pred?.score ? esc(pred.score) : '<span class="muted">—</span>'}</td>
+              <td>${result ? `${result.home} - ${result.away}` : '<span class="muted">pdte</span>'}</td>
+              <td class="table-center ${s && s.points ? 'points' : 'muted'}">${s ? (s.exact ? `${s.points} ✔` : (s.sign ? `${s.points} ~` : '0')) : '—'}</td>
+            </tr>`).join('') || `<tr><td colspan="5" class="empty-state">Sin partidos.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
     </div>`;
 }
 
@@ -377,36 +539,40 @@ function renderMyPorra() {
     : 'sin límite';
 
   $app.innerHTML = `
-    <div class="card">
-      <h2>Mi porra</h2>
-      <p class="muted">${open
-        ? `Edición abierta · cierre: ${deadlineTxt}`
-        : `Edición cerrada (la porra no está abierta o pasó el deadline).`}</p>
-      <table class="data">
-        <thead><tr><th>Grupo</th><th>Partido</th><th>Mi marcador</th></tr></thead>
-        <tbody>
-          ${groupMatches.map(m => {
-            const saved = predictionFor(state.myPlayerId, m.match_id);
-            const val = state.myDraft[m.match_id] ?? (saved ? saved.score : '');
-            return `<tr>
-              <td>${esc(m.group_id || '')}</td>
-              <td>${teamFlag(m.team1)} ${esc(teamName(m.team1))} – ${esc(teamName(m.team2))} ${teamFlag(m.team2)}</td>
-              <td><input class="score-input" data-match="${esc(m.match_id)}"
-                   value="${esc(val)}" placeholder="2-1" ${open ? '' : 'disabled'} /></td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Editar mi porra</h2>
+        <span class="hint">${open
+          ? `Edición abierta · cierre: ${deadlineTxt}`
+          : `Edición cerrada (la porra no está abierta o pasó el deadline)`}</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Grupo</th><th>Partido</th><th class="table-center">Mi marcador</th></tr></thead>
+          <tbody>
+            ${groupMatches.map(m => {
+              const saved = predictionFor(state.myPlayerId, m.match_id);
+              const val = state.myDraft[m.match_id] ?? (saved ? saved.score : '');
+              return `<tr>
+                <td>${esc(m.group_id || '')}</td>
+                <td>${teamFlag(m.team1)} ${esc(teamName(m.team1))} – ${esc(teamName(m.team2))} ${teamFlag(m.team2)}</td>
+                <td class="table-center"><input class="score-input" data-match="${esc(m.match_id)}"
+                     value="${esc(val)}" placeholder="2-1" ${open ? '' : 'disabled'} /></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
       ${open ? `<div class="actions"><button data-action="save-mine" class="primary">Guardar</button>
-        <span id="save-status" class="muted"></span></div>` : ''}
+        <span id="save-status" class="hint"></span></div>` : ''}
     </div>`;
 }
 
 function renderLoginForm() {
   $app.innerHTML = `
-    <div class="card narrow">
-      <h2>Entrar para jugar</h2>
-      <form id="login-form">
+    <div class="panel" style="max-width:420px">
+      <div class="panel-head"><h2>Entrar para jugar</h2></div>
+      <form id="login-form" class="login">
         <label>Email<input type="email" name="email" required /></label>
         <label>Contraseña<input type="password" name="password" required /></label>
         <div class="actions"><button type="submit" class="primary">Entrar</button></div>
@@ -421,6 +587,17 @@ function renderLoginForm() {
 document.addEventListener('click', async (e) => {
   const tabBtn = e.target.closest('[data-tab]');
   if (tabBtn) { state.tab = tabBtn.dataset.tab; render(); return; }
+
+  const goalsBtn = e.target.closest('[data-toggle-goals]');
+  if (goalsBtn) {
+    const id = goalsBtn.dataset.toggleGoals;
+    state.matchGoalsExpanded[id] = !state.matchGoalsExpanded[id];
+    render();
+    return;
+  }
+
+  const teamBtn = e.target.closest('[data-team-select]');
+  if (teamBtn) { state.selectedTeamId = teamBtn.dataset.teamSelect; render(); return; }
 
   const action = e.target.closest('[data-action]')?.dataset.action;
   if (!action) return;
@@ -438,7 +615,16 @@ document.addEventListener('click', async (e) => {
 
 document.addEventListener('input', (e) => {
   const input = e.target.closest('.score-input');
-  if (input) state.myDraft[input.dataset.match] = input.value.trim();
+  if (input) { state.myDraft[input.dataset.match] = input.value.trim(); return; }
+
+  const search = e.target.closest('[data-action="teams-search"]');
+  if (search) {
+    state.teamsQuery = search.value;
+    const caret = search.selectionStart;
+    render();
+    const again = document.querySelector('[data-action="teams-search"]');
+    if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch {} }
+  }
 });
 
 document.addEventListener('change', (e) => {

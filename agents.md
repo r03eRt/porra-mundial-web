@@ -76,6 +76,9 @@ El dashboard en `admin-next/` tiene:
 - ✅ Login de jugador (Supabase Auth email/password, enlazado por `porra_players.user_id`)
 - ✅ "Mi porra": editar marcadores de fase de grupos en `porra_predictions` (solo `open` + antes del deadline)
 - ✅ Menú espejo de la app legacy (array `TABS` en `main.js`). Pestañas reales: Clasificación porra, Editar mi porra, Partidos, Clasificación grupos, Equipos, Detalle jugador. El resto (Histórico, Mini-porra, Cruces, Mejores terceros, Máximos goleadores, Probabilidades, Estadísticas, Comparador) salen como placeholder "próximamente" (`ready: false`)
+- ✅ Aspecto idéntico a la legacy: `public-next/src/styles.css` reusa la paleta y las clases de `src/styles.css` (`.hero`, `.tabs`, `.panel`, `.table-wrap`, `.rank-1/2/3`, `.points`, `.matchdays`/`.match-card`/`.match-goals`, `.group-standings-grid`, `.teams-layout`/`.team-chart-card`)
+- ✅ Partidos como la legacy: agrupados por jornada (`slot`) → grupo, `match-card` con marcador grande y "Ver/Ocultar goleadores" (lee `porra_matches.scorers`)
+- ✅ Equipos como la legacy: layout de dos columnas (lista con buscador + detalle con tarjetas y barras). Reusa `src/lib/team-stats.js` (`calculateTeamStats`, `TEAM_DETAIL_METRICS`)
 - ✅ RLS de escritura del jugador aplicada: migración `supabase/migrations/20260623040000_player_write_predictions.sql` (funciones `pp_is_player`, `pp_predictions_open`; políticas `… player write` en `porra_predictions`/`porra_mini_answers`/`porra_knockout_picks`). Script suelto equivalente: `supabase/platform-player-write.sql`
 - ⬜ Clasificación de grupos calculada, entrada de resultados reales por el admin
 - ⬜ Mini-porra configurable, cruces configurables
