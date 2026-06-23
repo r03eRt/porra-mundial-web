@@ -237,7 +237,13 @@ async function loadPorra() {
   ]);
   state.teams = teams.data || [];
   state.groups = groups.data || [];
-  state.matches = matches.data || [];
+  state.matches = (matches.data || []).map(m => ({
+    ...m,
+    // normalize: porra_matches uses group_label; legacy uses group_id
+    group_id: m.group_id ?? m.group_label ?? null,
+    // normalize: porra_matches uses phase; some older code uses stage
+    stage: m.stage ?? m.phase ?? null,
+  }));
   state.players = players.data || [];
   state.predictions = predictions.data || [];
   state.knockoutPicks = knockoutPicks.data || [];
