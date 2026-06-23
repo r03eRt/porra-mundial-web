@@ -302,6 +302,119 @@ button:disabled { opacity: 0.6; cursor: default; }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table code { font-size: 0.8rem; }
 
+/* Knockout controls (generate / regenerate / reset) */
+.ko-controls {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+/* Knockout bracket — visual columns */
+.ko-bracket-visual {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  align-items: flex-start;
+}
+.ko-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  flex: 1;
+}
+.ko-col-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  text-align: center;
+  padding: 0.4rem 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.5rem;
+}
+.ko-col-matches {
+  display: flex;
+  flex-direction: column;
+}
+.ko-slot {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 0 0.35rem;
+}
+.ko-team-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.32rem 0.55rem;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+  min-height: 28px;
+}
+.ko-team-row:last-of-type { border-bottom: none; }
+.ko-team-row.ko-won { background: rgba(91,140,255,0.12); font-weight: 700; color: var(--accent); }
+.ko-team-row.ko-lost { color: var(--muted); }
+.ko-team-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ko-team-score {
+  font-weight: 700;
+  font-size: 0.9rem;
+  min-width: 1.2rem;
+  text-align: right;
+}
+.ko-slot-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.4rem;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+/* Champion column */
+.ko-col-champion .ko-col-label { color: #f4c430; }
+.ko-champion-slot {
+  border-color: #f4c430;
+  box-shadow: 0 0 0 1px rgba(244, 196, 48, 0.35);
+}
+.ko-champion-slot .ko-team-row {
+  font-size: 0.95rem;
+  font-weight: 700;
+  min-height: 56px;
+  justify-content: center;
+}
+.ko-champion-slot .ko-team-row.ko-won {
+  background: rgba(244, 196, 48, 0.15);
+  color: #f4c430;
+}
+
+/* Jornada group header in matches table */
+.matchday-group-header td {
+  background: var(--panel2);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+.toggle-slot-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0 0.3rem;
+  font-size: 0.75rem;
+  vertical-align: middle;
+  line-height: 1;
+}
+
 /* Resultado inline por partido */
 .result-cell { white-space: nowrap; }
 .inline-result-form { display: inline-flex; align-items: center; gap: 0.3rem; margin: 0; }

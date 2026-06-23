@@ -324,6 +324,7 @@ const state = {
   matches: [],
   players: [],
   miniQuestions: [],
+  miniResults: [],
   editingTeamId: null,
   editingMatchId: null,
   editingMiniQuestionId: null,
@@ -336,6 +337,8 @@ const state = {
   matchSectionCollapsed: false,
   playerSectionCollapsed: false,
   miniSectionCollapsed: false,
+  knockoutSectionCollapsed: true,
+  collapsedSlots: new Set(),
   detailError: '',
   error: ''
 };
@@ -510,6 +513,34 @@ function defaultKnockoutStructure(eventType, templateId = '') {
           : []);
 }
 
+// Given the number of teams entering the knockout phase, return the rounds
+// (e.g. 16 → [{key:'r16',count:8},{key:'qf',count:4},{key:'sf',count:2},{key:'final',count:1}])
+const KNOCKOUT_SIZE_TO_ROUND = { 32: 'r32', 16: 'r16', 8: 'qf', 4: 'sf', 2: 'final' };
+function bracketRoundsForTeamCount(teamCount) {
+  const rounds = [];
+  let n = teamCount;
+  while (n >= 2) {
+    const key = KNOCKOUT_SIZE_TO_ROUND[n];
+    if (!key) return null; // not a clean power-of-two bracket
+    rounds.push({ key, count: n / 2 });
+    n = n / 2;
+  }
+  return rounds.length ? rounds : null;
+}
+
+// Teams that reach the knockout phase from the current group structure.
+// Universal default: top 2 per group. Falls back to power-of-two if odd.
+function knockoutTeamCountFromGroups() {
+  const groupCount = state.groups.length;
+  if (!groupCount) return 0;
+  const raw = groupCount * 2; // top-2 per group
+  // round down to nearest power of two we support (32/16/8/4/2)
+  for (const size of [32, 16, 8, 4, 2]) {
+    if (raw >= size) return size;
+  }
+  return 0;
+}
+
 function knockoutRoundKeyFromFixture(fixture) {
   const round = String(fixture?.round || '').trim().toLowerCase();
   if (round) return round;
@@ -524,9 +555,21 @@ function knockoutRoundKeyFromFixture(fixture) {
 function knockoutSeedLabel(token) {
   const raw = String(token || '').trim();
   const winnerMatch = raw.match(/^W:(.+)$/i);
-  if (winnerMatch) return `Ganador ${winnerMatch[1].toUpperCase()}`;
+  if (winnerMatch) {
+    const refId = winnerMatch[1];
+    // If the token references a generated match id, name it by round + slot.
+    const refMatch = state.matches.find(m => String(m.match_id || '').toUpperCase() === refId.toUpperCase());
+    if (refMatch) {
+      const roundLabel = KNOCKOUT_ROUNDS.find(r => r.key === (refMatch.round_key ?? refMatch.phase))?.label;
+      if (roundLabel) return `Ganador ${roundLabel} ${refMatch.slot ?? ''}`.trim();
+    }
+    return `Ganador ${refId.toUpperCase()}`;
+  }
   const groupSeed = raw.match(/^([A-Z]+)([12])$/);
-  if (groupSeed) return `${groupSeed[1]}${groupSeed[2]}`;
+  if (groupSeed) {
+    const pos = groupSeed[2] === '1' ? '1º' : '2º';
+    return `${pos} Grupo ${groupSeed[1]}`;
+  }
   return raw;
 }
 
@@ -738,6 +781,35 @@ function togglePlayerSectionCollapsed() {
 function toggleMiniSectionCollapsed() {
   state.miniSectionCollapsed = !state.miniSectionCollapsed;
   render();
+}
+
+function toggleKnockoutSectionCollapsed() {
+  state.knockoutSectionCollapsed = !state.knockoutSectionCollapsed;
+  render();
+}
+
+function toggleSlotCollapsed(slotKey) {
+  if (!slotKey) return;
+  // Sync state so re-renders preserve collapsed state
+  if (state.collapsedSlots.has(slotKey)) {
+    state.collapsedSlots.delete(slotKey);
+  } else {
+    state.collapsedSlots.add(slotKey);
+  }
+  const isNowCollapsed = state.collapsedSlots.has(slotKey);
+
+  // Pure DOM toggle — no re-render, preserves unsaved result inputs in other rows
+  const headerRow = document.querySelector(`tr.matchday-group-header[data-slot-key="${CSS.escape(slotKey)}"]`);
+  if (!headerRow) return;
+  const btn = headerRow.querySelector('.toggle-slot-btn');
+  if (btn) { btn.textContent = isNowCollapsed ? '▶' : '▼'; btn.title = isNowCollapsed ? 'Mostrar' : 'Ocultar'; }
+
+  // Walk subsequent sibling rows until next header or end, hide/show them
+  let row = headerRow.nextElementSibling;
+  while (row && !row.classList.contains('matchday-group-header')) {
+    row.style.display = isNowCollapsed ? 'none' : '';
+    row = row.nextElementSibling;
+  }
 }
 
 function groupMatchKey(groupId, team1Id, team2Id) {
@@ -1037,12 +1109,13 @@ async function loadPorras() {
 
 async function loadDetail(porraId) {
   state.detailError = '';
-  const [teamsRes, groupsRes, matchesRes, playersRes, miniRes] = await Promise.all([
+  const [teamsRes, groupsRes, matchesRes, playersRes, miniRes, miniResultsRes] = await Promise.all([
     supabase.from('porra_teams').select('*').eq('porra_id', porraId).order('name'),
     supabase.from('porra_groups').select('*').eq('porra_id', porraId).order('name'),
     supabase.from('porra_matches').select('*').eq('porra_id', porraId).order('position').order('kickoff'),
     supabase.from('porra_players').select('*').eq('porra_id', porraId).order('joined_at'),
-    supabase.from('porra_mini_questions').select('*').eq('porra_id', porraId).order('position').order('question')
+    supabase.from('porra_mini_questions').select('*').eq('porra_id', porraId).order('position').order('question'),
+    supabase.from('porra_mini_results').select('*').eq('porra_id', porraId)
   ]);
   if (teamsRes.error) state.detailError = teamsRes.error.message;
   if (groupsRes.error) state.detailError = groupsRes.error.message;
@@ -1054,6 +1127,7 @@ async function loadDetail(porraId) {
   state.matches = matchesRes.data || [];
   state.players = playersRes.data || [];
   state.miniQuestions = miniRes.data || [];
+  state.miniResults = miniResultsRes.data || [];
   if (state.groups.length || state.teams.length) {
     state.groupSetupDraft = buildGroupSetupDraftFromState();
   } else {
@@ -1191,6 +1265,196 @@ function renderPorraList() {
     </section>`;
 }
 
+function renderKnockoutSection(teamOptions = '', knockoutOpts = '', knockoutTemplate = null) {
+  const knockoutMatches = state.matches.filter(m => (m.phase ?? m.stage) !== 'group');
+
+  // The bracket size is determined by the competition: top-2 per group.
+  const koTeamCount = knockoutTeamCountFromGroups();
+  const derivedRounds = koTeamCount ? bracketRoundsForTeamCount(koTeamCount) : null;
+  const bracketSummary = derivedRounds
+    ? derivedRounds.map(r => r.count * 2).join('→') + '→1'
+    : null;
+  const hasKnockout = knockoutMatches.length > 0;
+
+  // Controls block: always present in the Cruces section.
+  // Two generators: the official template (if any) and the auto-derived one.
+  const templateGen = knockoutTemplate ? `
+    <form id="generateKnockoutMatchesForm" class="form inline-form" style="margin:0 0 .5rem">
+      <label>Fecha inicial de cruces (opcional)
+        <input name="knockoutFirstKickoff" type="datetime-local" />
+      </label>
+      <label>Días entre rondas
+        <input name="knockoutDaysBetween" type="number" min="1" value="2" />
+      </label>
+      <button type="submit">${hasKnockout ? 'Regenerar' : 'Generar'} cruces ${esc(knockoutTemplate.label)}</button>
+    </form>
+    <p class="muted" style="margin:0 0 .75rem;font-size:.85rem">${esc(knockoutTemplate.label)} usa la plantilla oficial guardada en la porra y enlaza las rondas posteriores con los ganadores previos.</p>
+  ` : '';
+
+  const genControls = `
+    <div class="ko-controls">
+      ${templateGen}
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        ${derivedRounds
+          ? `<button type="button" class="btn-secondary btn-sm" id="genBracketAuto">
+              ${hasKnockout ? 'Regenerar' : 'Generar'} cruces (${koTeamCount} equipos: ${esc(bracketSummary)})
+            </button>
+            <span class="muted" style="font-size:.85rem">${state.groups.length} grupos × 2 clasificados</span>`
+          : `<span class="muted" style="font-size:.85rem">Define los grupos en el asistente para calcular el cuadro automáticamente.</span>`}
+        ${hasKnockout ? `<button type="button" class="btn-danger btn-sm" id="resetKnockoutMatchesBtnInline">Resetear todos los cruces</button>` : ''}
+      </div>
+    </div>`;
+
+  const addForm = `
+    <form id="addKnockoutMatchForm" class="form inline-form" style="margin-top:.5rem">
+      <select name="phase" required style="flex:0 0 140px">
+        <option value="">— ronda —</option>
+        ${knockoutOpts}
+      </select>
+      <select name="team1" required style="flex:1">
+        <option value="">— local —</option>
+        ${teamOptions}
+      </select>
+      <select name="team2" required style="flex:1">
+        <option value="">— visitante —</option>
+        ${teamOptions}
+      </select>
+      <input name="kickoff" type="datetime-local" style="flex:1" />
+      <button type="submit">+ Añadir cruce</button>
+    </form>
+    <span class="error" id="koMatchError"></span>`;
+
+  if (!knockoutMatches.length) {
+    return `
+    <section class="card mini-section-card">
+      <div class="section-collapsible-header">
+        <h2>Cruces</h2>
+      </div>
+      ${genControls}
+      <p class="muted" style="margin-top:1rem">O añade un cruce manualmente:</p>
+      ${addForm}
+    </section>`;
+  }
+
+  // Group by round in KNOCKOUT_ROUNDS order
+  const roundOrder = KNOCKOUT_ROUNDS.map(r => r.key);
+  const byRound = new Map();
+  for (const m of knockoutMatches) {
+    const rk = m.round_key ?? m.phase ?? '—';
+    if (!byRound.has(rk)) byRound.set(rk, []);
+    byRound.get(rk).push(m);
+  }
+  const sortedRounds = [...byRound.keys()].sort((a, b) => {
+    const ia = roundOrder.indexOf(a);
+    const ib = roundOrder.indexOf(b);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
+
+  // Build visual bracket: each round is a column, each match is a slot
+  // Slots are vertically distributed so they align naturally (2× spacing each round)
+  const firstRoundCount = byRound.get(sortedRounds[0])?.length ?? 1;
+
+  const bracketCols = sortedRounds.map((rk, colIdx) => {
+    const label = KNOCKOUT_ROUNDS.find(r => r.key === rk)?.label ?? rk;
+    const matches = byRound.get(rk);
+    // Each successive round has 2× the vertical spacing between matches
+    const gapMultiplier = Math.pow(2, colIdx);
+
+    const matchSlots = matches.map((m, matchIdx) => {
+      const team1Id = m.team1_id ?? m.team1;
+      const team2Id = m.team2_id ?? m.team2;
+      const label1 = matchTeamLabel(team1Id);
+      const label2 = matchTeamLabel(team2Id);
+      const result = matchResult(m);
+
+      const won1 = result && result.home > result.away;
+      const won2 = result && result.away > result.home;
+
+      const scoreDisplay = result
+        ? `<span class="ko-score">${esc(String(result.home))}–${esc(String(result.away))}</span>`
+        : `<span class="ko-score ko-score-pending">vs</span>`;
+
+      return `<div class="ko-slot" style="margin-top:${matchIdx === 0 ? (gapMultiplier - 1) * 28 : (gapMultiplier * 2 - 1) * 28}px" data-match-id="${esc(m.match_id)}">
+        <div class="ko-team-row${won1 ? ' ko-won' : won2 ? ' ko-lost' : ''}">
+          <span class="ko-team-name">${esc(label1)}</span>
+          ${result ? `<span class="ko-team-score">${esc(String(result.home))}</span>` : ''}
+        </div>
+        <div class="ko-team-row${won2 ? ' ko-won' : won1 ? ' ko-lost' : ''}">
+          <span class="ko-team-name">${esc(label2)}</span>
+          ${result ? `<span class="ko-team-score">${esc(String(result.away))}</span>` : ''}
+        </div>
+        <div class="ko-slot-actions">
+          <form class="inline-result-form" data-id="${esc(m.match_id)}">
+            <input name="home" type="number" min="0" step="1" inputmode="numeric"
+              value="${result ? esc(String(result.home)) : ''}" placeholder="–" aria-label="Goles local" />
+            <span class="result-sep">-</span>
+            <input name="away" type="number" min="0" step="1" inputmode="numeric"
+              value="${result ? esc(String(result.away)) : ''}" placeholder="–" aria-label="Goles visitante" />
+            <button type="submit" class="btn-secondary btn-sm" title="Guardar">✓</button>
+            ${result ? `<button type="button" class="btn-secondary btn-sm clear-result" data-id="${esc(m.match_id)}" title="Borrar">✕</button>` : ''}
+          </form>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="ko-col">
+      <div class="ko-col-label">${esc(label)}</div>
+      <div class="ko-col-matches">${matchSlots}</div>
+    </div>`;
+  }).join('');
+
+  // Champion column: winner of the final match, if decided.
+  const finalKey = sortedRounds.find(rk => rk === 'final');
+  let championCol = '';
+  if (finalKey) {
+    const finalMatch = byRound.get('final')?.[0];
+    const finalResult = finalMatch ? matchResult(finalMatch) : null;
+    let championLabel = '—';
+    if (finalMatch && finalResult && finalResult.home !== finalResult.away) {
+      const winnerToken = finalResult.home > finalResult.away
+        ? (finalMatch.team1_id ?? finalMatch.team1)
+        : (finalMatch.team2_id ?? finalMatch.team2);
+      championLabel = matchTeamLabel(winnerToken);
+    }
+    const decided = championLabel !== '—';
+    // Vertically center against the single final slot.
+    const gapMultiplier = Math.pow(2, sortedRounds.length - 1);
+    championCol = `<div class="ko-col ko-col-champion">
+      <div class="ko-col-label">🏆 Campeón</div>
+      <div class="ko-col-matches">
+        <div class="ko-slot ko-champion-slot" style="margin-top:${(gapMultiplier - 1) * 28}px">
+          <div class="ko-team-row${decided ? ' ko-won' : ''}">
+            <span class="ko-team-name">${esc(championLabel)}</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  return `
+    <section class="card mini-section-card">
+      <div class="section-collapsible-header">
+        <h2>Cruces <span class="muted">(${knockoutMatches.length} partidos)</span></h2>
+        <button type="button" id="toggleKnockoutSectionBtn" class="btn-secondary btn-sm">
+          ${state.knockoutSectionCollapsed ? 'Abrir' : 'Contraer'}
+        </button>
+      </div>
+      <div class="section-collapsible-body${state.knockoutSectionCollapsed ? ' is-collapsed' : ''}">
+        ${genControls}
+        <div class="ko-bracket-visual">
+          ${bracketCols}
+          ${championCol}
+        </div>
+        <div style="margin-top:.75rem">
+          <button type="button" id="saveAllKnockoutBtn" class="btn-secondary">Guardar todos los cruces</button>
+          <span class="muted" id="saveAllKnockoutStatus" style="margin-left:.5rem;font-size:.85rem"></span>
+        </div>
+        <p class="muted" style="margin-top:1rem">O añade un cruce manualmente:</p>
+        ${addForm}
+      </div>
+    </section>`;
+}
+
 function renderDetail() {
   const p = state.currentPorra;
   const nextStatus = nextPorraStatus(p.status);
@@ -1250,8 +1514,8 @@ function renderDetail() {
   const teamOptions = orderedTeams.map(t =>
     `<option value="${esc(t.team_id)}">${esc(t.flag || flagForTeam(t.name))} ${esc(t.name)}</option>`).join('');
 
-  // Matches table
-  const matchRows = state.matches.map((m, index) => {
+  // Matches table — grouped by jornada (slot)
+  const renderMatchRow = (m, globalIndex) => {
     const team1Id = m.team1_id ?? m.team1;
     const team2Id = m.team2_id ?? m.team2;
     const when = m.kickoff ? new Date(m.kickoff).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—';
@@ -1296,25 +1560,66 @@ function renderDetail() {
       <td>${esc(when)}</td>
       <td>
         <button type="button" class="btn-secondary btn-sm edit-match" data-id="${esc(m.match_id)}">Editar fecha</button>
-        <button type="button" class="btn-secondary btn-sm move-match" data-id="${esc(m.match_id)}" data-dir="up" ${index === 0 ? 'disabled' : ''}>↑</button>
-        <button type="button" class="btn-secondary btn-sm move-match" data-id="${esc(m.match_id)}" data-dir="down" ${index === state.matches.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="btn-secondary btn-sm move-match" data-id="${esc(m.match_id)}" data-dir="up" ${globalIndex === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="btn-secondary btn-sm move-match" data-id="${esc(m.match_id)}" data-dir="down" ${globalIndex === state.matches.length - 1 ? 'disabled' : ''}>↓</button>
         <button type="button" class="btn-danger btn-sm del-match" data-id="${esc(m.match_id)}">✕</button>
       </td>
     </tr>`;
+  };
+
+  // Group matches by slot; matches without slot go to their own "—" bucket
+  // Knockout matches are shown in the Cruces section below, not here
+  const groupOnlyMatches = state.matches
+    .map((m, globalIndex) => ({ m, globalIndex }))
+    .filter(({ m }) => (m.phase ?? m.stage) === 'group');
+  const slotBuckets = [];
+  const seenSlots = new Map();
+  groupOnlyMatches.forEach(({ m, globalIndex }) => {
+    const slotKey = m.slot != null ? String(m.slot) : '__none__';
+    if (!seenSlots.has(slotKey)) {
+      seenSlots.set(slotKey, slotBuckets.length);
+      slotBuckets.push({ slotKey, matches: [] });
+    }
+    slotBuckets[seenSlots.get(slotKey)].matches.push({ m, globalIndex });
+  });
+
+  const matchRows = slotBuckets.map(({ slotKey, matches: slotMatches }) => {
+    const phaseKey0 = slotMatches[0].m.phase ?? (slotMatches[0].m.stage === 'group' ? 'group' : slotMatches[0].m.round_key);
+    const isKnockout = phaseKey0 !== 'group';
+    const slotLabel = slotKey === '__none__'
+      ? '—'
+      : (isKnockout
+          ? (KNOCKOUT_ROUNDS.find(r => r.key === phaseKey0)?.label ?? `J${slotKey}`)
+          : `Jornada ${slotKey}`);
+    const isCollapsed = state.collapsedSlots.has(slotKey);
+    const headerRow = `<tr class="matchday-group-header" data-slot-key="${esc(slotKey)}">
+      <td colspan="7">
+        <button type="button" class="toggle-slot-btn btn-sm" data-slot="${esc(slotKey)}" title="${isCollapsed ? 'Mostrar' : 'Ocultar'}">${isCollapsed ? '▶' : '▼'}</button>
+        ${esc(slotLabel)} <span class="muted">(${slotMatches.length} partido${slotMatches.length !== 1 ? 's' : ''})</span>
+      </td>
+    </tr>`;
+    const bodyRows = slotMatches.map(({ m, globalIndex }) =>
+      renderMatchRow(m, globalIndex).replace('<tr ', `<tr ${isCollapsed ? 'style="display:none" ' : ''}`)
+    ).join('');
+    return headerRow + bodyRows;
   }).join('');
 
   // Group options for match form
   const groupOptMatch = `<option value="">— sin grupo —</option>` +
     state.groups.map(g => `<option value="${esc(g.group_id)}">${esc(g.name)}</option>`).join('');
-  const knockoutOpts = KNOCKOUT_ROUNDS.map(r =>
-    `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join('');
+  const templateRoundKeys = knockoutTemplate
+    ? new Set(knockoutTemplate.knockout.map(m => knockoutRoundKeyFromFixture(m)).filter(Boolean))
+    : null;
+  const knockoutOpts = KNOCKOUT_ROUNDS
+    .filter(r => !templateRoundKeys || templateRoundKeys.has(r.key))
+    .map(r => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join('');
   const miniFieldTypeOptions = selected => MINI_FIELD_TYPES.map(type =>
     `<option value="${esc(type.value)}"${type.value === selected ? ' selected' : ''}>${esc(type.label)}</option>`).join('');
   const miniQuestionRows = state.miniQuestions.map((question, index) => {
     const optionsText = miniOptionsToText(question.options);
     if (state.editingMiniQuestionId === question.question_id) {
       return `<tr>
-        <td colspan="6">
+        <td colspan="7">
           <form class="mini-edit-form edit-mini-question-form" data-id="${esc(question.question_id)}">
             <input name="question" type="text" value="${esc(question.question)}" placeholder="Pregunta" required />
             <input name="points" type="number" min="0" step="1" value="${esc(question.points)}" required style="width:90px" />
@@ -1329,12 +1634,17 @@ function renderDetail() {
         </td>
       </tr>`;
     }
+    const miniResult = state.miniResults.find(r => r.question_id === question.question_id);
+    const resultValue = miniResult?.value ?? '';
+    const options = Array.isArray(question.options) ? question.options : [];
+    const resultCell = renderMiniResultCell(question.question_id, resultValue, options);
     return `<tr>
       <td>${index + 1}</td>
       <td>${esc(question.question)}</td>
       <td>${esc(question.points)}</td>
       <td>${esc(miniFieldTypeLabel(question.field_type))}</td>
       <td>${optionsText ? esc(optionsText.replace(/\n/g, ', ')) : '<span class="muted">—</span>'}</td>
+      <td class="result-cell" data-mini-result-cell="${esc(question.question_id)}">${resultCell}</td>
       <td class="mini-actions">
         <button type="button" class="btn-secondary btn-sm edit-mini-question" data-id="${esc(question.question_id)}">Editar</button>
         <button type="button" class="btn-secondary btn-sm move-mini-question" data-id="${esc(question.question_id)}" data-dir="up" ${index === 0 ? 'disabled' : ''}>↑</button>
@@ -1476,7 +1786,9 @@ function renderDetail() {
           ? `<div class="table-wrap"><table class="data-table">
               <thead><tr><th>Jornada</th><th>Fase</th><th>Local</th><th>Visitante</th><th>Resultado</th><th>Fecha</th><th>Orden</th></tr></thead>
               <tbody data-match-dropzone="group">${matchRows}</tbody>
-            </table></div>`
+            </table></div>
+            <button type="button" id="saveAllResultsBtn" class="btn-secondary" style="margin-top:.5rem">Guardar todos los resultados</button>
+            <span class="muted" id="saveAllResultsStatus" style="margin-left:.5rem;font-size:.85rem"></span>`
           : `<p class="muted">Sin partidos todavía.</p>`}
         <form id="generateGroupMatchesForm" class="form inline-form" style="margin-top:.75rem">
           <label>Fecha inicial (opcional)
@@ -1490,21 +1802,6 @@ function renderDetail() {
         <button type="button" id="resetGroupMatchesBtn" class="btn-danger" style="margin-top:.5rem">
           Resetear fase de grupos
         </button>
-        ${knockoutTemplate ? `
-          <form id="generateKnockoutMatchesForm" class="form inline-form" style="margin-top:1rem">
-            <label>Fecha inicial de cruces (opcional)
-              <input name="knockoutFirstKickoff" type="datetime-local" />
-            </label>
-            <label>Días entre rondas
-              <input name="knockoutDaysBetween" type="number" min="1" value="2" />
-            </label>
-            <button type="submit">Generar cruces ${esc(knockoutTemplate.label)}</button>
-          </form>
-          <button type="button" id="resetKnockoutMatchesBtn" class="btn-danger" style="margin-top:.5rem">
-            Resetear cruces
-          </button>
-          <p class="muted" style="margin-top:.5rem">${esc(knockoutTemplate.label)} usa la plantilla oficial guardada en la porra y enlaza las rondas posteriores con los ganadores previos.</p>
-        ` : ''}
         ${p.event_type === 'nations' ? `
           <p class="muted" style="margin-top:.5rem">Nations League no usa un único cuadro de cruces. Se organiza por ligas, ascensos/descensos, play-offs y Final Four de Liga A; los partidos de estas fases se añaden manualmente.</p>
         ` : ''}
@@ -1545,6 +1842,8 @@ function renderDetail() {
       </div>
     </section>
 
+    ${renderKnockoutSection(teamOptions, knockoutOpts, knockoutTemplate)}
+
     <section class="card mini-section-card">
       <div class="section-collapsible-header">
         <h2>Mini-porra <span class="muted">(${state.miniQuestions.length})</span></h2>
@@ -1555,9 +1854,11 @@ function renderDetail() {
       <div class="section-collapsible-body${state.miniSectionCollapsed ? ' is-collapsed' : ''}">
         ${state.miniQuestions.length
           ? `<div class="table-wrap"><table class="data-table">
-              <thead><tr><th>#</th><th>Pregunta</th><th>Puntos</th><th>Tipo</th><th>Opciones</th><th></th></tr></thead>
+              <thead><tr><th>#</th><th>Pregunta</th><th>Puntos</th><th>Tipo</th><th>Opciones</th><th>Resultado oficial</th><th></th></tr></thead>
               <tbody>${miniQuestionRows}</tbody>
-            </table></div>`
+            </table></div>
+            <button type="button" id="saveAllMiniResultsBtn" class="btn-secondary" style="margin-top:.5rem">Guardar todos los resultados</button>
+            <span class="muted" id="saveAllMiniResultsStatus" style="margin-left:.5rem;font-size:.85rem"></span>`
           : `<p class="muted">Sin preguntas de mini-porra todavía.</p>`}
         <form id="addMiniQuestionForm" class="form mini-form" style="margin-top:.75rem">
           <label>Pregunta
@@ -1747,13 +2048,20 @@ async function openPorra(id) {
   state.currentPorra = state.porras.find(p => p.id === id) || null;
   state.playerMessage = '';
   state.playerTempPasswords = {};
-  state.groupSetupCollapsed = false;
-  state.matchSectionCollapsed = false;
-  state.playerSectionCollapsed = false;
-  state.miniSectionCollapsed = false;
+  state.groupSetupCollapsed = true;
+  state.matchSectionCollapsed = true;
+  state.playerSectionCollapsed = true;
+  state.miniSectionCollapsed = true;
+  state.knockoutSectionCollapsed = false;
+  state.collapsedSlots = new Set();
   clearGroupSetupDraft();
   if (!state.currentPorra) return;
   await loadDetail(id);
+  state.collapsedSlots = new Set(
+    state.matches
+      .filter(m => (m.phase ?? m.stage) === 'group')
+      .map(m => m.slot != null ? String(m.slot) : '__none__')
+  );
   render();
 }
 
@@ -1781,10 +2089,12 @@ async function deletePorra(porraId) {
     state.currentPorra = null;
   }
   state.playerTempPasswords = {};
-  state.groupSetupCollapsed = false;
-  state.matchSectionCollapsed = false;
-  state.playerSectionCollapsed = false;
-  state.miniSectionCollapsed = false;
+  state.groupSetupCollapsed = true;
+  state.matchSectionCollapsed = true;
+  state.playerSectionCollapsed = true;
+  state.miniSectionCollapsed = true;
+  state.knockoutSectionCollapsed = false;
+  state.collapsedSlots = new Set();
   clearGroupSetupDraft();
   await loadPorras();
   render();
@@ -2105,44 +2415,346 @@ async function handleEditMatch(form) {
   render();
 }
 
+function renderMiniResultCell(questionId, currentValue, options = []) {
+  const hasResult = currentValue !== '' && currentValue != null;
+  if (options.length) {
+    return `
+      <form class="inline-mini-result-form" data-id="${esc(questionId)}">
+        <select name="value">
+          <option value="">— sin resultado —</option>
+          ${options.map(opt => `<option value="${esc(opt)}"${opt === currentValue ? ' selected' : ''}>${esc(opt)}</option>`).join('')}
+        </select>
+        <button type="submit" class="btn-secondary btn-sm" title="Guardar resultado">✓</button>
+        ${hasResult ? `<button type="button" class="btn-secondary btn-sm clear-mini-result" data-id="${esc(questionId)}" title="Borrar resultado">✕</button>` : ''}
+      </form>`;
+  }
+  return `
+    <form class="inline-mini-result-form" data-id="${esc(questionId)}">
+      <input name="value" type="text" value="${esc(currentValue)}" placeholder="Respuesta oficial" style="width:10rem" />
+      <button type="submit" class="btn-secondary btn-sm" title="Guardar resultado">✓</button>
+      ${hasResult ? `<button type="button" class="btn-secondary btn-sm clear-mini-result" data-id="${esc(questionId)}" title="Borrar resultado">✕</button>` : ''}
+    </form>`;
+}
+
+function patchMiniResultCell(questionId) {
+  const cell = document.querySelector(`[data-mini-result-cell="${CSS.escape(questionId)}"]`);
+  if (!cell) return;
+  const miniResult = state.miniResults.find(r => r.question_id === questionId);
+  const question = state.miniQuestions.find(q => q.question_id === questionId);
+  const options = Array.isArray(question?.options) ? question.options : [];
+  cell.innerHTML = renderMiniResultCell(questionId, miniResult?.value ?? '', options);
+}
+
+async function handleSetMiniResult(form) {
+  const questionId = form.dataset.id;
+  const fd = new FormData(form);
+  const value = String(fd.get('value') || '').trim();
+
+  if (!value) {
+    await clearMiniResult(questionId);
+    return;
+  }
+
+  const btn = form.querySelector('button[type="submit"]');
+  if (btn) btn.disabled = true;
+
+  const { error } = await supabase.from('porra_mini_results')
+    .upsert([{ porra_id: state.currentPorra.id, question_id: questionId, value }],
+      { onConflict: 'porra_id,question_id' });
+
+  if (error) {
+    if (btn) btn.disabled = false;
+    showFormError(form, error.message);
+    return;
+  }
+
+  const existing = state.miniResults.find(r => r.question_id === questionId);
+  if (existing) { existing.value = value; }
+  else { state.miniResults.push({ porra_id: state.currentPorra.id, question_id: questionId, value }); }
+  patchMiniResultCell(questionId);
+}
+
+async function clearMiniResult(questionId) {
+  const { error } = await supabase.from('porra_mini_results')
+    .delete()
+    .eq('porra_id', state.currentPorra.id)
+    .eq('question_id', questionId);
+
+  if (error) {
+    state.detailError = error.message;
+    render();
+    return;
+  }
+
+  state.miniResults = state.miniResults.filter(r => r.question_id !== questionId);
+  patchMiniResultCell(questionId);
+}
+
+// Actualiza solo la celda de resultado de un partido en el DOM, sin re-renderizar
+// toda la tabla (preserva los valores que el usuario haya tecleado en otras filas).
+function patchResultCell(matchId) {
+  const match = state.matches.find(m => m.match_id === matchId);
+  if (!match) return;
+  const row = document.querySelector(`tr[data-match-id="${CSS.escape(matchId)}"]`);
+  if (!row) return;
+  const cell = row.querySelector('.result-cell');
+  if (!cell) return;
+  const result = matchResult(match);
+  cell.innerHTML = `
+    <form class="inline-result-form" data-id="${esc(matchId)}">
+      <input name="home" type="number" min="0" step="1" inputmode="numeric"
+        value="${result ? esc(result.home) : ''}" placeholder="–" aria-label="Goles local" />
+      <span class="result-sep">-</span>
+      <input name="away" type="number" min="0" step="1" inputmode="numeric"
+        value="${result ? esc(result.away) : ''}" placeholder="–" aria-label="Goles visitante" />
+      <button type="submit" class="btn-secondary btn-sm" title="Guardar resultado">✓</button>
+      ${result ? `<button type="button" class="btn-secondary btn-sm clear-result" data-id="${esc(matchId)}" title="Borrar resultado">✕</button>` : ''}
+    </form>`;
+}
+
 async function handleSetResult(form) {
   const matchId = form.dataset.id;
   const fd = new FormData(form);
   const homeRaw = String(fd.get('home') || '').trim();
   const awayRaw = String(fd.get('away') || '').trim();
 
-  // Si ambos están vacíos, equivale a borrar el resultado.
   if (homeRaw === '' && awayRaw === '') {
     await clearMatchResult(matchId);
     return;
   }
   if (homeRaw === '' || awayRaw === '') {
-    state.detailError = 'Introduce ambos marcadores (local y visitante).';
-    render();
+    showFormError(form, 'Introduce ambos marcadores.');
     return;
   }
   const home = Number(homeRaw);
   const away = Number(awayRaw);
   if (!Number.isInteger(home) || !Number.isInteger(away) || home < 0 || away < 0) {
-    state.detailError = 'Los marcadores deben ser números enteros no negativos.';
-    render();
+    showFormError(form, 'Los marcadores deben ser enteros no negativos.');
     return;
   }
 
-  // Escribe ambos pares de columnas para que cualquier lector (admin/public)
-  // resuelva el resultado: prefieren score_* y caen a result_*.
+  const btn = form.querySelector('button[type="submit"]');
+  if (btn) btn.disabled = true;
+
   const { error } = await supabase.from('porra_matches')
     .update({ result_home: home, result_away: away, score_home: home, score_away: away })
     .eq('porra_id', state.currentPorra.id)
     .eq('match_id', matchId);
+
   if (error) {
-    state.detailError = error.message;
-    render();
+    if (btn) btn.disabled = false;
+    showFormError(form, error.message);
     return;
   }
-  state.detailError = '';
-  await loadDetail(state.currentPorra.id);
+
+  // Actualiza state.matches sin recargar todo.
+  const match = state.matches.find(m => m.match_id === matchId);
+  if (match) { match.result_home = home; match.result_away = away; match.score_home = home; match.score_away = away; }
+  // Knockout: re-render the whole bracket so the winner propagates to the next round,
+  // but keep any other unsaved inputs the user is editing.
+  // Group/flat table: surgical patch is enough.
+  if (match && (match.phase ?? match.stage) !== 'group') {
+    renderPreservingKnockoutInputs();
+  } else {
+    patchResultCell(matchId);
+  }
+}
+
+// Capture unsaved values in every knockout result form, render, then restore them.
+function snapshotKnockoutInputs() {
+  const snapshot = {};
+  document.querySelectorAll('.ko-slot .inline-result-form').forEach(form => {
+    const id = form.dataset.id;
+    if (!id) return;
+    snapshot[id] = {
+      home: form.querySelector('[name="home"]')?.value ?? '',
+      away: form.querySelector('[name="away"]')?.value ?? ''
+    };
+  });
+  return snapshot;
+}
+
+function restoreKnockoutInputs(snapshot) {
+  if (!snapshot) return;
+  Object.entries(snapshot).forEach(([id, vals]) => {
+    const form = document.querySelector(`.ko-slot .inline-result-form[data-id="${CSS.escape(id)}"]`);
+    if (!form) return;
+    const homeEl = form.querySelector('[name="home"]');
+    const awayEl = form.querySelector('[name="away"]');
+    // Only restore inputs the user had typed that aren't yet reflected (e.g. unsaved).
+    if (homeEl && vals.home !== '' && homeEl.value === '') homeEl.value = vals.home;
+    if (awayEl && vals.away !== '' && awayEl.value === '') awayEl.value = vals.away;
+  });
+}
+
+function renderPreservingKnockoutInputs() {
+  const snapshot = snapshotKnockoutInputs();
   render();
+  restoreKnockoutInputs(snapshot);
+}
+
+async function saveAllKnockoutResults() {
+  const btn = document.getElementById('saveAllKnockoutBtn');
+  const status = document.getElementById('saveAllKnockoutStatus');
+  const forms = [...document.querySelectorAll('.ko-slot .inline-result-form')];
+  const filled = forms.filter(f => {
+    const home = String(f.querySelector('[name="home"]')?.value || '').trim();
+    const away = String(f.querySelector('[name="away"]')?.value || '').trim();
+    return home !== '' && away !== '';
+  });
+  if (!filled.length) {
+    if (status) status.textContent = 'No hay resultados rellenados.';
+    return;
+  }
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = `Guardando ${filled.length} resultado(s)…`;
+
+  const updates = filled.map(f => ({
+    matchId: f.dataset.id,
+    home: Number(f.querySelector('[name="home"]').value),
+    away: Number(f.querySelector('[name="away"]').value)
+  })).filter(({ home, away }) =>
+    Number.isInteger(home) && Number.isInteger(away) && home >= 0 && away >= 0
+  );
+
+  const results = await Promise.all(updates.map(({ matchId, home, away }) =>
+    supabase.from('porra_matches')
+      .update({ result_home: home, result_away: away, score_home: home, score_away: away })
+      .eq('porra_id', state.currentPorra.id)
+      .eq('match_id', matchId)
+      .then(({ error }) => ({ matchId, home, away, error }))
+  ));
+
+  const errors = results.filter(r => r.error);
+  const saved = results.filter(r => !r.error);
+  for (const { matchId, home, away } of saved) {
+    const match = state.matches.find(m => m.match_id === matchId);
+    if (match) { match.result_home = home; match.result_away = away; match.score_home = home; match.score_away = away; }
+  }
+  if (status) {
+    status.textContent = errors.length
+      ? `${saved.length} guardados, ${errors.length} con error.`
+      : `${saved.length} resultado(s) guardados ✓`;
+  }
+  if (saved.length) render(); // propaga ganadores por el cuadro
+  if (btn) btn.disabled = false;
+}
+
+async function saveAllResults() {
+  const btn = document.getElementById('saveAllResultsBtn');
+  const status = document.getElementById('saveAllResultsStatus');
+  const forms = [...document.querySelectorAll('.inline-result-form')];
+  const filled = forms.filter(f => {
+    const home = String(f.querySelector('[name="home"]')?.value || '').trim();
+    const away = String(f.querySelector('[name="away"]')?.value || '').trim();
+    return home !== '' && away !== '';
+  });
+
+  if (!filled.length) {
+    if (status) status.textContent = 'No hay resultados rellenados.';
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = `Guardando ${filled.length} resultado(s)…`;
+
+  const updates = filled.map(f => {
+    const matchId = f.dataset.id;
+    const home = Number(f.querySelector('[name="home"]').value);
+    const away = Number(f.querySelector('[name="away"]').value);
+    return { matchId, home, away };
+  }).filter(({ home, away }) =>
+    Number.isInteger(home) && Number.isInteger(away) && home >= 0 && away >= 0
+  );
+
+  const results = await Promise.all(updates.map(({ matchId, home, away }) =>
+    supabase.from('porra_matches')
+      .update({ result_home: home, result_away: away, score_home: home, score_away: away })
+      .eq('porra_id', state.currentPorra.id)
+      .eq('match_id', matchId)
+      .then(({ error }) => ({ matchId, home, away, error }))
+  ));
+
+  const errors = results.filter(r => r.error);
+  const saved = results.filter(r => !r.error);
+
+  // Actualiza state; parchea las celdas de grupo y marca si hubo cruces.
+  let knockoutSaved = false;
+  for (const { matchId, home, away } of saved) {
+    const match = state.matches.find(m => m.match_id === matchId);
+    if (match) { match.result_home = home; match.result_away = away; match.score_home = home; match.score_away = away; }
+    if (match && (match.phase ?? match.stage) !== 'group') {
+      knockoutSaved = true;
+    } else {
+      patchResultCell(matchId);
+    }
+  }
+
+  if (status) {
+    status.textContent = errors.length
+      ? `${saved.length} guardados, ${errors.length} con error.`
+      : `${saved.length} resultado(s) guardados ✓`;
+  }
+  // Si se guardaron cruces, re-renderiza el cuadro para propagar ganadores.
+  if (knockoutSaved) render();
+  if (btn) btn.disabled = false;
+}
+
+async function saveAllMiniResults() {
+  const btn = document.getElementById('saveAllMiniResultsBtn');
+  const status = document.getElementById('saveAllMiniResultsStatus');
+  const forms = [...document.querySelectorAll('.inline-mini-result-form')];
+  const filled = forms.filter(f => {
+    const el = f.querySelector('[name="value"]');
+    return String(el?.value || '').trim() !== '';
+  });
+
+  if (!filled.length) {
+    if (status) status.textContent = 'No hay resultados rellenados.';
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = `Guardando ${filled.length} resultado(s)…`;
+
+  const updates = filled.map(f => ({
+    questionId: f.dataset.id,
+    value: String(f.querySelector('[name="value"]').value).trim()
+  }));
+
+  const results = await Promise.all(updates.map(({ questionId, value }) =>
+    supabase.from('porra_mini_results')
+      .upsert([{ porra_id: state.currentPorra.id, question_id: questionId, value }],
+        { onConflict: 'porra_id,question_id' })
+      .then(({ error }) => ({ questionId, value, error }))
+  ));
+
+  const errors = results.filter(r => r.error);
+  const saved = results.filter(r => !r.error);
+
+  for (const { questionId, value } of saved) {
+    const existing = state.miniResults.find(r => r.question_id === questionId);
+    if (existing) { existing.value = value; }
+    else { state.miniResults.push({ porra_id: state.currentPorra.id, question_id: questionId, value }); }
+    patchMiniResultCell(questionId);
+  }
+
+  if (btn) btn.disabled = false;
+  if (status) {
+    status.textContent = errors.length
+      ? `${saved.length} guardados, ${errors.length} con error.`
+      : `${saved.length} resultado(s) guardados ✓`;
+  }
+}
+
+function showFormError(form, message) {
+  let el = form.querySelector('.result-form-error');
+  if (!el) {
+    el = document.createElement('span');
+    el.className = 'result-form-error error';
+    form.appendChild(el);
+  }
+  el.textContent = message;
 }
 
 async function clearMatchResult(matchId) {
@@ -2155,9 +2767,13 @@ async function clearMatchResult(matchId) {
     render();
     return;
   }
-  state.detailError = '';
-  await loadDetail(state.currentPorra.id);
-  render();
+  const match = state.matches.find(m => m.match_id === matchId);
+  if (match) { match.result_home = null; match.result_away = null; match.score_home = null; match.score_away = null; }
+  if (match && (match.phase ?? match.stage) !== 'group') {
+    renderPreservingKnockoutInputs();
+  } else {
+    patchResultCell(matchId);
+  }
 }
 
 async function handleEditTeam(form) {
@@ -2230,6 +2846,121 @@ async function handleAddMatch(form) {
   render();
 }
 
+// Build the first-round seed crosses (1A-2B, 1C-2D, …, 1B-2A, …) for a list of
+// group letters ordered by position. Standard FIFA/UEFA cross pattern.
+function firstRoundSeedCrosses(groupLetters) {
+  const n = groupLetters.length;
+  const pairs = [];
+  // First half: groups 0,2,4,… winner vs next group runner-up.
+  // Second half mirrors with runner-up of the same-paired group.
+  for (let i = 0; i < n; i += 2) {
+    const gA = groupLetters[i];
+    const gB = groupLetters[i + 1];
+    if (!gB) break;
+    pairs.push({ home: `${gA}1`, away: `${gB}2` }); // 1A vs 2B
+  }
+  for (let i = 0; i < n; i += 2) {
+    const gA = groupLetters[i];
+    const gB = groupLetters[i + 1];
+    if (!gB) break;
+    pairs.push({ home: `${gB}1`, away: `${gA}2` }); // 1B vs 2A
+  }
+  return pairs;
+}
+
+async function generateEmptyBracket(matchesPerRound) {
+  // matchesPerRound: e.g. [{key:'qf',count:4},{key:'sf',count:2},{key:'final',count:1}]
+  const basePosition = Math.max(0, ...state.matches.map(m => Number(m.position) || 0));
+  const rows = [];
+  let pos = basePosition + 1;
+
+  // Group letters ordered by position → used to seed the first round.
+  const groupLetters = [...state.groups]
+    .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+    .map(g => g.group_id);
+
+  // First round: real seed crosses if we have a clean 2-per-group bracket; else blanks.
+  const firstRound = matchesPerRound[0];
+  const seedPairs = firstRoundSeedCrosses(groupLetters);
+  const useSeeds = seedPairs.length === firstRound.count;
+
+  // Track the match IDs of the previous round so the next round can reference winners.
+  let prevRoundIds = [];
+
+  matchesPerRound.forEach(({ key, count }, roundIdx) => {
+    const thisRoundIds = [];
+    for (let i = 0; i < count; i++) {
+      const matchId = makeEntityId('match');
+      thisRoundIds.push(matchId);
+      let team1Token = null;
+      let team2Token = null;
+      if (roundIdx === 0) {
+        if (useSeeds) {
+          team1Token = seedPairs[i].home;
+          team2Token = seedPairs[i].away;
+        }
+      } else {
+        // Winner of the two feeding matches from the previous round.
+        team1Token = `W:${prevRoundIds[i * 2]}`;
+        team2Token = `W:${prevRoundIds[i * 2 + 1]}`;
+      }
+      rows.push({
+        porra_id: state.currentPorra.id,
+        match_id: matchId,
+        stage: 'knockout',
+        group_id: null,
+        round_key: key,
+        team1: team1Token, team2: team2Token,
+        team1_id: team1Token, team2_id: team2Token,
+        phase: key,
+        group_label: null,
+        kickoff: null,
+        slot: i + 1,
+        position: pos++,
+        status: 'scheduled'
+      });
+    }
+    prevRoundIds = thisRoundIds;
+  });
+
+  const { error } = await supabase.from('porra_matches').insert(rows);
+  if (error) { state.detailError = error.message; render(); return; }
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+async function handleAddKnockoutMatch(form) {
+  const errorEl = document.getElementById('koMatchError');
+  const fd = new FormData(form);
+  const team1Id = String(fd.get('team1') || '');
+  const team2Id = String(fd.get('team2') || '');
+  const phase = String(fd.get('phase') || '');
+  const kickoffRaw = String(fd.get('kickoff') || '');
+  if (!phase) { errorEl.textContent = 'Selecciona la ronda.'; return; }
+  if (!team1Id || !team2Id) { errorEl.textContent = 'Selecciona los dos equipos.'; return; }
+  if (team1Id === team2Id) { errorEl.textContent = 'Los dos equipos deben ser distintos.'; return; }
+  const { error } = await supabase.from('porra_matches').insert({
+    porra_id: state.currentPorra.id,
+    match_id: makeEntityId('match'),
+    stage: 'knockout',
+    group_id: null,
+    round_key: phase,
+    team1: team1Id,
+    team2: team2Id,
+    team1_id: team1Id,
+    team2_id: team2Id,
+    phase,
+    group_label: null,
+    kickoff: kickoffRaw ? new Date(kickoffRaw).toISOString() : null,
+    position: Math.max(0, ...state.matches.map(match => Number(match.position) || 0)) + 1,
+    status: 'scheduled'
+  });
+  if (error) { errorEl.textContent = error.message; return; }
+  form.reset();
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
 async function handleGenerateGroupMatches(form) {
   const fd = new FormData(form);
   const firstKickoffRaw = String(fd.get('firstKickoff') || '');
@@ -2248,22 +2979,38 @@ async function handleGenerateGroupMatches(form) {
 }
 
 async function handleGenerateKnockoutMatches(form) {
-  const errorEl = document.getElementById('matchError');
+  const errorEl = document.getElementById('koMatchError') || document.getElementById('matchError');
   const fd = new FormData(form);
   const firstKickoffRaw = String(fd.get('knockoutFirstKickoff') || '');
   const daysBetweenRaw = String(fd.get('knockoutDaysBetween') || '');
+
+  // Regenerate: if knockout matches already exist, confirm and wipe them first.
+  const existingIds = state.matches
+    .filter(match => (match.phase ?? match.stage) !== 'group')
+    .map(match => match.match_id);
+  if (existingIds.length) {
+    if (!window.confirm(`Vas a regenerar el cuadro. Se borrarán los ${existingIds.length} cruces actuales (y sus resultados). ¿Continuar?`)) return;
+    const { error: delError } = await supabase
+      .from('porra_matches')
+      .delete()
+      .eq('porra_id', state.currentPorra.id)
+      .in('match_id', existingIds);
+    if (delError) { if (errorEl) errorEl.textContent = delError.message; return; }
+    await loadDetail(state.currentPorra.id);
+  }
+
   const { rows, error } = buildKnockoutMatches(firstKickoffRaw, daysBetweenRaw);
   if (error) {
-    errorEl.textContent = error;
+    if (errorEl) errorEl.textContent = error;
     return;
   }
   if (!rows.length) {
-    errorEl.textContent = 'No se pudieron generar los cruces.';
+    if (errorEl) errorEl.textContent = 'No se pudieron generar los cruces.';
     return;
   }
   const { error: insertError } = await supabase.from('porra_matches').insert(rows);
   if (insertError) {
-    errorEl.textContent = insertError.message;
+    if (errorEl) errorEl.textContent = insertError.message;
     return;
   }
   form.reset();
@@ -2308,6 +3055,30 @@ async function resetKnockoutMatches() {
   if (error) { state.detailError = error.message; render(); return; }
   await loadDetail(state.currentPorra.id);
   render();
+}
+
+async function regenerateBracket() {
+  const count = knockoutTeamCountFromGroups();
+  const rounds = count ? bracketRoundsForTeamCount(count) : null;
+  if (!rounds) {
+    state.detailError = 'Define los grupos antes de generar los cruces.';
+    render();
+    return;
+  }
+  const existingIds = state.matches
+    .filter(match => (match.phase ?? match.stage) !== 'group')
+    .map(match => match.match_id);
+  if (existingIds.length) {
+    if (!window.confirm(`Vas a regenerar el cuadro. Se borrarán los ${existingIds.length} cruces actuales (y sus resultados). ¿Continuar?`)) return;
+    const { error } = await supabase
+      .from('porra_matches')
+      .delete()
+      .eq('porra_id', state.currentPorra.id)
+      .in('match_id', existingIds);
+    if (error) { state.detailError = error.message; render(); return; }
+    await loadDetail(state.currentPorra.id);
+  }
+  await generateEmptyBracket(rounds);
 }
 
 async function moveMatch(matchId, direction) {
@@ -2525,6 +3296,9 @@ async function deleteGroup(groupId) {
 }
 
 async function deleteMatch(matchId) {
+  const match = state.matches.find(m => m.match_id === matchId);
+  const isKnockout = match && (match.phase ?? match.stage) !== 'group';
+  if (isKnockout && !window.confirm('¿Eliminar este cruce? Si alguna ronda posterior dependía de su ganador, tendrás que regenerar el cuadro.')) return;
   const { error } = await supabase
     .from('porra_matches')
     .delete()
@@ -2549,7 +3323,9 @@ document.addEventListener('submit', e => {
   if (e.target.classList.contains('edit-team-form')) { e.preventDefault(); handleEditTeam(e.target); }
   if (e.target.classList.contains('edit-match-form')) { e.preventDefault(); handleEditMatch(e.target); }
   if (e.target.classList.contains('inline-result-form')) { e.preventDefault(); handleSetResult(e.target); }
+  if (e.target.classList.contains('inline-mini-result-form')) { e.preventDefault(); handleSetMiniResult(e.target); }
   if (e.target.id === 'addMatchForm') { e.preventDefault(); handleAddMatch(e.target); }
+  if (e.target.id === 'addKnockoutMatchForm') { e.preventDefault(); handleAddKnockoutMatch(e.target); }
   if (e.target.id === 'generateGroupMatchesForm') { e.preventDefault(); handleGenerateGroupMatches(e.target); }
   if (e.target.id === 'generateKnockoutMatchesForm') { e.preventDefault(); handleGenerateKnockoutMatches(e.target); }
   if (e.target.id === 'addMiniQuestionForm') { e.preventDefault(); handleAddMiniQuestion(e.target); }
@@ -2637,7 +3413,7 @@ document.addEventListener('dragend', () => {
 
 document.addEventListener('click', e => {
   if (e.target.id === 'logoutBtn')              supabase.auth.signOut().then(refreshAuth);
-  if (e.target.id === 'backBtn')                { state.currentPorra = null; state.playerMessage = ''; state.playerTempPasswords = {}; clearGroupSetupDraft(); state.groupSetupCollapsed = false; state.matchSectionCollapsed = false; state.playerSectionCollapsed = false; state.miniSectionCollapsed = false; render(); }
+  if (e.target.id === 'backBtn')                { state.currentPorra = null; state.playerMessage = ''; state.playerTempPasswords = {}; clearGroupSetupDraft(); state.groupSetupCollapsed = false; state.matchSectionCollapsed = false; state.playerSectionCollapsed = false; state.miniSectionCollapsed = false; state.knockoutSectionCollapsed = false; state.collapsedSlots = new Set(); render(); }
   if (e.target.id === 'advanceStatusBtn')       advancePorraStatus();
   if (e.target.id === 'revertDraftBtn')         revertPorraToDraft();
   if (e.target.id === 'deletePorraBtn')         deletePorra(state.currentPorra?.id);
@@ -2645,6 +3421,8 @@ document.addEventListener('click', e => {
   if (e.target.id === 'toggleMatchSectionBtn')   toggleMatchSectionCollapsed();
   if (e.target.id === 'togglePlayerSectionBtn')  togglePlayerSectionCollapsed();
   if (e.target.id === 'toggleMiniSectionBtn')    toggleMiniSectionCollapsed();
+  if (e.target.id === 'toggleKnockoutSectionBtn') toggleKnockoutSectionCollapsed();
+  if (e.target.classList.contains('toggle-slot-btn')) toggleSlotCollapsed(e.target.dataset.slot);
   if (e.target.id === 'cancelGroupSetupBtn')     cancelGroupSetup();
   if (e.target.classList.contains('open-porra')) openPorra(e.target.dataset.id);
   if (e.target.classList.contains('delete-porra')) deletePorra(e.target.dataset.id);
@@ -2657,8 +3435,13 @@ document.addEventListener('click', e => {
   if (e.target.classList.contains('del-group'))  deleteGroup(e.target.dataset.id);
   if (e.target.classList.contains('del-match'))  deleteMatch(e.target.dataset.id);
   if (e.target.classList.contains('clear-result')) clearMatchResult(e.target.dataset.id);
+  if (e.target.classList.contains('clear-mini-result')) clearMiniResult(e.target.dataset.id);
   if (e.target.id === 'resetGroupMatchesBtn')     resetGroupMatches();
-  if (e.target.id === 'resetKnockoutMatchesBtn')  resetKnockoutMatches();
+  if (e.target.id === 'saveAllResultsBtn')        saveAllResults();
+  if (e.target.id === 'saveAllKnockoutBtn')       saveAllKnockoutResults();
+  if (e.target.id === 'saveAllMiniResultsBtn')    saveAllMiniResults();
+  if (e.target.id === 'resetKnockoutMatchesBtn' || e.target.id === 'resetKnockoutMatchesBtnInline')  resetKnockoutMatches();
+  if (e.target.id === 'genBracketAuto') regenerateBracket();
   if (e.target.classList.contains('move-match')) moveMatch(e.target.dataset.id, e.target.dataset.dir);
   if (e.target.classList.contains('edit-mini-question')) startEditMiniQuestion(e.target.dataset.id);
   if (e.target.classList.contains('cancel-edit-mini-question')) cancelEditMiniQuestion();

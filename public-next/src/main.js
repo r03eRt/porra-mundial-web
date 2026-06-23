@@ -884,8 +884,9 @@ function knockoutChampionPick(playerId) {
 function winnerFromMatch(match) {
   const result = matchResult(match);
   if (!result) return '';
-  if (result.home > result.away) return String(match.team1 || '').trim();
-  if (result.away > result.home) return String(match.team2 || '').trim();
+  // team1/team2 pueden ser semillas (A1) o ganadores (W:id); resuélvelas a NOMBRE real.
+  if (result.home > result.away) return teamName(match.team1_id ?? match.team1);
+  if (result.away > result.home) return teamName(match.team2_id ?? match.team2);
   return '';
 }
 
@@ -897,8 +898,15 @@ function buildKnockoutReality() {
     const matches = knockoutMatches().filter(match => normalizeKnockoutStageKey(match.round_key) === stage.key);
     const teams = new Set();
     for (const match of matches) {
-      if (match.team1) teams.add(knockoutTeamKey(match.team1));
-      if (match.team2) teams.add(knockoutTeamKey(match.team2));
+      // Las plantillas guardan semillas (A1, B2) o ganadores (W:matchId) en team1/team2.
+      // Resuélvelas a NOMBRE de equipo real (los pronósticos del jugador se guardan
+      // por nombre, no por team_id) usando los resultados oficiales.
+      const raw1 = match.team1_id ?? match.team1;
+      const raw2 = match.team2_id ?? match.team2;
+      const t1 = raw1 ? teamName(raw1) : '';
+      const t2 = raw2 ? teamName(raw2) : '';
+      if (t1) teams.add(knockoutTeamKey(t1));
+      if (t2) teams.add(knockoutTeamKey(t2));
     }
     reality[stage.key] = {
       key: stage.key,
@@ -930,6 +938,10 @@ function calculatePlayerKnockout(playerId, reality = buildKnockoutReality()) {
   const breakdown = {};
   let points = 0;
 
+  // El cuadro derivado del jugador combina la primera ronda (auto desde sus
+  // grupos) con las rondas siguientes guardadas. Es la fuente de sus pronósticos.
+  const bracket = buildPlayerKnockoutBracket(playerId);
+
   for (const stage of knockoutStages()) {
     const stageReality = reality[stage.key] || {
       key: stage.key,
@@ -940,7 +952,9 @@ function calculatePlayerKnockout(playerId, reality = buildKnockoutReality()) {
       complete: false,
       teams: new Set()
     };
-    const predictions = knockoutStagePicks(playerId, stage.key, stage.key === 'champion' ? 1 : stage.teams).filter(Boolean);
+    const predictions = stage.key === 'champion'
+      ? [knockoutChampionPick(playerId)].filter(Boolean)
+      : (bracket[stage.key] || []).filter(Boolean);
     const hits = predictions.filter(team => stageReality.teams.has(knockoutTeamKey(team))).length;
     const stagePoints = hits * stage.points;
     breakdown[stage.key] = { ...stageReality, hits, points: stagePoints };
