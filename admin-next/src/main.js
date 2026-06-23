@@ -115,6 +115,7 @@ const state = {
   editingMatchId: null,
   editingMiniQuestionId: null,
   playerMessage: '',
+  playerTempPasswords: {},
   draggingMatchId: null,
   draggingTeamId: null,
   groupSetupDraft: null,
@@ -176,6 +177,10 @@ function nextPorraStatus(status) {
   return index >= 0 && index < PORRA_STATUS_FLOW.length - 1
     ? PORRA_STATUS_FLOW[index + 1]
     : null;
+}
+
+function canRevertPorraToDraft(status) {
+  return normalizePorraStatus(status) !== 'draft';
 }
 
 function syncCurrentPorraFromList() {
@@ -703,6 +708,7 @@ function renderDetail() {
       <td>${esc(player.display_name ?? player.name ?? player.player_id)}</td>
       <td>${esc(player.email ?? '—')}</td>
       <td><code>${esc(player.player_id)}</code></td>
+      <td>${esc(state.playerTempPasswords[player.player_id] || '—')}</td>
       <td>${esc(player.joined_at ? new Date(player.joined_at).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—')}</td>
       <td><button type="button" class="btn-danger btn-sm del-player" data-id="${esc(player.player_id)}">✕</button></td>
     </tr>
@@ -918,6 +924,9 @@ function renderDetail() {
       <button type="button" id="advanceStatusBtn" class="btn-secondary" ${nextStatus ? '' : 'disabled'}>
         ${nextStatus ? `Pasar a ${esc(porraStatusLabel(nextStatus).toLowerCase())}` : 'Porra cerrada'}
       </button>
+      ${canRevertPorraToDraft(p.status)
+        ? `<button type="button" id="revertDraftBtn" class="btn-secondary">Volver a borrador</button>`
+        : ''}
       ${normalizePorraStatus(p.status) === 'draft'
         ? `<button type="button" id="deletePorraBtn" class="btn-danger">Borrar borrador</button>`
         : ''}
@@ -935,7 +944,7 @@ function renderDetail() {
       <div class="section-collapsible-body${state.playerSectionCollapsed ? ' is-collapsed' : ''}">
         ${state.players.length
           ? `<div class="table-wrap"><table class="data-table">
-              <thead><tr><th>Nombre</th><th>Email</th><th>ID jugador</th><th>Alta</th><th></th></tr></thead>
+              <thead><tr><th>Nombre</th><th>Email</th><th>ID jugador</th><th>Contraseña temporal</th><th>Alta</th><th></th></tr></thead>
               <tbody>${playersRows}</tbody>
             </table></div>`
           : `<p class="muted">Sin jugadores todavía.</p>`}
@@ -1170,6 +1179,7 @@ async function handleCreate(form) {
 async function openPorra(id) {
   state.currentPorra = state.porras.find(p => p.id === id) || null;
   state.playerMessage = '';
+  state.playerTempPasswords = {};
   state.groupSetupCollapsed = false;
   state.matchSectionCollapsed = false;
   state.playerSectionCollapsed = false;
@@ -1203,6 +1213,7 @@ async function deletePorra(porraId) {
   if (state.currentPorra?.id === porraId) {
     state.currentPorra = null;
   }
+  state.playerTempPasswords = {};
   state.groupSetupCollapsed = false;
   state.matchSectionCollapsed = false;
   state.playerSectionCollapsed = false;
@@ -1776,6 +1787,9 @@ async function handleAddPlayer(form) {
     btn.disabled = false;
     return;
   }
+  if (data?.player?.player_id && data?.temp_password) {
+    state.playerTempPasswords[data.player.player_id] = data.temp_password;
+  }
   state.playerMessage = data?.temp_password
     ? `Usuario creado en Auth. Contraseña temporal: ${data.temp_password}`
     : 'Jugador añadido y enlazado.';
@@ -1791,6 +1805,19 @@ async function advancePorraStatus() {
   const { error } = await supabase
     .from('porras')
     .update({ status: nextStatus })
+    .eq('id', state.currentPorra.id);
+  if (error) { state.detailError = error.message; render(); return; }
+  await loadPorras();
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+async function revertPorraToDraft() {
+  if (!state.currentPorra) return;
+  if (!window.confirm('Vas a devolver esta porra a borrador. ¿Continuar?')) return;
+  const { error } = await supabase
+    .from('porras')
+    .update({ status: 'draft' })
     .eq('id', state.currentPorra.id);
   if (error) { state.detailError = error.message; render(); return; }
   await loadPorras();
@@ -1942,8 +1969,9 @@ document.addEventListener('dragend', () => {
 
 document.addEventListener('click', e => {
   if (e.target.id === 'logoutBtn')              supabase.auth.signOut().then(refreshAuth);
-  if (e.target.id === 'backBtn')                { state.currentPorra = null; state.playerMessage = ''; clearGroupSetupDraft(); state.groupSetupCollapsed = false; state.matchSectionCollapsed = false; state.playerSectionCollapsed = false; state.miniSectionCollapsed = false; render(); }
+  if (e.target.id === 'backBtn')                { state.currentPorra = null; state.playerMessage = ''; state.playerTempPasswords = {}; clearGroupSetupDraft(); state.groupSetupCollapsed = false; state.matchSectionCollapsed = false; state.playerSectionCollapsed = false; state.miniSectionCollapsed = false; render(); }
   if (e.target.id === 'advanceStatusBtn')       advancePorraStatus();
+  if (e.target.id === 'revertDraftBtn')         revertPorraToDraft();
   if (e.target.id === 'deletePorraBtn')         deletePorra(state.currentPorra?.id);
   if (e.target.id === 'toggleGroupSetupBtn')     toggleGroupSetupCollapsed();
   if (e.target.id === 'toggleMatchSectionBtn')   toggleMatchSectionCollapsed();

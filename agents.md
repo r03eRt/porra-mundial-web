@@ -51,7 +51,7 @@ El dashboard en `admin-next/` tiene:
 - ✅ Borrar porras en estado borrador desde la lista o el detalle
 - ✅ Vista de detalle por porra: asistente de fase de grupos, partidos y mini-porra
 - ✅ Vista de detalle por porra: asistente de fase de grupos, jugadores, partidos y mini-porra plegables
-- ✅ Gestión de jugadores: añadir por nombre y email, listar y eliminar; si el email no existe en Auth, el panel crea la cuenta y la enlaza
+- ✅ Gestión de jugadores: añadir por nombre y email, listar y eliminar; si el email no existe en Auth, el panel crea la cuenta, la enlaza y muestra su contraseña temporal en la tabla
 - ✅ Equipos con bandera ligada desde catálogo, con opción de equipo personalizado
 - ✅ Tabla de equipos ordenada por grupo, con edición inline y arrastre dentro del mismo grupo
 - ✅ Bloqueo de equipos duplicados en toda la porra, incluido el asistente guiado
@@ -61,6 +61,7 @@ El dashboard en `admin-next/` tiene:
 - ✅ Reset de fase de grupos para regenerar esa estructura si algo sale mal
 - ✅ Organización manual de partidos con botones subir/bajar usando `porra_matches.position`
 - ✅ Edición inline de la fecha de cada partido desde la sección de partidos
+- ✅ La porra se puede devolver a borrador desde cualquier estado
 - ✅ Reordenación por arrastre de las filas de fase de grupos
 - ✅ Estructura de partidos: jornadas, orden manual y fechas
 - ✅ Sección de partidos plegable desde la cabecera, igual que el asistente de grupos
