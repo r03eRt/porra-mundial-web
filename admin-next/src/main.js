@@ -328,6 +328,7 @@ const state = {
   editingTeamId: null,
   editingMatchId: null,
   editingMiniQuestionId: null,
+  editingPorraName: false,
   playerMessage: '',
   playerTempPasswords: {},
   draggingMatchId: null,
@@ -1734,7 +1735,14 @@ function renderDetail() {
   return `
     <div class="detail-header">
       <button type="button" id="backBtn" class="btn-secondary">&larr; Volver</button>
-      <h2 style="margin:0">${esc(p.name)}</h2>
+      ${state.editingPorraName
+        ? `<form id="renamePorraForm" class="inline-form" style="display:inline-flex;gap:6px;align-items:center">
+            <input name="porraName" type="text" value="${esc(p.name)}" required style="min-width:200px" />
+            <button type="submit" class="btn-secondary btn-sm">Guardar</button>
+            <button type="button" id="cancelRenamePorraBtn" class="btn-secondary btn-sm">Cancelar</button>
+           </form>`
+        : `<h2 style="margin:0">${esc(p.name)} <button type="button" id="renamePorraBtn" class="btn-secondary btn-sm" title="Cambiar nombre">✎</button></h2>`
+      }
       <code class="muted">${esc(p.slug)}</code>
       <span class="status-pill">${esc(porraStatusLabel(p.status))}</span>
       <button type="button" id="advanceStatusBtn" class="btn-secondary" ${nextStatus ? '' : 'disabled'}>
@@ -3262,6 +3270,22 @@ async function revertPorraToDraft() {
   render();
 }
 
+async function handleRenamePorra(form) {
+  const newName = new FormData(form).get('porraName')?.trim();
+  if (!newName || !state.currentPorra) return;
+  const { error } = await supabase
+    .from('porras')
+    .update({ name: newName })
+    .eq('id', state.currentPorra.id);
+  if (error) { state.detailError = error.message; render(); return; }
+  state.currentPorra.name = newName;
+  state.editingPorraName = false;
+  // Update in the porras list too
+  const idx = state.porras.findIndex(p => p.id === state.currentPorra.id);
+  if (idx !== -1) state.porras[idx].name = newName;
+  render();
+}
+
 async function deletePlayer(playerId) {
   const { error } = await supabase
     .from('porra_players')
@@ -3314,6 +3338,7 @@ async function deleteMatch(matchId) {
 document.addEventListener('submit', e => {
   if (e.target.id === 'loginForm')    { e.preventDefault(); handleLogin(e.target); }
   if (e.target.id === 'createForm')   { e.preventDefault(); handleCreate(e.target); }
+  if (e.target.id === 'renamePorraForm') { e.preventDefault(); handleRenamePorra(e.target); }
   if (e.target.id === 'addPlayerForm') { e.preventDefault(); handleAddPlayer(e.target); }
   if (e.target.id === 'startGroupSetupForm') { e.preventDefault(); handleStartGroupSetup(e.target); }
   if (e.target.id === 'saveGroupSetupForm') { e.preventDefault(); handleSaveGroupSetup(e.target); }
@@ -3417,6 +3442,8 @@ document.addEventListener('click', e => {
   if (e.target.id === 'advanceStatusBtn')       advancePorraStatus();
   if (e.target.id === 'revertDraftBtn')         revertPorraToDraft();
   if (e.target.id === 'deletePorraBtn')         deletePorra(state.currentPorra?.id);
+  if (e.target.id === 'renamePorraBtn')         { state.editingPorraName = true; render(); }
+  if (e.target.id === 'cancelRenamePorraBtn')   { state.editingPorraName = false; render(); }
   if (e.target.id === 'toggleGroupSetupBtn')     toggleGroupSetupCollapsed();
   if (e.target.id === 'toggleMatchSectionBtn')   toggleMatchSectionCollapsed();
   if (e.target.id === 'togglePlayerSectionBtn')  togglePlayerSectionCollapsed();
