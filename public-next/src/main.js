@@ -3,7 +3,7 @@ import {
   scorePrediction, historyPositionChange,
   calculateBestCurrentStreak, pickNextPendingMatch
 } from '../../src/lib/porra-core.js';
-import { parseScore } from '../../src/lib/statistics-utils.js';
+import { parseScore, normalize, statsCountryFlag, statsCountryLabel } from '../../src/lib/statistics-utils.js';
 import { calculateTeamStats, TEAM_DETAIL_METRICS } from '../../src/lib/team-stats.js';
 
 const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
@@ -28,6 +28,21 @@ const KNOCKOUT_STAGE_META = {
 };
 
 const KNOCKOUT_STAGE_ORDER = ['r32', 'r16', 'qf', 'sf', 'final', 'champion'];
+
+const STATS_CONFIG = {
+  players: {
+    label: 'Jugadores',
+    searchPlaceholder: 'Buscar jugador o selección...',
+    loadingText: 'Cargando rankings de jugadores...',
+    errorText: 'No se pudieron cargar los rankings de jugadores.'
+  },
+  teams: {
+    label: 'Equipos',
+    searchPlaceholder: 'Buscar equipo...',
+    loadingText: 'Cargando rankings de equipos...',
+    errorText: 'No se pudieron cargar los rankings de equipos.'
+  }
+};
 
 const KNOCKOUT_TEMPLATES = {
   euro_8: {
@@ -173,7 +188,14 @@ const state = {
   rankingSort: { key: 'position', direction: 'asc' }, // orden de la tabla
   probabilitiesCache: null, // { key, result } de la última simulación
   probabilitiesExpanded: { players: false, teams: false, mini: false },
-  historyCheckpointId: ''   // match_id del snapshot activo en Histórico
+  historyCheckpointId: '',   // match_id del snapshot activo en Histórico
+  statsMode: 'players',
+  statsSelections: { players: '', teams: '' },
+  statsSearch: { players: '', teams: '' },
+  statsExpanded: { players: false, teams: false },
+  statsErrors: { players: false, teams: false },
+  playerRankings: null,
+  teamRankings: null
 };
 
 let toastTimer = null;
@@ -1318,6 +1340,7 @@ function render() {
     case 'knockout': renderKnockout(); break;
     case 'bestThirds': renderBestThirds(); break;
     case 'probabilities': renderProbabilities(); break;
+    case 'statistics': renderStatistics(); break;
     default: renderRanking();
   }
 }
@@ -1375,7 +1398,7 @@ const TABS = [
   { key: 'bestThirds', label: 'Mejores terceros', ready: true },
   { key: 'topScorers', label: 'Máximos goleadores', ready: false },
   { key: 'probabilities', label: 'Probabilidades', ready: true },
-  { key: 'statistics', label: 'Estadísticas', ready: false },
+  { key: 'statistics', label: 'Estadísticas', ready: true },
   { key: 'compare', label: 'Comparador', ready: false }
 ];
 
@@ -3308,8 +3331,125 @@ function renderProbabilities() {
 }
 
 // ---------------------------------------------------------------------------
-// Acciones
+// Estadísticas (rankings scrapeados de AS.com, caché en as_rankings_cache)
 // ---------------------------------------------------------------------------
+function formatStatsCountryCell(value) {
+  const label = statsCountryLabel(value);
+  const flag = statsCountryFlag(label);
+  return `<span class="stats-country"><span class="stats-flag">${flag}</span><span>${esc(label)}</span></span>`;
+}
+
+async function loadStatsRankings() {
+  let payload;
+  try {
+    const { data, error } = await supabase
+      .from('as_rankings_cache')
+      .select('kind,payload,updated_at');
+    if (error) throw error;
+    const byKind = Object.fromEntries((data || []).map(row => [row.kind, row]));
+    payload = {
+      players: byKind.players?.payload || null,
+      teams: byKind.teams?.payload || null
+    };
+  } catch (err) {
+    console.warn('No se pudo leer as_rankings_cache:', err);
+    payload = { players: null, teams: null };
+  }
+
+  if (payload.players) { state.playerRankings = payload.players; state.statsErrors.players = false; }
+  else { state.statsErrors.players = true; }
+  if (payload.teams) { state.teamRankings = payload.teams; state.statsErrors.teams = false; }
+  else { state.statsErrors.teams = true; }
+}
+
+function renderStatistics() {
+  const mode = state.statsMode;
+  const config = STATS_CONFIG[mode];
+  const dataset = mode === 'teams' ? state.teamRankings : state.playerRankings;
+  const rankings = dataset?.rankings || [];
+
+  const modeTabs = ['players', 'teams'].map(m =>
+    `<button class="stats-mode-tab${m === mode ? ' active' : ''}" data-action="stats-mode" data-mode="${m}">
+      ${m === 'players' ? 'Jugadores' : 'Equipos'}
+    </button>`
+  ).join('');
+
+  if (!dataset) {
+    $app.innerHTML = `
+      <div class="panel">
+        <div class="panel-head">
+          <div><h2>Estadísticas</h2><p class="hint">${esc(config.loadingText)}</p></div>
+          <div class="filters">
+            <div class="stats-mode-tabs">${modeTabs}</div>
+          </div>
+        </div>
+        <p class="empty-state">${esc(state.statsErrors[mode] ? config.errorText : config.loadingText)}</p>
+      </div>`;
+    return;
+  }
+
+  const savedSlug = state.statsSelections[mode];
+  const selected = rankings.find(r => r.slug === savedSlug) || rankings[0];
+  if (selected && !state.statsSelections[mode]) state.statsSelections[mode] = selected.slug;
+
+  const q = normalize(state.statsSearch[mode] || '');
+  const rows = (selected?.rows || []).filter(row =>
+    !q || normalize([row.position, ...(row.raw || [])].join(' ')).includes(q)
+  );
+  const visibleRows = state.statsExpanded[mode] ? rows : rows.slice(0, 10);
+  const hasMore = rows.length > visibleRows.length;
+  const updatedAt = dataset.scrapedAt
+    ? new Date(dataset.scrapedAt).toLocaleString('es-ES')
+    : 'sin fecha';
+
+  const rankingOptions = rankings.map(r =>
+    `<option value="${esc(r.slug)}"${r.slug === selected?.slug ? ' selected' : ''}>${esc(r.label)}</option>`
+  ).join('');
+
+  const tableBody = visibleRows.length
+    ? `<thead><tr>${(selected?.headers || []).map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+       <tbody>${visibleRows.map(row =>
+         `<tr>${(selected.headers || []).map((_, i) => {
+           const cell = row.raw?.[i] ?? '';
+           const display = mode === 'players' && i === 2
+             ? formatStatsCountryCell(cell)
+             : mode === 'teams' && i === 1
+               ? formatStatsCountryCell(cell)
+               : esc(cell);
+           return `<td>${display}</td>`;
+         }).join('')}</tr>`
+       ).join('')}</tbody>`
+    : `<tbody><tr><td class="empty-state">No hay ${config.label.toLowerCase()} que coincidan con la búsqueda.</td></tr></tbody>`;
+
+  $app.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Estadísticas</h2>
+          <p class="hint">
+            ${esc(config.label)}: ${rankings.length} rankings · ${selected?.rows?.length ?? 0} registros · Actualizado: ${esc(updatedAt)}
+            ${selected?.url ? `· <a href="${esc(selected.url)}" target="_blank" rel="noopener">ver fuente</a>` : ''}
+          </p>
+        </div>
+        <div class="filters">
+          <div class="stats-mode-tabs">${modeTabs}</div>
+          <select data-action="stats-ranking">${rankingOptions}</select>
+          <input type="text" placeholder="${esc(config.searchPlaceholder)}" value="${esc(state.statsSearch[mode] || '')}" data-action="stats-search" />
+        </div>
+      </div>
+      <div class="table-wrap stats-table-wrap"><table>${tableBody}</table></div>
+      <div class="stats-footer">
+        <span class="hint">${rows.length ? `Mostrando ${visibleRows.length} de ${rows.length} filas${q ? ' filtradas' : ''}.` : 'No hay filas para mostrar.'}</span>
+        <div class="stats-footer-actions">
+          ${hasMore || state.statsExpanded[mode]
+            ? `<button data-action="stats-toggle">${state.statsExpanded[mode] ? 'Ver menos' : 'Ver todo'}</button>`
+            : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+
 document.addEventListener('click', async (e) => {
   const tabBtn = e.target.closest('[data-tab]');
   if (tabBtn) { state.tab = tabBtn.dataset.tab; render(); return; }
@@ -3369,6 +3509,17 @@ document.addEventListener('click', async (e) => {
   if (action === 'prob-toggle-players') { state.probabilitiesExpanded.players = !state.probabilitiesExpanded.players; renderProbabilities(); return; }
   if (action === 'prob-toggle-teams') { state.probabilitiesExpanded.teams = !state.probabilitiesExpanded.teams; renderProbabilities(); return; }
   if (action === 'prob-toggle-mini') { state.probabilitiesExpanded.mini = !state.probabilitiesExpanded.mini; renderProbabilities(); return; }
+  if (action === 'stats-mode') {
+    state.statsMode = e.target.closest('[data-action]').dataset.mode;
+    state.statsExpanded[state.statsMode] = false;
+    renderStatistics();
+    return;
+  }
+  if (action === 'stats-toggle') {
+    state.statsExpanded[state.statsMode] = !state.statsExpanded[state.statsMode];
+    renderStatistics();
+    return;
+  }
   if (action === 'logout') {
     await supabase.auth.signOut();
     await refreshSession();
@@ -3420,6 +3571,16 @@ document.addEventListener('input', (e) => {
     const again = document.querySelector('[data-action="mini-search"]');
     if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch {} }
   }
+
+  const statsSearch = e.target.closest('[data-action="stats-search"]');
+  if (statsSearch) {
+    state.statsSearch[state.statsMode] = statsSearch.value;
+    state.statsExpanded[state.statsMode] = false;
+    const caret = statsSearch.selectionStart;
+    renderStatistics();
+    const again = document.querySelector('[data-action="stats-search"]');
+    if (again) { again.focus(); try { again.setSelectionRange(caret, caret); } catch {} }
+  }
 });
 
 document.addEventListener('change', (e) => {
@@ -3434,6 +3595,13 @@ document.addEventListener('change', (e) => {
 
   const historySel = e.target.closest('[data-action="history-checkpoint"]');
   if (historySel) { state.historyCheckpointId = historySel.value; renderHistory(); }
+
+  const statsRanking = e.target.closest('[data-action="stats-ranking"]');
+  if (statsRanking) {
+    state.statsSelections[state.statsMode] = statsRanking.value;
+    state.statsExpanded[state.statsMode] = false;
+    renderStatistics();
+  }
 });
 
 document.addEventListener('input', (e) => {
@@ -3548,4 +3716,6 @@ function esc(s) {
 (async function init() {
   await loadPorra();
   render();
+  // Load stats rankings in background (no-await, re-renders when done)
+  loadStatsRankings().then(() => { if (state.tab === 'statistics') renderStatistics(); });
 })();
