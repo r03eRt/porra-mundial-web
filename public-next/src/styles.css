@@ -36,6 +36,9 @@ body {
   padding: 0.45rem 0.9rem; border-radius: 999px; cursor: pointer;
 }
 .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tab.soon { opacity: 0.6; }
+.tab.soon::after { content: ' ·'; }
+.tab.soon.active { opacity: 1; }
 
 .app {
   max-width: 860px; margin: 0 auto; padding: 0 1.25rem 2rem;
@@ -59,7 +62,7 @@ table.data th, table.data td {
 table.data th { color: var(--muted); font-weight: 600; }
 table.data tr.me { background: var(--me); }
 
-input, button {
+input, button, select {
   font: inherit; padding: 0.55rem 0.7rem; border-radius: 9px;
   border: 1px solid var(--border); background: var(--panel2); color: var(--text);
 }
@@ -72,3 +75,9 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 form label { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.9rem; color: var(--muted); margin-bottom: 0.75rem; }
 .actions { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
 code { background: var(--panel2); padding: 0.1rem 0.35rem; border-radius: 5px; }
+
+.team-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.5rem; }
+.team-list li { background: var(--panel2); border: 1px solid var(--border); border-radius: 9px; padding: 0.5rem 0.7rem; }
+
+label.inline { display: inline-flex; flex-direction: row; align-items: center; gap: 0.5rem; margin-bottom: 1rem; color: var(--muted); }
+label.inline select { width: auto; }

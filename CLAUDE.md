@@ -69,7 +69,7 @@ Dos apps en el mismo repo, compartiendo el mismo proyecto Supabase.
 cd public-next && npm run dev   # → http://localhost:5175
 ```
 
-Abrir una porra por slug: `http://localhost:5175/p/<slug>` (o `?slug=<slug>`). Sin login se ven Clasificación y Partidos. Con **Entrar para jugar** (email/password de la cuenta Auth del jugador, enlazada por `porra_players.user_id`) aparece la pestaña **Mi porra** para editar marcadores de fase de grupos; solo se puede guardar si la porra está `open` y antes del `predictions_deadline`. La clasificación reusa `src/lib/porra-core.js` (`scorePrediction`) sobre los `result_home`/`result_away` que meta el admin. No hay framework; JS vanilla con event delegation, mismo patrón que `admin-next/`.
+Abrir una porra por slug: `http://localhost:5175/p/<slug>` (o `?slug=<slug>`). El menú replica el de la app legacy (array `TABS` en `main.js`). Pestañas ya funcionales: Clasificación porra, Editar mi porra (solo con jugador logueado), Partidos, Clasificación grupos, Equipos, Detalle jugador. Las demás (Histórico, Mini-porra, Cruces, Mejores terceros, Máximos goleadores, Probabilidades, Estadísticas, Comparador) aparecen como placeholder "próximamente" (`ready: false` en `TABS`). Con **Entrar para jugar** (email/password de la cuenta Auth del jugador, enlazada por `porra_players.user_id`) se desbloquea **Editar mi porra**; solo guarda si la porra está `open` y antes del `predictions_deadline`. La clasificación reusa `src/lib/porra-core.js` (`scorePrediction`) sobre los `result_home`/`result_away` que meta el admin. JS vanilla con event delegation, mismo patrón que `admin-next/`.
 
 ### admin-next — cómo arrancarlo
 

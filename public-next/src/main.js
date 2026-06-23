@@ -19,7 +19,8 @@ const state = {
   session: null,       // sesión Supabase Auth
   myPlayerId: null,    // player_id del usuario logueado en esta porra (o null)
   tab: 'ranking',
-  myDraft: {}          // ediciones sin guardar: { match_id: "2-1" }
+  myDraft: {},         // ediciones sin guardar: { match_id: "2-1" }
+  playerDetailId: null // jugador seleccionado en "Detalle jugador"
 };
 
 // ---------------------------------------------------------------------------
@@ -127,14 +128,33 @@ function render() {
 
   $title.textContent = state.porra.name;
   renderSessionBar();
+
+  // Si la pestaña activa ya no es visible (p.ej. logout en "Mi porra"), volver a ranking
+  if (!visibleTabs().some(t => t.key === state.tab)) state.tab = 'ranking';
   renderTabs();
+
+  const tab = TABS.find(t => t.key === state.tab);
+  if (tab && !tab.ready) { renderPlaceholder(tab); return; }
 
   switch (state.tab) {
     case 'ranking': renderRanking(); break;
     case 'matches': renderMatches(); break;
     case 'mine': renderMyPorra(); break;
+    case 'groupStandings': renderGroupStandings(); break;
+    case 'teams': renderTeams(); break;
+    case 'player': renderPlayerDetail(); break;
     default: renderRanking();
   }
+}
+
+function renderPlaceholder(tab) {
+  $app.innerHTML = `
+    <div class="card">
+      <h2>${esc(tab.label)}</h2>
+      <p class="muted">Esta sección estará disponible próximamente.</p>
+      <p class="muted">En la app del Mundial existe; aquí se irá portando con los
+      datos de esta porra a medida que avance la plataforma.</p>
+    </div>`;
 }
 
 function renderNoSlug() {
@@ -166,14 +186,32 @@ function playerName(playerId) {
   return p ? p.name : playerId;
 }
 
+// Menú espejo de la app legacy (sin las pestañas de admin). Las que aún no
+// tienen lógica se renderizan con placeholder. "Mi porra" solo si hay jugador.
+const TABS = [
+  { key: 'ranking', label: 'Clasificación porra', ready: true },
+  { key: 'mine', label: '✏️ Editar mi porra', ready: true, playerOnly: true },
+  { key: 'history', label: 'Histórico', ready: false },
+  { key: 'mini', label: 'Mini-porra', ready: false },
+  { key: 'matches', label: 'Partidos', ready: true },
+  { key: 'knockout', label: 'Cruces', ready: false },
+  { key: 'groupStandings', label: 'Clasificación grupos', ready: true },
+  { key: 'player', label: 'Detalle jugador', ready: true },
+  { key: 'teams', label: 'Equipos', ready: true },
+  { key: 'bestThirds', label: 'Mejores terceros', ready: false },
+  { key: 'topScorers', label: 'Máximos goleadores', ready: false },
+  { key: 'probabilities', label: 'Probabilidades', ready: false },
+  { key: 'statistics', label: 'Estadísticas', ready: false },
+  { key: 'compare', label: 'Comparador', ready: false }
+];
+
+function visibleTabs() {
+  return TABS.filter(t => !t.playerOnly || state.myPlayerId);
+}
+
 function renderTabs() {
-  const tabs = [
-    { key: 'ranking', label: 'Clasificación' },
-    { key: 'matches', label: 'Partidos' }
-  ];
-  if (state.myPlayerId) tabs.push({ key: 'mine', label: 'Mi porra' });
-  $tabs.innerHTML = tabs.map(t =>
-    `<button class="tab ${state.tab === t.key ? 'active' : ''}" data-tab="${t.key}">${t.label}</button>`
+  $tabs.innerHTML = visibleTabs().map(t =>
+    `<button class="tab ${state.tab === t.key ? 'active' : ''} ${t.ready ? '' : 'soon'}" data-tab="${t.key}">${t.label}</button>`
   ).join('');
 }
 
@@ -216,6 +254,114 @@ function renderMatches() {
               <td>${r ? `${r.home} - ${r.away}` : '<span class="muted">pendiente</span>'}</td>
             </tr>`;
           }).join('') || `<tr><td colspan="3" class="muted">Sin partidos todavía.</td></tr>`}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// --- Clasificación de grupos (puntos reales del torneo) --------------------
+function computeGroupStandings(groupId) {
+  const matches = state.matches.filter(m => m.stage === 'group' && m.group_id === groupId);
+  const teamIds = [...new Set(matches.flatMap(m => [m.team1, m.team2]).filter(Boolean))];
+  const rows = teamIds.map((team, i) => ({
+    team, idx: i, pj: 0, g: 0, e: 0, p: 0, gf: 0, gc: 0, pts: 0
+  }));
+  const byTeam = new Map(rows.map(r => [r.team, r]));
+  for (const m of matches) {
+    const r = matchResult(m);
+    if (!r) continue;
+    const home = byTeam.get(m.team1), away = byTeam.get(m.team2);
+    if (!home || !away) continue;
+    home.pj++; away.pj++;
+    home.gf += r.home; home.gc += r.away;
+    away.gf += r.away; away.gc += r.home;
+    if (r.home > r.away) { home.pts += 3; home.g++; away.p++; }
+    else if (r.home < r.away) { away.pts += 3; away.g++; home.p++; }
+    else { home.pts++; away.pts++; home.e++; away.e++; }
+  }
+  return rows.sort((a, b) =>
+    b.pts - a.pts || (b.gf - b.gc) - (a.gf - a.gc) || b.gf - a.gf || a.idx - b.idx);
+}
+
+function renderGroupStandings() {
+  const groups = state.groups.length
+    ? state.groups
+    : [...new Set(state.matches.filter(m => m.stage === 'group').map(m => m.group_id).filter(Boolean))]
+        .map(group_id => ({ group_id, name: group_id }));
+  $app.innerHTML = groups.map(grp => {
+    const rows = computeGroupStandings(grp.group_id);
+    return `
+      <div class="card">
+        <h2>Grupo ${esc(grp.name || grp.group_id)}</h2>
+        <table class="data">
+          <thead><tr><th>#</th><th>Equipo</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>GF</th><th>GC</th><th>DG</th><th>Pts</th></tr></thead>
+          <tbody>
+            ${rows.map((r, i) => `<tr>
+              <td>${i + 1}</td>
+              <td>${teamFlag(r.team)} ${esc(teamName(r.team))}</td>
+              <td>${r.pj}</td><td>${r.g}</td><td>${r.e}</td><td>${r.p}</td>
+              <td>${r.gf}</td><td>${r.gc}</td><td>${r.gf - r.gc}</td>
+              <td><strong>${r.pts}</strong></td>
+            </tr>`).join('') || `<tr><td colspan="10" class="muted">Sin equipos.</td></tr>`}
+          </tbody>
+        </table>
+      </div>`;
+  }).join('') || `<div class="card"><p class="muted">No hay grupos definidos.</p></div>`;
+}
+
+// --- Equipos ---------------------------------------------------------------
+function renderTeams() {
+  const byGroup = new Map();
+  for (const t of state.teams) {
+    const key = t.group_id || '—';
+    if (!byGroup.has(key)) byGroup.set(key, []);
+    byGroup.get(key).push(t);
+  }
+  const sections = [...byGroup.entries()].map(([group, teams]) => `
+    <div class="card">
+      <h2>${group === '—' ? 'Sin grupo' : 'Grupo ' + esc(group)}</h2>
+      <ul class="team-list">
+        ${teams.map(t => `<li>${t.flag || '🏳️'} ${esc(t.name)}</li>`).join('')}
+      </ul>
+    </div>`).join('');
+  $app.innerHTML = sections || `<div class="card"><p class="muted">No hay equipos todavía.</p></div>`;
+}
+
+// --- Detalle de jugador ----------------------------------------------------
+function renderPlayerDetail() {
+  const selected = state.playerDetailId
+    || (state.myPlayerId || state.players[0]?.player_id) || null;
+  state.playerDetailId = selected;
+  const scoring = scoringConfig();
+  const groupMatches = state.matches.filter(m => m.stage === 'group');
+
+  const rows = groupMatches.map(m => {
+    const pred = predictionFor(selected, m.match_id);
+    const result = matchResult(m);
+    const s = result ? scorePrediction({ score: pred?.score }, result, scoring) : null;
+    return { m, pred, result, s };
+  });
+
+  $app.innerHTML = `
+    <div class="card">
+      <h2>Detalle de jugador</h2>
+      <label class="inline">Jugador:
+        <select data-action="select-player">
+          ${state.players.map(p =>
+            `<option value="${esc(p.player_id)}" ${p.player_id === selected ? 'selected' : ''}>${esc(p.name)}</option>`
+          ).join('')}
+        </select>
+      </label>
+      <table class="data">
+        <thead><tr><th>Grupo</th><th>Partido</th><th>Pronóstico</th><th>Resultado</th><th>Puntos</th></tr></thead>
+        <tbody>
+          ${rows.map(({ m, pred, result, s }) => `<tr>
+            <td>${esc(m.group_id || '')}</td>
+            <td>${teamFlag(m.team1)} ${esc(teamName(m.team1))} – ${esc(teamName(m.team2))} ${teamFlag(m.team2)}</td>
+            <td>${pred?.score ? esc(pred.score) : '<span class="muted">—</span>'}</td>
+            <td>${result ? `${result.home} - ${result.away}` : '<span class="muted">pdte</span>'}</td>
+            <td>${s ? (s.exact ? `<strong>${s.points}</strong> ✔` : (s.sign ? `${s.points} ~` : '0')) : '<span class="muted">—</span>'}</td>
+          </tr>`).join('') || `<tr><td colspan="5" class="muted">Sin partidos.</td></tr>`}
         </tbody>
       </table>
     </div>`;
@@ -293,6 +439,11 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('input', (e) => {
   const input = e.target.closest('.score-input');
   if (input) state.myDraft[input.dataset.match] = input.value.trim();
+});
+
+document.addEventListener('change', (e) => {
+  const sel = e.target.closest('[data-action="select-player"]');
+  if (sel) { state.playerDetailId = sel.value; render(); }
 });
 
 document.addEventListener('submit', async (e) => {
