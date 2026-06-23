@@ -17,6 +17,17 @@ const PORRA_STATUS_LABELS = {
   closed: 'Cerrada'
 };
 
+const KNOCKOUT_STAGE_META = {
+  r32: { label: 'Dieciseisavos', points: 3, aliases: ['r32', 'round_of_32', 'dieciseisavos', 'dieciseisavos'] },
+  r16: { label: 'Octavos', points: 5, aliases: ['r16', 'octavos', 'octavos'] },
+  qf: { label: 'Cuartos', points: 7, aliases: ['qf', 'cuartos'] },
+  sf: { label: 'Semifinales', points: 10, aliases: ['sf', 'semis', 'semifinales'] },
+  final: { label: 'Final', points: 12, aliases: ['final'] },
+  champion: { label: 'Campeón', points: 15, aliases: ['1º', 'campeon', 'campeón', 'champion', 'winner'] }
+};
+
+const KNOCKOUT_STAGE_ORDER = ['r32', 'r16', 'qf', 'sf', 'final', 'champion'];
+
 // ---------------------------------------------------------------------------
 // Estado
 // ---------------------------------------------------------------------------
@@ -37,6 +48,8 @@ const state = {
   myPlayerId: null,    // player_id del usuario logueado en esta porra (o null)
   tab: 'ranking',
   myDraft: {},         // ediciones sin guardar: { match_id: "2-1" }
+  myMiniDraft: {},     // ediciones sin guardar de mini-porra: { question_id: "..." }
+  knockoutPlayerId: null, // jugador seleccionado en la pestaña de cruces
   playerDetailId: null, // jugador seleccionado en "Detalle jugador"
   matchGoalsExpanded: {}, // { match_id: true } goleadores desplegados
   selectedTeamId: null, // equipo seleccionado en "Equipos"
@@ -44,6 +57,8 @@ const state = {
   rankingQuery: '',      // buscador de participante en Clasificación
   rankingSort: { key: 'position', direction: 'asc' } // orden de la tabla
 };
+
+let toastTimer = null;
 
 // ---------------------------------------------------------------------------
 // Routing por slug:  /p/<slug>   (o ?slug=<slug> como fallback)
@@ -101,17 +116,23 @@ async function refreshSession() {
     const mine = state.players.find(p => p.user_id === state.session.user.id);
     state.myPlayerId = mine ? mine.player_id : null;
   }
+  if (!state.knockoutPlayerId && state.myPlayerId) state.knockoutPlayerId = state.myPlayerId;
 }
 
 // ---------------------------------------------------------------------------
 // Helpers de dominio
 // ---------------------------------------------------------------------------
 function teamName(teamId) {
-  const t = state.teams.find(x => x.team_id === teamId);
-  return t ? t.name : (teamId || '—');
+  const resolved = resolveKnockoutSeed(teamId);
+  const key = knockoutTeamKey(resolved);
+  const t = state.teams.find(x => x.team_id === resolved || knockoutTeamKey(x.name) === key);
+  if (t) return t.name;
+  return knockoutSeedLabel(teamId) || (teamId || '—');
 }
 function teamFlag(teamId) {
-  const t = state.teams.find(x => x.team_id === teamId);
+  const resolved = resolveKnockoutSeed(teamId);
+  const key = knockoutTeamKey(resolved);
+  const t = state.teams.find(x => x.team_id === resolved || knockoutTeamKey(x.name) === key);
   return t && t.flag ? t.flag : '';
 }
 function scoringConfig() {
@@ -119,22 +140,521 @@ function scoringConfig() {
   return { groupExact: s.groupExact ?? 3, groupSign: s.groupSign ?? 1 };
 }
 function matchResult(match) {
-  if (match.result_home === null || match.result_away === null) return null;
-  return { home: match.result_home, away: match.result_away };
+  if (!match) return null;
+  const home = match.score_home ?? match.result_home;
+  const away = match.score_away ?? match.result_away;
+  if (home == null || away == null) return null;
+  return { home: Number(home), away: Number(away) };
 }
 function predictionFor(playerId, matchId) {
   return state.predictions.find(p => p.player_id === playerId && p.match_id === matchId) || null;
 }
 
-// Campeón que predijo el jugador (porra_knockout_picks, stage final). '' si no.
-function championPickFor(playerId) {
-  const pick = state.knockoutPicks.find(k =>
-    k.player_id === playerId && (k.stage === '1º' || k.stage === 'final' || k.stage === 'champion'));
-  return pick && pick.team ? pick.team : '';
+function showAppToast(message, duration = 2400) {
+  const text = String(message ?? '').trim();
+  if (!text) return;
+
+  let toast = document.getElementById('appToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'appToast';
+    toast.className = 'app-toast';
+    toast.hidden = true;
+    document.body.appendChild(toast);
+  }
+
+  toast.textContent = text;
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.hidden = true;
+  }, duration);
 }
 
-// Puntos de cruces del jugador. Sin lógica de cruces todavía → 0 (columna lista).
-function knockoutPointsFor(/* playerId */) { return 0; }
+function normalizeKnockoutStageKey(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  for (const [key, meta] of Object.entries(KNOCKOUT_STAGE_META)) {
+    if (key === raw || meta.aliases.includes(raw)) return key;
+  }
+  return raw;
+}
+
+function knockoutTeamKey(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function knockoutSeedLabel(token) {
+  const raw = String(token || '').trim();
+  const winnerMatch = raw.match(/^W:(.+)$/i);
+  if (winnerMatch) return `Ganador ${winnerMatch[1].toUpperCase()}`;
+  const groupSeed = raw.match(/^([A-Z]+)([12])$/);
+  if (groupSeed) return `${groupSeed[1]}${groupSeed[2]}`;
+  return raw;
+}
+
+function teamByToken(token) {
+  const key = knockoutTeamKey(token);
+  return state.teams.find(team => team.team_id === token || knockoutTeamKey(team.name) === key) || null;
+}
+
+function computeGroupStandingsByMatches(groupId) {
+  const matches = state.matches.filter(match => match.stage === 'group' && (match.group_id ?? match.group_label) === groupId);
+  const teamIds = [...new Set(matches.flatMap(match => [match.team1_id ?? match.team1, match.team2_id ?? match.team2]).filter(Boolean))];
+  const rows = teamIds.map((team, index) => ({ team, idx: index, pts: 0, gf: 0, gc: 0 }));
+  const byTeam = new Map(rows.map(row => [row.team, row]));
+
+  for (const match of matches) {
+    const result = matchResult(match);
+    if (!result) continue;
+    const home = byTeam.get(match.team1_id ?? match.team1);
+    const away = byTeam.get(match.team2_id ?? match.team2);
+    if (!home || !away) continue;
+    home.gf += result.home;
+    home.gc += result.away;
+    away.gf += result.away;
+    away.gc += result.home;
+    if (result.home > result.away) home.pts += 3;
+    else if (result.away > result.home) away.pts += 3;
+    else {
+      home.pts += 1;
+      away.pts += 1;
+    }
+  }
+
+  return rows.sort((a, b) =>
+    b.pts - a.pts ||
+    ((b.gf - b.gc) - (a.gf - a.gc)) ||
+    (b.gf - a.gf) ||
+    (a.idx - b.idx)
+  );
+}
+
+function resolveKnockoutSeed(token, seen = new Set()) {
+  const raw = String(token || '').trim();
+  if (!raw) return '';
+  if (seen.has(raw)) return raw;
+  seen.add(raw);
+
+  const directTeam = teamByToken(raw);
+  if (directTeam) return directTeam.team_id;
+
+  const groupSeed = raw.match(/^([A-Z]+)([12])$/);
+  if (groupSeed) {
+    const standings = computeGroupStandingsByMatches(groupSeed[1]);
+    return standings[Number(groupSeed[2]) - 1]?.team || raw;
+  }
+
+  const winnerSeed = raw.match(/^W:(.+)$/i);
+  if (winnerSeed) {
+    const matchId = winnerSeed[1].toUpperCase();
+    const match = state.matches.find(item => String(item.match_id || '').toUpperCase() === matchId);
+    const result = matchResult(match);
+    if (!match || !result || result.home === result.away) return raw;
+    const winnerToken = result.home > result.away ? (match.team1_id ?? match.team1) : (match.team2_id ?? match.team2);
+    return resolveKnockoutSeed(winnerToken, seen);
+  }
+
+  return raw;
+}
+
+function knockoutScoringConfig() {
+  const raw = state.porra?.scoring?.knockout || {};
+  return KNOCKOUT_STAGE_ORDER.reduce((acc, key) => {
+    acc[key] = Number(raw[key] ?? KNOCKOUT_STAGE_META[key]?.points ?? 0) || 0;
+    return acc;
+  }, {});
+}
+
+function knockoutMatches() {
+  return state.matches.filter(match => match.stage === 'knockout');
+}
+
+function knockoutStages() {
+  const scoring = knockoutScoringConfig();
+  const configured = Array.isArray(state.porra?.knockout_structure) ? state.porra.knockout_structure : [];
+  const structure = configured
+    .map(item => {
+      const key = normalizeKnockoutStageKey(item?.key);
+      if (!KNOCKOUT_STAGE_META[key] || key === 'champion') return null;
+      return {
+        key,
+        label: String(item?.label || KNOCKOUT_STAGE_META[key].label),
+        teams: Math.max(0, Number(item?.teams || 0) || 0),
+        points: Number(item?.points ?? scoring[key]) || 0
+      };
+    })
+    .filter(Boolean);
+
+  if (structure.length) {
+    return [...structure, { key: 'champion', label: KNOCKOUT_STAGE_META.champion.label, teams: 1, points: scoring.champion }];
+  }
+
+  const derived = KNOCKOUT_STAGE_ORDER
+    .filter(key => key !== 'champion')
+    .map(key => {
+      const matches = knockoutMatches().filter(match => normalizeKnockoutStageKey(match.round_key) === key);
+      if (!matches.length) return null;
+      return {
+        key,
+        label: KNOCKOUT_STAGE_META[key].label,
+        teams: matches.length * 2,
+        points: scoring[key]
+      };
+    })
+    .filter(Boolean);
+
+  if (!derived.length) return [];
+  return [...derived, { key: 'champion', label: KNOCKOUT_STAGE_META.champion.label, teams: 1, points: scoring.champion }];
+}
+
+function knockoutRoundStages() {
+  return knockoutStages().filter(stage => stage.key !== 'champion');
+}
+
+function knockoutPickFor(playerId, stageKey, slot) {
+  return state.knockoutPicks.find(pick =>
+    pick.player_id === playerId &&
+    normalizeKnockoutStageKey(pick.stage) === stageKey &&
+    Number(pick.slot) === Number(slot)
+  ) || null;
+}
+
+function knockoutStagePicks(playerId, stageKey, expectedTeams = 0) {
+  const picks = state.knockoutPicks
+    .filter(pick => pick.player_id === playerId && normalizeKnockoutStageKey(pick.stage) === stageKey)
+    .sort((a, b) => Number(a.slot) - Number(b.slot))
+    .map(pick => String(pick.team || '').trim());
+
+  const size = Math.max(expectedTeams, picks.length);
+  return Array.from({ length: size }, (_, index) => picks[index] || '');
+}
+
+function buildPlayerKnockoutBracket(playerId) {
+  const roundStages = knockoutRoundStages();
+  if (!roundStages.length) return {};
+
+  const bracket = {};
+  const firstStage = roundStages[0];
+  bracket[firstStage.key] = knockoutStagePicks(playerId, firstStage.key, firstStage.teams);
+
+  let previousRound = bracket[firstStage.key];
+  for (const stage of roundStages.slice(1)) {
+    const selectedTeams = knockoutStagePicks(playerId, stage.key, stage.teams);
+    const selectedKeys = new Set(selectedTeams.map(knockoutTeamKey).filter(Boolean));
+
+    bracket[stage.key] = [];
+    for (let index = 0; index < previousRound.length; index += 2) {
+      const pair = [previousRound[index], previousRound[index + 1]];
+      const winner = pair.find(team => selectedKeys.has(knockoutTeamKey(team))) || selectedTeams[index / 2] || '';
+      bracket[stage.key].push(winner);
+    }
+
+    previousRound = bracket[stage.key];
+  }
+
+  return bracket;
+}
+
+function knockoutChampionPick(playerId) {
+  const pick = knockoutPickFor(playerId, 'champion', 1);
+  return pick ? String(pick.team || '').trim() : '';
+}
+
+function winnerFromMatch(match) {
+  const result = matchResult(match);
+  if (!result) return '';
+  if (result.home > result.away) return String(match.team1 || '').trim();
+  if (result.away > result.home) return String(match.team2 || '').trim();
+  return '';
+}
+
+function buildKnockoutReality() {
+  const roundStages = knockoutRoundStages();
+  const reality = {};
+
+  for (const stage of roundStages) {
+    const matches = knockoutMatches().filter(match => normalizeKnockoutStageKey(match.round_key) === stage.key);
+    const teams = new Set();
+    for (const match of matches) {
+      if (match.team1) teams.add(knockoutTeamKey(match.team1));
+      if (match.team2) teams.add(knockoutTeamKey(match.team2));
+    }
+    reality[stage.key] = {
+      key: stage.key,
+      label: stage.label,
+      points: stage.points,
+      expected: stage.teams,
+      resolved: teams.size,
+      complete: stage.teams > 0 && teams.size >= stage.teams,
+      teams
+    };
+  }
+
+  const finalMatch = knockoutMatches().find(match => normalizeKnockoutStageKey(match.round_key) === 'final');
+  const champion = winnerFromMatch(finalMatch);
+  reality.champion = {
+    key: 'champion',
+    label: KNOCKOUT_STAGE_META.champion.label,
+    points: knockoutScoringConfig().champion,
+    expected: 1,
+    resolved: champion ? 1 : 0,
+    complete: Boolean(champion),
+    teams: champion ? new Set([knockoutTeamKey(champion)]) : new Set()
+  };
+
+  return reality;
+}
+
+function calculatePlayerKnockout(playerId, reality = buildKnockoutReality()) {
+  const breakdown = {};
+  let points = 0;
+
+  for (const stage of knockoutStages()) {
+    const stageReality = reality[stage.key] || {
+      key: stage.key,
+      label: stage.label,
+      points: stage.points,
+      expected: stage.teams,
+      resolved: 0,
+      complete: false,
+      teams: new Set()
+    };
+    const predictions = knockoutStagePicks(playerId, stage.key, stage.key === 'champion' ? 1 : stage.teams).filter(Boolean);
+    const hits = predictions.filter(team => stageReality.teams.has(knockoutTeamKey(team))).length;
+    const stagePoints = hits * stage.points;
+    breakdown[stage.key] = { ...stageReality, hits, points: stagePoints };
+    points += stagePoints;
+  }
+
+  return { points, breakdown };
+}
+
+// Campeón que predijo el jugador (porra_knockout_picks, stage final). '' si no.
+function championPickFor(playerId) {
+  return knockoutChampionPick(playerId);
+}
+
+function refreshPredictionsFromState() {
+  return supabase.from('porra_predictions')
+    .select('*').eq('porra_id', state.porra.id)
+    .then(({ data }) => {
+      state.predictions = data || [];
+    });
+}
+
+function matchRowInput(matchId) {
+  return document.querySelector(`[data-match="${matchId}"]`);
+}
+
+function matchRowStatus(matchId) {
+  return document.querySelector(`[data-status="${matchId}"]`);
+}
+
+function draftScoreForMatch(matchId) {
+  const input = matchRowInput(matchId);
+  return String(state.myDraft[matchId] ?? input?.value ?? '').trim();
+}
+
+async function savePredictionRow(matchId, score) {
+  const { error } = await supabase
+    .from('porra_predictions')
+    .upsert([{
+      porra_id: state.porra.id,
+      player_id: state.myPlayerId,
+      match_id: matchId,
+      score
+    }], { onConflict: 'porra_id,player_id,match_id' });
+
+  if (error) throw error;
+  await refreshPredictionsFromState();
+  delete state.myDraft[matchId];
+  render();
+}
+
+async function deletePredictionRow(matchId) {
+  const { error } = await supabase
+    .from('porra_predictions')
+    .delete()
+    .eq('porra_id', state.porra.id)
+    .eq('player_id', state.myPlayerId)
+    .eq('match_id', matchId);
+
+  if (error) throw error;
+  await refreshPredictionsFromState();
+  delete state.myDraft[matchId];
+  render();
+}
+
+function draftMiniScoreForQuestion(questionId) {
+  const input = document.querySelector(`[data-mini-answer-form][data-question-id="${questionId}"] .mini-answer-input`);
+  return String(state.myMiniDraft[questionId] ?? input?.value ?? '').trim();
+}
+
+function miniQuestionStatus(questionId) {
+  return document.querySelector(`[data-mini-status="${questionId}"]`);
+}
+
+async function saveMiniAnswer(questionId) {
+  const status = miniQuestionStatus(questionId);
+  if (!state.myPlayerId) {
+    showAppToast('Necesitas entrar para guardar tus respuestas.');
+    return;
+  }
+  if (!miniEditOpen()) {
+    if (status) status.textContent = 'Edición cerrada.';
+    showAppToast('La porra no está abierta o ya pasó el deadline.');
+    return;
+  }
+
+  const value = draftMiniScoreForQuestion(questionId);
+  if (status) status.textContent = 'Guardando…';
+  if (!value) {
+    if (status) status.textContent = 'Introduce una respuesta.';
+    showAppToast('Introduce una respuesta.');
+    return;
+  }
+
+  try {
+    await saveMiniAnswerRow(questionId, value);
+    const nextStatus = miniQuestionStatus(questionId);
+    if (nextStatus) nextStatus.textContent = 'Guardado ✓';
+    showAppToast('Respuesta de mini-porra guardada.');
+  } catch (error) {
+    if (status) status.textContent = 'Error: ' + error.message;
+    showAppToast(`No se pudo guardar: ${error.message}`, 3600);
+  }
+}
+
+async function clearMiniAnswer(questionId) {
+  const status = miniQuestionStatus(questionId);
+  if (!state.myPlayerId) {
+    showAppToast('Necesitas entrar para borrar tus respuestas.');
+    return;
+  }
+  if (!miniEditOpen()) {
+    if (status) status.textContent = 'Edición cerrada.';
+    showAppToast('La porra no está abierta o ya pasó el deadline.');
+    return;
+  }
+
+  if (status) status.textContent = 'Borrando…';
+
+  try {
+    await deleteMiniAnswerRow(questionId);
+    const nextStatus = miniQuestionStatus(questionId);
+    if (nextStatus) nextStatus.textContent = 'Borrada.';
+    showAppToast('Respuesta de mini-porra borrada.');
+  } catch (error) {
+    if (status) status.textContent = 'Error: ' + error.message;
+    showAppToast(`No se pudo borrar: ${error.message}`, 3600);
+  }
+}
+
+async function refreshKnockoutPicksFromState() {
+  const { data } = await supabase.from('porra_knockout_picks')
+    .select('*').eq('porra_id', state.porra.id);
+  state.knockoutPicks = data || [];
+}
+
+function knockoutEditOpen() {
+  return Boolean(state.myPlayerId) &&
+    state.porra.status === 'open' &&
+    (!state.porra.predictions_deadline || new Date() < new Date(state.porra.predictions_deadline));
+}
+
+function knockoutInputValue(stageKey, slot) {
+  const input = document.querySelector(`[data-knockout-input="${stageKey}:${slot}"]`);
+  return String(input?.value || '').trim();
+}
+
+function knockoutRowStatus(stageKey, slot) {
+  return document.querySelector(`[data-knockout-status="${stageKey}:${slot}"]`);
+}
+
+async function saveKnockoutPick(stageKey, slot) {
+  const status = knockoutRowStatus(stageKey, slot);
+  if (!state.myPlayerId) {
+    showAppToast('Necesitas entrar para guardar tus cruces.');
+    return;
+  }
+  if (!knockoutEditOpen()) {
+    if (status) status.textContent = 'Edición cerrada.';
+    showAppToast('La porra no está abierta o ya pasó el deadline.');
+    return;
+  }
+
+  const team = knockoutInputValue(stageKey, slot);
+  if (status) status.textContent = 'Guardando…';
+  if (!team) {
+    await clearKnockoutPick(stageKey, slot);
+    return;
+  }
+
+  const { error } = await supabase
+    .from('porra_knockout_picks')
+    .upsert([{
+      porra_id: state.porra.id,
+      player_id: state.myPlayerId,
+      stage: stageKey,
+      slot: Number(slot),
+      team
+    }], { onConflict: 'porra_id,player_id,stage,slot' });
+
+  if (error) {
+    if (status) status.textContent = 'Error: ' + error.message;
+    showAppToast(`No se pudo guardar: ${error.message}`, 3600);
+    return;
+  }
+
+  await refreshKnockoutPicksFromState();
+  render();
+  const nextStatus = knockoutRowStatus(stageKey, slot);
+  if (nextStatus) nextStatus.textContent = 'Guardado ✓';
+  showAppToast('Cruce guardado.');
+}
+
+async function clearKnockoutPick(stageKey, slot) {
+  const status = knockoutRowStatus(stageKey, slot);
+  if (!state.myPlayerId) {
+    showAppToast('Necesitas entrar para borrar tus cruces.');
+    return;
+  }
+  if (!knockoutEditOpen()) {
+    if (status) status.textContent = 'Edición cerrada.';
+    showAppToast('La porra no está abierta o ya pasó el deadline.');
+    return;
+  }
+
+  if (status) status.textContent = 'Borrando…';
+  const { error } = await supabase
+    .from('porra_knockout_picks')
+    .delete()
+    .eq('porra_id', state.porra.id)
+    .eq('player_id', state.myPlayerId)
+    .eq('stage', stageKey)
+    .eq('slot', Number(slot));
+
+  if (error) {
+    if (status) status.textContent = 'Error: ' + error.message;
+    showAppToast(`No se pudo borrar: ${error.message}`, 3600);
+    return;
+  }
+
+  await refreshKnockoutPicksFromState();
+  render();
+  const nextStatus = knockoutRowStatus(stageKey, slot);
+  if (nextStatus) nextStatus.textContent = 'Borrado.';
+  showAppToast('Cruce borrado.');
+}
+
+function knockoutPointsFor(playerId) {
+  return calculatePlayerKnockout(playerId).points;
+}
 
 // Devuelve filas con todas las columnas de la clasificación legacy.
 function computeRanking() {
@@ -222,6 +742,7 @@ function render() {
     case 'teams': renderTeams(); break;
     case 'player': renderPlayerDetail(); break;
     case 'mini': renderMini(); break;
+    case 'knockout': renderKnockout(); break;
     default: renderRanking();
   }
 }
@@ -272,7 +793,7 @@ const TABS = [
   { key: 'history', label: 'Histórico', ready: false },
   { key: 'mini', label: 'Mini-porra', ready: true },
   { key: 'matches', label: 'Partidos', ready: true },
-  { key: 'knockout', label: 'Cruces', ready: false },
+  { key: 'knockout', label: 'Cruces', ready: true },
   { key: 'groupStandings', label: 'Clasificación grupos', ready: true },
   { key: 'player', label: 'Detalle jugador', ready: true },
   { key: 'teams', label: 'Equipos', ready: true },
@@ -392,7 +913,7 @@ function renderSummary() {
 function renderRanking() {
   const MEDALS = ['🥇', '🥈', '🥉'];
   const features = state.porra.features || {};
-  const showKnockout = features.knockout !== false; // por defecto se muestra
+  const showKnockout = features.knockout !== false && !state.porra?.scoring?.nationsLeague?.templateId; // Nations League no usa un cuadro único
   const ranking = computeRanking();
   const total = ranking.length;
   const q = (state.rankingQuery || '').toLowerCase();
@@ -748,6 +1269,56 @@ function miniAnswerFor(playerId, questionId) {
   return a ? String(a.value || '').trim() : '';
 }
 
+function miniMyAnswerFor(questionId) {
+  return String(state.myMiniDraft[questionId] ?? miniAnswerFor(state.myPlayerId, questionId) ?? '').trim();
+}
+
+function miniEditOpen() {
+  return Boolean(state.myPlayerId) &&
+    state.porra.status === 'open' &&
+    (!state.porra.predictions_deadline || new Date() < new Date(state.porra.predictions_deadline));
+}
+
+function miniAnswerStatus(questionId) {
+  return document.querySelector(`[data-mini-status="${questionId}"]`);
+}
+
+async function refreshMiniAnswersFromState() {
+  const { data } = await supabase.from('porra_mini_answers')
+    .select('*').eq('porra_id', state.porra.id);
+  state.miniAnswers = data || [];
+}
+
+async function saveMiniAnswerRow(questionId, value) {
+  const { error } = await supabase
+    .from('porra_mini_answers')
+    .upsert([{
+      porra_id: state.porra.id,
+      player_id: state.myPlayerId,
+      question_id: questionId,
+      value
+    }], { onConflict: 'porra_id,player_id,question_id' });
+
+  if (error) throw error;
+  await refreshMiniAnswersFromState();
+  delete state.myMiniDraft[questionId];
+  render();
+}
+
+async function deleteMiniAnswerRow(questionId) {
+  const { error } = await supabase
+    .from('porra_mini_answers')
+    .delete()
+    .eq('porra_id', state.porra.id)
+    .eq('player_id', state.myPlayerId)
+    .eq('question_id', questionId);
+
+  if (error) throw error;
+  await refreshMiniAnswersFromState();
+  delete state.myMiniDraft[questionId];
+  render();
+}
+
 // Puntúa la respuesta de un jugador a una pregunta. Misma lógica que la legacy:
 // el resultado admite variantes separadas por "|"; en número, "+N" = "al menos N".
 function scoreMiniAnswer(question, answer, result) {
@@ -795,6 +1366,44 @@ function renderMini() {
   const rows = ranking.filter(r => r.name.toLowerCase().includes(q));
   const resolved = questions.filter(qq => miniResultFor(qq.question_id)).length;
   const maxPoints = questions.reduce((t, qq) => t + (qq.points || 0), 0);
+  const canEditMini = miniEditOpen();
+  const miniStatusText = !state.myPlayerId
+    ? 'Entra para editar tus respuestas.'
+    : (canEditMini
+      ? `Edición abierta · cierre: ${state.porra.predictions_deadline ? new Date(state.porra.predictions_deadline).toLocaleString('es-ES') : 'sin límite'}`
+      : 'Edición cerrada (la porra no está abierta o pasó el deadline).');
+  const miniEditorRows = questions.map((question, index) => {
+    const value = miniMyAnswerFor(question.question_id);
+    const placeholder = question.field_type === 'number' || question.field_type === 'goals-range'
+      ? '0 o +N'
+      : 'Escribe tu respuesta';
+    return `
+      <article class="mini-answer-card">
+        <div class="mini-answer-copy">
+          <span class="pill">Q${index + 1} · ${esc(question.points || 0)} pts</span>
+          <h3>${esc(question.question)}</h3>
+          <p>${esc(MINI_FIELD_LABELS[question.field_type] || question.field_type)}</p>
+        </div>
+        <form class="mini-answer-form" data-mini-answer-form data-question-id="${esc(question.question_id)}">
+          <div class="mini-answer-input-wrap">
+            <input
+              class="mini-answer-input"
+              name="answer"
+              type="text"
+              placeholder="${esc(placeholder)}"
+              value="${esc(value)}"
+              inputmode="text"
+              ${canEditMini ? '' : 'disabled'}
+            />
+          </div>
+          <div class="mini-answer-actions">
+            <button type="submit" class="primary" ${canEditMini ? '' : 'disabled'}>Guardar</button>
+            <button type="button" data-clear-mini-answer="${esc(question.question_id)}" ${canEditMini ? '' : 'disabled'}>Limpiar</button>
+            <span class="mini-answer-status hint" data-mini-status="${esc(question.question_id)}"></span>
+          </div>
+        </form>
+      </article>`;
+  }).join('');
 
   $app.innerHTML = `
     <section class="cards">
@@ -825,7 +1434,12 @@ function renderMini() {
     </div>
 
     <div class="panel">
-      <div class="panel-head"><h2>Respuestas por pregunta</h2></div>
+      <div class="panel-head">
+        <div>
+          <h2>Pronósticos de la mini-porra</h2>
+          <span class="hint">Puedes indicar variantes o empates con |.</span>
+        </div>
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Pregunta</th><th>Resultado</th><th class="table-center">Puntos</th>${state.players.map(p => `<th>${esc(p.name)}</th>`).join('')}</tr></thead>
@@ -845,6 +1459,310 @@ function renderMini() {
         </table>
       </div>
     </div>`;
+
+  if (state.myPlayerId) {
+    $app.insertAdjacentHTML('beforeend', `
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Resultados de la mini-porra</h2>
+            <span class="hint">${esc(miniStatusText)}</span>
+          </div>
+        </div>
+        <div class="mini-answer-grid">
+          ${miniEditorRows}
+        </div>
+      </div>`);
+  } else {
+    $app.insertAdjacentHTML('beforeend', `
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Resultados de la mini-porra</h2>
+            <span class="hint">${esc(miniStatusText)}</span>
+          </div>
+        </div>
+        <p class="empty-state">Identifícate para editar tus respuestas de mini-porra.</p>
+      </div>`);
+  }
+}
+
+function knockoutSelectedPlayerId() {
+  const available = new Set(state.players.map(player => player.player_id));
+  if (state.knockoutPlayerId && available.has(state.knockoutPlayerId)) return state.knockoutPlayerId;
+  state.knockoutPlayerId = state.myPlayerId && available.has(state.myPlayerId)
+    ? state.myPlayerId
+    : (state.players[0]?.player_id || null);
+  return state.knockoutPlayerId;
+}
+
+function knockoutPredictionStatus(team, stageReality) {
+  if (!team || !stageReality || !stageReality.resolved) return 'pending';
+  if (stageReality.teams.has(knockoutTeamKey(team))) return 'correct';
+  return stageReality.complete ? 'wrong' : 'pending';
+}
+
+function renderBracketTeam(team, status = 'pending') {
+  const statusMark = status === 'correct' ? '✓' : (status === 'wrong' ? '×' : '');
+  const label = team ? `${teamFlag(team) || '🏳️'} ${esc(team)}` : 'Por definir';
+  return `<div class="bracket-team ${status}"><span>${label}</span><span class="bracket-status">${statusMark}</span></div>`;
+}
+
+function bracketGridStyle(halfRoundCount) {
+  const columns = halfRoundCount > 0
+    ? `repeat(${halfRoundCount},220px) 240px repeat(${halfRoundCount},220px)`
+    : '240px';
+  const minWidth = halfRoundCount > 0
+    ? `${240 + (halfRoundCount * 2 * 220) + (halfRoundCount * 2 * 34)}px`
+    : '240px';
+  return `grid-template-columns:${columns};min-width:${minWidth}`;
+}
+
+function renderKnockoutRound(stage, teams, stageScore, { matchOffset = 0, side = 'left' } = {}) {
+  const matches = [];
+  for (let index = 0; index < teams.length; index += 2) {
+    matches.push(`
+      <article class="bracket-match ${side === 'right' ? 'right-side' : ''}">
+        <span class="bracket-match-number">Cruce ${matchOffset + index / 2 + 1}</span>
+        ${renderBracketTeam(teams[index], knockoutPredictionStatus(teams[index], stageScore))}
+        ${renderBracketTeam(teams[index + 1], knockoutPredictionStatus(teams[index + 1], stageScore))}
+      </article>
+    `);
+  }
+
+  return `
+    <section class="bracket-round ${side === 'right' ? 'right-bracket-round' : ''}" style="--matches:${Math.max(matches.length, 1)}">
+      <div class="bracket-round-head">
+        <h3>${esc(stageScore.label)}</h3>
+        <span>${stageScore.hits} aciertos · +${stageScore.points} pts</span>
+        <small>${stageScore.resolved}/${stageScore.expected} selecciones confirmadas</small>
+      </div>
+      <div class="bracket-matches">${matches.join('')}</div>
+    </section>
+  `;
+}
+
+function renderKnockoutEditorPick(stageKey, slot, active) {
+  const disabled = knockoutEditOpen() ? '' : ' disabled';
+  return `
+    <div class="bracket-team knockout-edit-team">
+      <input
+        data-knockout-input="${esc(`${stageKey}:${slot}`)}"
+        list="knockoutTeamOptions"
+        value="${esc(active)}"
+        placeholder="Selección"
+        ${disabled}
+      />
+      <div class="knockout-edit-actions">
+        <button type="button" class="primary" data-save-knockout="${esc(`${stageKey}:${slot}`)}"${disabled}>Guardar</button>
+        <button type="button" data-clear-knockout="${esc(`${stageKey}:${slot}`)}"${disabled}>Limpiar</button>
+      </div>
+      <span class="knockout-edit-status hint" data-knockout-status="${esc(`${stageKey}:${slot}`)}"></span>
+    </div>
+  `;
+}
+
+function renderKnockoutEditorRound(stage, teams, { matchOffset = 0, slotOffset = 0, side = 'left' } = {}) {
+  const matches = [];
+  for (let index = 0; index < teams.length; index += 2) {
+    const firstSlot = slotOffset + index + 1;
+    const secondSlot = slotOffset + index + 2;
+    const firstActive = knockoutPickFor(state.myPlayerId, stage.key, firstSlot)?.team || '';
+    const secondActive = knockoutPickFor(state.myPlayerId, stage.key, secondSlot)?.team || '';
+    matches.push(`
+      <article class="bracket-match ${side === 'right' ? 'right-side' : ''}">
+        <span class="bracket-match-number">Cruce ${matchOffset + index / 2 + 1}</span>
+        ${renderKnockoutEditorPick(stage.key, firstSlot, firstActive)}
+        ${renderKnockoutEditorPick(stage.key, secondSlot, secondActive)}
+      </article>
+    `);
+  }
+
+  return `
+    <section class="bracket-round knockout-edit-round ${side === 'right' ? 'right-bracket-round' : ''}" style="--matches:${Math.max(matches.length, 1)}">
+      <div class="bracket-round-head">
+        <h3>${esc(stage.label)}</h3>
+        <span>${stage.teams} selecciones</span>
+        <small>Edición manual de clasificados</small>
+      </div>
+      <div class="bracket-matches">${matches.join('')}</div>
+    </section>
+  `;
+}
+
+function renderKnockoutFinal(finalStage, finalTeams, champion, finalScore, championScore) {
+  return `
+    <section class="bracket-round bracket-final-round">
+      <div class="bracket-round-head">
+        <h3>${esc(finalStage.label)}</h3>
+        <span>${finalScore.hits} aciertos · +${finalScore.points} pts</span>
+        <small>${finalScore.resolved}/${finalScore.expected} selecciones confirmadas</small>
+      </div>
+      <div class="bracket-matches">
+        <article class="bracket-match">
+          <span class="bracket-match-number">${esc(finalStage.label)}</span>
+          ${renderBracketTeam(finalTeams[0], knockoutPredictionStatus(finalTeams[0], finalScore))}
+          ${renderBracketTeam(finalTeams[1], knockoutPredictionStatus(finalTeams[1], finalScore))}
+        </article>
+        <article class="bracket-match champion-card">
+          <span class="trophy" aria-hidden="true">★</span>
+          ${renderBracketTeam(champion, knockoutPredictionStatus(champion, championScore))}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderKnockoutEditorFinal(finalStage, finalTeams) {
+  const finalist1 = knockoutPickFor(state.myPlayerId, finalStage.key, 1)?.team || '';
+  const finalist2 = knockoutPickFor(state.myPlayerId, finalStage.key, 2)?.team || '';
+  const champion = knockoutPickFor(state.myPlayerId, 'champion', 1)?.team || '';
+  return `
+    <section class="bracket-round bracket-final-round knockout-edit-round">
+      <div class="bracket-round-head">
+        <h3>${esc(finalStage.label)}</h3>
+        <span>2 finalistas + campeón</span>
+        <small>Edición manual de clasificados</small>
+      </div>
+      <div class="bracket-matches">
+        <article class="bracket-match">
+          <span class="bracket-match-number">${esc(finalStage.label)}</span>
+          ${renderKnockoutEditorPick(finalStage.key, 1, finalist1 || finalTeams[0] || '')}
+          ${renderKnockoutEditorPick(finalStage.key, 2, finalist2 || finalTeams[1] || '')}
+        </article>
+        <article class="bracket-match champion-card knockout-edit-champion">
+          <span class="trophy" aria-hidden="true">★</span>
+          ${renderKnockoutEditorPick('champion', 1, champion)}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderKnockout() {
+  const stages = knockoutStages();
+  const roundStages = knockoutRoundStages();
+  if (!roundStages.length) {
+    $app.innerHTML = `
+      <div class="panel">
+        <div class="panel-head"><h2>Cruces</h2></div>
+        <p class="empty-state">Esta porra todavía no tiene estructura de cruces configurada.</p>
+      </div>`;
+    return;
+  }
+  if (!state.players.length) {
+    $app.innerHTML = `
+      <div class="panel">
+        <div class="panel-head"><h2>Cruces</h2></div>
+        <p class="empty-state">Todavía no hay participantes cargados para mostrar pronósticos de cruces.</p>
+      </div>`;
+    return;
+  }
+
+  const playerId = knockoutSelectedPlayerId();
+  const player = state.players.find(item => item.player_id === playerId) || null;
+  const knockout = calculatePlayerKnockout(playerId);
+  const bracket = buildPlayerKnockoutBracket(playerId);
+  const finalStage = roundStages[roundStages.length - 1];
+  const finalTeams = bracket[finalStage.key] || ['', ''];
+  const champion = championPickFor(playerId);
+  const summaryStages = stages.map(stage => knockout.breakdown[stage.key]);
+  const halfRounds = roundStages.slice(0, -1);
+  const leftRounds = halfRounds.map(stage => ({
+    stage,
+    teams: (bracket[stage.key] || []).slice(0, (bracket[stage.key] || []).length / 2),
+    matchOffset: 0,
+    slotOffset: 0
+  }));
+  const rightRounds = halfRounds.map(stage => ({
+    stage,
+    teams: (bracket[stage.key] || []).slice((bracket[stage.key] || []).length / 2),
+    matchOffset: (bracket[stage.key] || []).length / 4,
+    slotOffset: (bracket[stage.key] || []).length / 2
+  })).reverse();
+  const canEditOwnKnockout = knockoutEditOpen();
+  const ownBracket = state.myPlayerId ? buildPlayerKnockoutBracket(state.myPlayerId) : {};
+  const ownFinalTeams = finalStage && state.myPlayerId ? (ownBracket[finalStage.key] || ['', '']) : ['', ''];
+
+  $app.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Cuadro de cruces</h2>
+          <span class="hint">Recorrido previsto por cada participante desde ${esc(roundStages[0].label.toLowerCase())} hasta campeón.</span>
+        </div>
+        <label class="inline knockout-player-picker">
+          <span>Participante</span>
+          <select data-action="select-knockout-player">
+            ${state.players.map(item => `<option value="${esc(item.player_id)}"${item.player_id === playerId ? ' selected' : ''}>${esc(item.name)}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+
+      <div class="knockout-score-summary">
+        <article class="knockout-total">
+          <b>${knockout.points}</b>
+          <span>puntos en cruces</span>
+        </article>
+        ${summaryStages.map(stage => `
+          <article>
+            <strong>${esc(stage.label)}</strong>
+            <span>${stage.hits} aciertos · +${stage.points} pts</span>
+          </article>
+        `).join('')}
+      </div>
+
+      <div class="bracket-wrap">
+        <div class="bracket-title">
+          <span>Pronóstico de</span>
+          <strong>${esc(player?.name || '')}</strong>
+        </div>
+        <div class="bracket" style="${bracketGridStyle(halfRounds.length)}">
+          ${leftRounds.map(({ stage, teams, matchOffset }) =>
+            renderKnockoutRound(stage, teams, knockout.breakdown[stage.key], { matchOffset })
+          ).join('')}
+          ${renderKnockoutFinal(finalStage, finalTeams, champion, knockout.breakdown[finalStage.key], knockout.breakdown.champion)}
+          ${rightRounds.map(({ stage, teams, matchOffset }) =>
+            renderKnockoutRound(stage, teams, knockout.breakdown[stage.key], { matchOffset, side: 'right' })
+          ).join('')}
+        </div>
+      </div>
+    </div>
+    ${state.myPlayerId ? `
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Editar mis cruces</h2>
+            <span class="hint">${canEditOwnKnockout
+              ? `Edición abierta · cierre: ${state.porra.predictions_deadline ? esc(new Date(state.porra.predictions_deadline).toLocaleString('es-ES')) : 'sin límite'}`
+              : 'Edición cerrada (la porra no está abierta o pasó el deadline).'}</span>
+          </div>
+        </div>
+        <datalist id="knockoutTeamOptions">
+          ${state.teams.map(team => `<option value="${esc(team.name)}">${esc(team.flag || '')} ${esc(team.name)}</option>`).join('')}
+        </datalist>
+        <div class="bracket-wrap">
+          <div class="bracket-title">
+            <span>Editando cruces de</span>
+            <strong>${esc(playerName(state.myPlayerId))}</strong>
+          </div>
+          <div class="bracket bracket-editor" style="${bracketGridStyle(halfRounds.length)}">
+            ${leftRounds.map(({ stage, teams, matchOffset, slotOffset }) =>
+              renderKnockoutEditorRound(stage, (ownBracket[stage.key] || []).slice(0, (ownBracket[stage.key] || []).length / 2), { matchOffset, slotOffset })
+            ).join('')}
+            ${renderKnockoutEditorFinal(finalStage, ownFinalTeams)}
+            ${rightRounds.map(({ stage, matchOffset, slotOffset }) =>
+              renderKnockoutEditorRound(stage, (ownBracket[stage.key] || []).slice((ownBracket[stage.key] || []).length / 2), {
+                matchOffset,
+                slotOffset,
+                side: 'right'
+              })
+            ).join('')}
+          </div>
+        </div>
+      </div>
+    ` : ''}
+  `;
 }
 
 function renderMyPorra() {
@@ -866,7 +1784,7 @@ function renderMyPorra() {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Grupo</th><th>Partido</th><th class="table-center">Mi marcador</th></tr></thead>
+          <thead><tr><th>Grupo</th><th>Partido</th><th class="table-center">Mi marcador</th>${open ? '<th class="table-center">Acciones</th>' : ''}</tr></thead>
           <tbody>
             ${groupMatches.map(m => {
               const saved = predictionFor(state.myPlayerId, m.match_id);
@@ -876,12 +1794,19 @@ function renderMyPorra() {
                 <td>${teamFlag(m.team1)} ${esc(teamName(m.team1))} – ${esc(teamName(m.team2))} ${teamFlag(m.team2)}</td>
                 <td class="table-center"><input class="score-input" data-match="${esc(m.match_id)}"
                      value="${esc(val)}" placeholder="2-1" ${open ? '' : 'disabled'} /></td>
+                ${open ? `<td class="table-center">
+                  <div class="row-actions">
+                    <button class="primary" data-save-match="${esc(m.match_id)}">Guardar</button>
+                    <button data-clear-match="${esc(m.match_id)}">Limpiar</button>
+                    <span class="row-status hint" data-status="${esc(m.match_id)}"></span>
+                  </div>
+                </td>` : ''}
               </tr>`;
             }).join('')}
           </tbody>
         </table>
       </div>
-      ${open ? `<div class="actions"><button data-action="save-mine" class="primary">Guardar</button>
+      ${open ? `<div class="actions"><button data-action="save-mine" class="primary">Guardar todo</button>
         <span id="save-status" class="hint"></span></div>` : ''}
     </div>`;
 }
@@ -928,6 +1853,32 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  const saveMatchBtn = e.target.closest('[data-save-match]');
+  if (saveMatchBtn) { await saveMatchPrediction(saveMatchBtn.dataset.saveMatch); return; }
+
+  const clearMatchBtn = e.target.closest('[data-clear-match]');
+  if (clearMatchBtn) { await clearMatchPrediction(clearMatchBtn.dataset.clearMatch); return; }
+
+  const clearMiniBtn = e.target.closest('[data-clear-mini-answer]');
+  if (clearMiniBtn) {
+    await clearMiniAnswer(clearMiniBtn.dataset.clearMiniAnswer);
+    return;
+  }
+
+  const saveKnockoutBtn = e.target.closest('[data-save-knockout]');
+  if (saveKnockoutBtn) {
+    const [stageKey, slot] = String(saveKnockoutBtn.dataset.saveKnockout || '').split(':');
+    await saveKnockoutPick(stageKey, slot);
+    return;
+  }
+
+  const clearKnockoutBtn = e.target.closest('[data-clear-knockout]');
+  if (clearKnockoutBtn) {
+    const [stageKey, slot] = String(clearKnockoutBtn.dataset.clearKnockout || '').split(':');
+    await clearKnockoutPick(stageKey, slot);
+    return;
+  }
+
   const action = e.target.closest('[data-action]')?.dataset.action;
   if (!action) return;
 
@@ -936,6 +1887,8 @@ document.addEventListener('click', async (e) => {
     await supabase.auth.signOut();
     await refreshSession();
     state.tab = 'ranking';
+    state.myDraft = {};
+    state.myMiniDraft = {};
     render();
     return;
   }
@@ -945,6 +1898,13 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('input', (e) => {
   const input = e.target.closest('.score-input');
   if (input) { state.myDraft[input.dataset.match] = input.value.trim(); return; }
+
+  const miniInput = e.target.closest('.mini-answer-input');
+  if (miniInput) {
+    const questionId = miniInput.closest('[data-mini-answer-form]')?.dataset.questionId;
+    if (questionId) state.myMiniDraft[questionId] = miniInput.value.trim();
+    return;
+  }
 
   const teamsSearch = e.target.closest('[data-action="teams-search"]');
   if (teamsSearch) {
@@ -979,9 +1939,20 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   const sel = e.target.closest('[data-action="select-player"]');
   if (sel) { state.playerDetailId = sel.value; render(); }
+
+  const knockoutSel = e.target.closest('[data-action="select-knockout-player"]');
+  if (knockoutSel) {
+    state.knockoutPlayerId = knockoutSel.value;
+    render();
+  }
 });
 
 document.addEventListener('submit', async (e) => {
+  if (e.target.matches('[data-mini-answer-form]')) {
+    e.preventDefault();
+    await saveMiniAnswer(e.target.dataset.questionId);
+    return;
+  }
   if (e.target.id !== 'login-form') return;
   e.preventDefault();
   const fd = new FormData(e.target);
@@ -1006,20 +1977,65 @@ async function saveMine() {
       match_id,
       score
     }));
-  if (!rows.length) { if (status) status.textContent = 'Nada que guardar.'; return; }
+  if (!rows.length) {
+    if (status) status.textContent = 'Nada que guardar.';
+    showAppToast('Nada que guardar.');
+    return;
+  }
 
   const { error } = await supabase
     .from('porra_predictions')
     .upsert(rows, { onConflict: 'porra_id,player_id,match_id' });
 
-  if (error) { if (status) status.textContent = 'Error: ' + error.message; return; }
+  if (error) {
+    if (status) status.textContent = 'Error: ' + error.message;
+    showAppToast(`No se pudo guardar: ${error.message}`, 3600);
+    return;
+  }
 
   // Refrescar predicciones en memoria
-  const { data } = await supabase.from('porra_predictions')
-    .select('*').eq('porra_id', state.porra.id);
-  state.predictions = data || [];
+  await refreshPredictionsFromState();
   state.myDraft = {};
-  if (status) status.textContent = 'Guardado ✓';
+  render();
+  const nextStatus = document.getElementById('save-status');
+  if (nextStatus) nextStatus.textContent = 'Guardado ✓';
+  showAppToast('Guardado ✓');
+}
+
+async function saveMatchPrediction(matchId) {
+  const status = matchRowStatus(matchId);
+  const score = draftScoreForMatch(matchId);
+  if (status) status.textContent = 'Guardando…';
+  if (!score) {
+    if (status) status.textContent = 'Introduce un marcador.';
+    showAppToast('Introduce un marcador.');
+    return;
+  }
+
+  try {
+    await savePredictionRow(matchId, score);
+    const rowStatus = matchRowStatus(matchId);
+    if (rowStatus) rowStatus.textContent = 'Guardado ✓';
+    showAppToast('Marcador guardado.');
+  } catch (error) {
+    if (status) status.textContent = 'Error: ' + error.message;
+    showAppToast(`No se pudo guardar: ${error.message}`, 3600);
+  }
+}
+
+async function clearMatchPrediction(matchId) {
+  const status = matchRowStatus(matchId);
+  if (status) status.textContent = 'Borrando…';
+
+  try {
+    await deletePredictionRow(matchId);
+    const rowStatus = matchRowStatus(matchId);
+    if (rowStatus) rowStatus.textContent = 'Borrado.';
+    showAppToast('Marcador borrado.');
+  } catch (error) {
+    if (status) status.textContent = 'Error: ' + error.message;
+    showAppToast(`No se pudo borrar: ${error.message}`, 3600);
+  }
 }
 
 // ---------------------------------------------------------------------------

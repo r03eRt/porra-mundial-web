@@ -20,11 +20,224 @@ const FEATURES = [
 ];
 
 const KNOCKOUT_ROUNDS = [
+  { key: 'r32', label: 'Dieciseisavos' },
   { key: 'r16', label: 'Octavos' },
   { key: 'qf', label: 'Cuartos' },
   { key: 'sf', label: 'Semifinales' },
   { key: 'final', label: 'Final' }
 ];
+
+const DEFAULT_KNOCKOUT_SCORING = {
+  r32: 3,
+  r16: 5,
+  qf: 7,
+  sf: 10,
+  final: 12,
+  champion: 15
+};
+
+const KNOCKOUT_TEMPLATES = {
+  euro_8: {
+    id: 'euro_8',
+    label: 'Eurocopa 1980-1992 (8 equipos)',
+    years: [1980, 1984, 1988, 1992],
+    teams: 8,
+    groups: ['A', 'B'],
+    teamsPerGroup: 4,
+    qualifiedPerGroup: 2,
+    thirdPlaceQualifiers: 0,
+    knockout: [
+      { id: 'F', round: 'final', home: 'A1', away: 'B1' }
+    ]
+  },
+  euro_16: {
+    id: 'euro_16',
+    label: 'Eurocopa 1996-2012 (16 equipos)',
+    years: [1996, 2000, 2004, 2008, 2012],
+    teams: 16,
+    groups: ['A', 'B', 'C', 'D'],
+    teamsPerGroup: 4,
+    qualifiedPerGroup: 2,
+    thirdPlaceQualifiers: 0,
+    knockout: [
+      { id: 'QF1', round: 'qf', home: 'A1', away: 'B2' },
+      { id: 'QF2', round: 'qf', home: 'B1', away: 'A2' },
+      { id: 'QF3', round: 'qf', home: 'C1', away: 'D2' },
+      { id: 'QF4', round: 'qf', home: 'D1', away: 'C2' },
+      { id: 'SF1', round: 'sf', home: 'W:QF1', away: 'W:QF3' },
+      { id: 'SF2', round: 'sf', home: 'W:QF2', away: 'W:QF4' },
+      { id: 'F', round: 'final', home: 'W:SF1', away: 'W:SF2' }
+    ]
+  },
+  euro_24: {
+    id: 'euro_24',
+    label: 'Eurocopa 2016-2028 (24 equipos)',
+    years: [2016, 2020, 2024, 2028],
+    teams: 24,
+    groups: ['A', 'B', 'C', 'D', 'E', 'F'],
+    teamsPerGroup: 4,
+    qualifiedPerGroup: 2,
+    thirdPlaceQualifiers: 4,
+    knockout: [
+      { id: 'R16_1', round: 'r16', home: 'B1', away: '3A/B/C/D' },
+      { id: 'R16_2', round: 'r16', home: 'A1', away: 'C2' },
+      { id: 'R16_3', round: 'r16', home: 'F1', away: '3A/B/C' },
+      { id: 'R16_4', round: 'r16', home: 'D2', away: 'E2' },
+      { id: 'R16_5', round: 'r16', home: 'E1', away: '3A/B/C/D' },
+      { id: 'R16_6', round: 'r16', home: 'D1', away: 'F2' },
+      { id: 'R16_7', round: 'r16', home: 'C1', away: '3D/E/F' },
+      { id: 'R16_8', round: 'r16', home: 'A2', away: 'B2' },
+      { id: 'QF1', round: 'qf', home: 'W:R16_1', away: 'W:R16_2' },
+      { id: 'QF2', round: 'qf', home: 'W:R16_3', away: 'W:R16_4' },
+      { id: 'QF3', round: 'qf', home: 'W:R16_5', away: 'W:R16_6' },
+      { id: 'QF4', round: 'qf', home: 'W:R16_7', away: 'W:R16_8' },
+      { id: 'SF1', round: 'sf', home: 'W:QF1', away: 'W:QF2' },
+      { id: 'SF2', round: 'sf', home: 'W:QF3', away: 'W:QF4' },
+      { id: 'F', round: 'final', home: 'W:SF1', away: 'W:SF2' }
+    ]
+  },
+  worldcup_32: {
+    id: 'worldcup_32',
+    label: 'Mundial 32 equipos (1998-2022)',
+    years: [1998, 2002, 2006, 2010, 2014, 2018, 2022],
+    teams: 32,
+    groups: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'],
+    teamsPerGroup: 4,
+    qualifiedPerGroup: 2,
+    thirdPlaceQualifiers: 0,
+    knockout: [
+      { id: 'R16-1', round: 'r16', home: 'A1', away: 'B2' },
+      { id: 'R16-2', round: 'r16', home: 'C1', away: 'D2' },
+      { id: 'R16-3', round: 'r16', home: 'E1', away: 'F2' },
+      { id: 'R16-4', round: 'r16', home: 'G1', away: 'H2' },
+      { id: 'R16-5', round: 'r16', home: 'B1', away: 'A2' },
+      { id: 'R16-6', round: 'r16', home: 'D1', away: 'C2' },
+      { id: 'R16-7', round: 'r16', home: 'F1', away: 'E2' },
+      { id: 'R16-8', round: 'r16', home: 'H1', away: 'G2' },
+      { id: 'QF-1', round: 'qf', home: 'W:R16-1', away: 'W:R16-2' },
+      { id: 'QF-2', round: 'qf', home: 'W:R16-3', away: 'W:R16-4' },
+      { id: 'QF-3', round: 'qf', home: 'W:R16-5', away: 'W:R16-6' },
+      { id: 'QF-4', round: 'qf', home: 'W:R16-7', away: 'W:R16-8' },
+      { id: 'SF-1', round: 'sf', home: 'W:QF-1', away: 'W:QF-2' },
+      { id: 'SF-2', round: 'sf', home: 'W:QF-3', away: 'W:QF-4' },
+      { id: 'F', round: 'final', home: 'W:SF-1', away: 'W:SF-2' }
+    ]
+  },
+  worldcup_48: {
+    id: 'worldcup_48',
+    label: 'Mundial 2026 (48 equipos)',
+    years: [2026],
+    teams: 48,
+    groups: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'],
+    teamsPerGroup: 4,
+    qualifiedPerGroup: 2,
+    thirdPlaceQualifiers: 8,
+    knockout: [
+      { id: 'R32-1', round: 'r32', home: '2A', away: '2B' },
+      { id: 'R32-2', round: 'r32', home: '1E', away: '3A/B/C/D/F' },
+      { id: 'R32-3', round: 'r32', home: '1F', away: '2C' },
+      { id: 'R32-4', round: 'r32', home: '1C', away: '2F' },
+      { id: 'R32-5', round: 'r32', home: '1I', away: '3C/D/F/G/H' },
+      { id: 'R32-6', round: 'r32', home: '2E', away: '2I' },
+      { id: 'R32-7', round: 'r32', home: '1A', away: '3C/E/F/H/I' },
+      { id: 'R32-8', round: 'r32', home: '1L', away: '3E/H/I/J/K' },
+      { id: 'R32-9', round: 'r32', home: '1D', away: '3B/E/F/I/J' },
+      { id: 'R32-10', round: 'r32', home: '1G', away: '3A/E/H/I/J' },
+      { id: 'R32-11', round: 'r32', home: '2K', away: '2L' },
+      { id: 'R32-12', round: 'r32', home: '1H', away: '2J' },
+      { id: 'R32-13', round: 'r32', home: '1B', away: '3E/F/G/I/J' },
+      { id: 'R32-14', round: 'r32', home: '1J', away: '2H' },
+      { id: 'R32-15', round: 'r32', home: '1K', away: '3D/E/I/J/L' },
+      { id: 'R32-16', round: 'r32', home: '2D', away: '2G' },
+      { id: 'R16-1', round: 'r16', home: 'W:R32-2', away: 'W:R32-5' },
+      { id: 'R16-2', round: 'r16', home: 'W:R32-1', away: 'W:R32-3' },
+      { id: 'R16-3', round: 'r16', home: 'W:R32-4', away: 'W:R32-6' },
+      { id: 'R16-4', round: 'r16', home: 'W:R32-7', away: 'W:R32-8' },
+      { id: 'R16-5', round: 'r16', home: 'W:R32-11', away: 'W:R32-12' },
+      { id: 'R16-6', round: 'r16', home: 'W:R32-9', away: 'W:R32-10' },
+      { id: 'R16-7', round: 'r16', home: 'W:R32-14', away: 'W:R32-13' },
+      { id: 'R16-8', round: 'r16', home: 'W:R32-15', away: 'W:R32-16' },
+      { id: 'QF-1', round: 'qf', home: 'W:R16-1', away: 'W:R16-2' },
+      { id: 'QF-2', round: 'qf', home: 'W:R16-3', away: 'W:R16-4' },
+      { id: 'QF-3', round: 'qf', home: 'W:R16-5', away: 'W:R16-6' },
+      { id: 'QF-4', round: 'qf', home: 'W:R16-7', away: 'W:R16-8' },
+      { id: 'SF-1', round: 'sf', home: 'W:QF-1', away: 'W:QF-2' },
+      { id: 'SF-2', round: 'sf', home: 'W:QF-3', away: 'W:QF-4' },
+      { id: 'F', round: 'final', home: 'W:SF-1', away: 'W:SF-2' }
+    ]
+  }
+};
+
+const NATIONS_LEAGUE_TEMPLATES = {
+  nations_2026_27: {
+    id: 'nations_2026_27',
+    label: 'Nations League 2026-27',
+    years: ['2026-27'],
+    teams: 54,
+    leagues: {
+      A: {
+        groups: ['A1', 'A2', 'A3', 'A4'],
+        teamsPerGroup: 4,
+        matchesPerTeam: 6,
+        qualification: {
+          quarterFinals: ['1st', '2nd'],
+          relegationPlayoff: ['3rd'],
+          relegated: ['4th']
+        }
+      },
+      B: {
+        groups: ['B1', 'B2', 'B3', 'B4'],
+        teamsPerGroup: 4,
+        matchesPerTeam: 6,
+        qualification: {
+          promoted: ['1st'],
+          promotionPlayoff: ['2nd'],
+          relegationPlayoff: ['3rd'],
+          relegated: ['4th']
+        }
+      },
+      C: {
+        groups: ['C1', 'C2', 'C3', 'C4'],
+        teamsPerGroup: 4,
+        matchesPerTeam: 6,
+        qualification: {
+          promoted: ['1st'],
+          promotionPlayoff: ['2nd'],
+          relegationPlayoff: ['two_best_4th'],
+          relegated: ['two_worst_4th']
+        }
+      },
+      D: {
+        groups: ['D1', 'D2'],
+        teamsPerGroup: 3,
+        matchesPerTeam: 4,
+        qualification: {
+          promoted: ['1st'],
+          promotionPlayoff: ['2nd']
+        }
+      }
+    },
+    leagueAFinals: {
+      quarterFinals: [
+        { id: 'QF1', home: 'A_GROUP_WINNER', away: 'A_RUNNER_UP' },
+        { id: 'QF2', home: 'A_GROUP_WINNER', away: 'A_RUNNER_UP' },
+        { id: 'QF3', home: 'A_GROUP_WINNER', away: 'A_RUNNER_UP' },
+        { id: 'QF4', home: 'A_GROUP_WINNER', away: 'A_RUNNER_UP' }
+      ],
+      finalFour: [
+        { id: 'SF1', home: 'W:QF1', away: 'W:QF2' },
+        { id: 'SF2', home: 'W:QF3', away: 'W:QF4' },
+        { id: 'THIRD_PLACE', home: 'L:SF1', away: 'L:SF2' },
+        { id: 'FINAL', home: 'W:SF1', away: 'W:SF2' }
+      ]
+    },
+    promotionRelegationPlayoffs: {
+      A_B: { matches: [{ home: 'A_3rd', away: 'B_2nd' }] },
+      B_C: { matches: [{ home: 'B_3rd', away: 'C_2nd' }] },
+      C_D: { matches: [{ home: 'C_best_4th', away: 'D_2nd' }] }
+    }
+  }
+};
 
 const MINI_FIELD_TYPES = [
   { value: 'text', label: 'Texto libre' },
@@ -213,6 +426,193 @@ function normalizeTeamName(value) {
     .toUpperCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, ' ');
+}
+
+function matchResult(match) {
+  if (!match) return null;
+  const home = match.score_home ?? match.result_home;
+  const away = match.score_away ?? match.result_away;
+  if (home == null || away == null) return null;
+  return { home: Number(home), away: Number(away) };
+}
+
+function knockoutTemplateOptionsForEvent(eventType) {
+  const eventKey = String(eventType || '').trim().toLowerCase();
+  if (eventKey === 'worldcup') {
+    return [
+      { value: 'worldcup_48', label: 'Mundial 2026 (48 equipos)' },
+      { value: 'worldcup_32', label: 'Mundial clásico (32 equipos)' }
+    ];
+  }
+  if (eventKey === 'euro') {
+    return [
+      { value: 'euro_24', label: 'Eurocopa 2016-2028 (24 equipos)' },
+      { value: 'euro_16', label: 'Eurocopa 1996-2012 (16 equipos)' },
+      { value: 'euro_8', label: 'Eurocopa 1980-1992 (8 equipos)' }
+    ];
+  }
+  return [];
+}
+
+function defaultKnockoutTemplateIdForEvent(eventType) {
+  const eventKey = String(eventType || '').trim().toLowerCase();
+  if (eventKey === 'worldcup') return 'worldcup_48';
+  if (eventKey === 'euro') return 'euro_24';
+  return '';
+}
+
+function nationsLeagueTemplateOptions() {
+  return Object.values(NATIONS_LEAGUE_TEMPLATES)
+    .map(template => ({ value: template.id, label: template.label }));
+}
+
+function nationsLeagueTemplateForEvent(templateId = '') {
+  const variantKey = String(templateId || '').trim().toLowerCase();
+  return NATIONS_LEAGUE_TEMPLATES[variantKey] || NATIONS_LEAGUE_TEMPLATES.nations_2026_27;
+}
+
+function knockoutTemplateForEvent(eventType, templateId = '') {
+  const eventKey = String(eventType || '').trim().toLowerCase();
+  const variantKey = String(templateId || '').trim().toLowerCase();
+  if (eventKey === 'worldcup') {
+    return KNOCKOUT_TEMPLATES[variantKey] || KNOCKOUT_TEMPLATES.worldcup_48;
+  }
+  if (eventKey === 'euro') {
+    if (!variantKey || variantKey === 'euro') return KNOCKOUT_TEMPLATES.euro_24;
+    return KNOCKOUT_TEMPLATES[variantKey] || KNOCKOUT_TEMPLATES.euro_24;
+  }
+  return KNOCKOUT_TEMPLATES[variantKey] || KNOCKOUT_TEMPLATES[eventKey] || null;
+}
+
+function defaultKnockoutStructure(eventType, templateId = '') {
+  const template = knockoutTemplateForEvent(eventType, templateId);
+  if (!template) return [];
+  const stageCounts = { r32: 0, r16: 0, qf: 0, sf: 0, final: 0 };
+  for (const match of template.knockout) {
+    const roundKey = knockoutRoundKeyFromFixture(match);
+    if (roundKey && stageCounts[roundKey] != null) stageCounts[roundKey] += 1;
+  }
+  return KNOCKOUT_ROUNDS
+    .filter(round => stageCounts[round.key] > 0)
+    .map(round => ({
+      key: round.key,
+      label: round.label,
+      teams: stageCounts[round.key] * 2,
+      points: DEFAULT_KNOCKOUT_SCORING[round.key] || 0
+    }))
+    .concat(stageCounts.final > 0
+      ? [{
+          key: 'champion',
+          label: 'Campeón',
+          teams: 1,
+          points: DEFAULT_KNOCKOUT_SCORING.champion
+        }]
+          : []);
+}
+
+function knockoutRoundKeyFromFixture(fixture) {
+  const round = String(fixture?.round || '').trim().toLowerCase();
+  if (round) return round;
+  const code = String(fixture?.id || '').trim().charAt(0).toUpperCase();
+  if (code === 'O' || code === 'R') return 'r16';
+  if (code === 'Q') return 'qf';
+  if (code === 'S') return 'sf';
+  if (code === 'F') return 'final';
+  return null;
+}
+
+function knockoutSeedLabel(token) {
+  const raw = String(token || '').trim();
+  const winnerMatch = raw.match(/^W:(.+)$/i);
+  if (winnerMatch) return `Ganador ${winnerMatch[1].toUpperCase()}`;
+  const groupSeed = raw.match(/^([A-Z]+)([12])$/);
+  if (groupSeed) return `${groupSeed[1]}${groupSeed[2]}`;
+  return raw;
+}
+
+function teamByToken(token) {
+  const key = normalizeTeamName(token);
+  return state.teams.find(team =>
+    team.team_id === token || normalizeTeamName(team.name) === key
+  ) || null;
+}
+
+function computeAdminGroupStandings(groupId) {
+  const groupMatches = state.matches.filter(match => {
+    const phase = match.phase ?? match.stage;
+    return phase === 'group' && (match.group_id ?? match.group_label) === groupId;
+  });
+  const groupTeams = state.teams
+    .filter(team => team.group_id === groupId)
+    .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0));
+  const rows = groupTeams.map((team, index) => ({
+    team: team.team_id,
+    idx: index,
+    pts: 0,
+    gf: 0,
+    gc: 0
+  }));
+  const byTeam = new Map(rows.map(row => [row.team, row]));
+
+  for (const match of groupMatches) {
+    const result = matchResult(match);
+    if (!result) continue;
+    const home = byTeam.get(match.team1_id ?? match.team1);
+    const away = byTeam.get(match.team2_id ?? match.team2);
+    if (!home || !away) continue;
+    home.gf += result.home;
+    home.gc += result.away;
+    away.gf += result.away;
+    away.gc += result.home;
+    if (result.home > result.away) home.pts += 3;
+    else if (result.away > result.home) away.pts += 3;
+    else {
+      home.pts += 1;
+      away.pts += 1;
+    }
+  }
+
+  return rows.sort((a, b) =>
+    b.pts - a.pts ||
+    ((b.gf - b.gc) - (a.gf - a.gc)) ||
+    (b.gf - a.gf) ||
+    (a.idx - b.idx)
+  );
+}
+
+function resolveKnockoutSeed(token, seen = new Set()) {
+  const raw = String(token || '').trim();
+  if (!raw) return '';
+  if (seen.has(raw)) return raw;
+  seen.add(raw);
+
+  const directTeam = teamByToken(raw);
+  if (directTeam) return directTeam.team_id;
+
+  const groupSeed = raw.match(/^([A-Z]+)([12])$/);
+  if (groupSeed) {
+    const standings = computeAdminGroupStandings(groupSeed[1]);
+    return standings[Number(groupSeed[2]) - 1]?.team || raw;
+  }
+
+  const winnerSeed = raw.match(/^W:(.+)$/i);
+  if (winnerSeed) {
+    const matchId = winnerSeed[1].toUpperCase();
+    const match = state.matches.find(item => String(item.match_id || '').toUpperCase() === matchId);
+    const result = matchResult(match);
+    if (!match || !result || result.home === result.away) return raw;
+    const winnerToken = result.home > result.away ? (match.team1_id ?? match.team1) : (match.team2_id ?? match.team2);
+    return resolveKnockoutSeed(winnerToken, seen);
+  }
+
+  return raw;
+}
+
+function matchTeamLabel(token) {
+  const resolved = resolveKnockoutSeed(token);
+  const team = teamByToken(resolved);
+  if (team) return `${team.flag || flagForTeam(team.name)} ${team.name}`.trim();
+  return knockoutSeedLabel(token) || '—';
 }
 
 function porraHasTeamName(name, ignoreTeamId = null) {
@@ -556,12 +956,79 @@ function buildGroupMatches(firstKickoffRaw, daysBetweenRaw) {
   return rows;
 }
 
+function buildKnockoutMatches(firstKickoffRaw, daysBetweenRaw) {
+  const templateId = state.currentPorra?.scoring?.knockout?.templateId || '';
+  const template = knockoutTemplateForEvent(state.currentPorra?.event_type, templateId);
+  if (!template) return { rows: [], error: 'Esta porra no tiene una plantilla automática de cruces.' };
+
+  const existingKnockout = state.matches.filter(match => (match.phase ?? match.stage) !== 'group');
+  if (existingKnockout.length) {
+    return { rows: [], error: 'Ya existen cruces creados. Resetea los cruces antes de volver a generarlos.' };
+  }
+
+  const expectedGroups = template.groups.map(normalizeTeamName);
+  const actualGroups = [...state.groups]
+    .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
+    .map(group => normalizeTeamName(group.name || group.group_id));
+  if (expectedGroups.some((groupName, index) => actualGroups[index] !== groupName)) {
+    return { rows: [], error: `La plantilla ${state.currentPorra.event_type} espera grupos ${template.groups.join(', ')} en ese orden.` };
+  }
+
+  const firstKickoff = firstKickoffRaw ? new Date(firstKickoffRaw) : null;
+  const daysBetween = Math.max(1, Number(daysBetweenRaw) || 2);
+  const basePosition = Math.max(0, ...state.matches.map(match => Number(match.position) || 0));
+  const rows = [];
+  const roundOrder = KNOCKOUT_ROUNDS
+    .map(round => round.key)
+    .filter(roundKey => template.knockout.some(match => knockoutRoundKeyFromFixture(match) === roundKey));
+  const roundOffsets = Object.fromEntries(roundOrder.map((roundKey, index) => [roundKey, index]));
+  const slotsByRound = { r32: 0, r16: 0, qf: 0, sf: 0, final: 0 };
+
+  for (const match of template.knockout) {
+    const roundKey = knockoutRoundKeyFromFixture(match);
+    if (!roundKey) continue;
+    slotsByRound[roundKey] += 1;
+    const kickoff = firstKickoff
+      ? new Date(
+          firstKickoff.getTime()
+          + (roundOffsets[roundKey] || 0) * daysBetween * 24 * 60 * 60 * 1000
+          + (slotsByRound[roundKey] - 1) * 2 * 60 * 60 * 1000
+        ).toISOString()
+      : null;
+    const team1Token = match.home;
+    const team2Token = match.away;
+    rows.push({
+      porra_id: state.currentPorra.id,
+      match_id: match.id,
+      stage: 'knockout',
+      group_id: null,
+      round_key: roundKey,
+      team1: team1Token,
+      team2: team2Token,
+      team1_id: team1Token,
+      team2_id: team2Token,
+      phase: roundKey,
+      group_label: null,
+      kickoff,
+      slot: slotsByRound[roundKey],
+      position: basePosition + rows.length + 1,
+      status: 'scheduled'
+    });
+  }
+
+  return { rows, error: '' };
+}
+
+function knockoutMatchesExist() {
+  return state.matches.some(match => (match.phase ?? match.stage) !== 'group');
+}
+
 // ── Data loaders ───────────────────────────────────────────────────────────────
 
 async function loadPorras() {
   const { data, error } = await supabase
     .from('porras')
-    .select('id, slug, name, event_type, status, created_at')
+    .select('id, slug, name, event_type, status, created_at, features, scoring, knockout_structure')
     .order('created_at', { ascending: false });
   if (error) { state.error = error.message; state.porras = []; return; }
   state.porras = (data || []).map(p => ({ ...p, status: normalizePorraStatus(p.status) }));
@@ -649,6 +1116,10 @@ function renderPorraList() {
     .map(e => `<option value="${e.value}">${esc(e.label)}</option>`).join('');
   const featureChecks = FEATURES
     .map(f => `<label class="check"><input type="checkbox" name="feature" value="${f.key}" checked /> ${esc(f.label)}</label>`).join('');
+  const ruleSelect = eventType => knockoutTemplateOptionsForEvent(eventType)
+    .map(rule => `<option value="${esc(rule.value)}">${esc(rule.label)}</option>`).join('');
+  const nationsRuleSelect = nationsLeagueTemplateOptions()
+    .map(rule => `<option value="${esc(rule.value)}">${esc(rule.label)}</option>`).join('');
   const porrasList = state.porras.length
     ? state.porras.map(p => `
         <li class="porra-row">
@@ -678,6 +1149,30 @@ function renderPorraList() {
         <label>Tipo de evento
           <select name="event_type">${eventOptions}</select>
         </label>
+        <div class="event-rules" data-knockout-rules="worldcup">
+          <label>Reglas de Mundial
+            <select name="worldcup_rules">
+              ${ruleSelect('worldcup')}
+            </select>
+          </label>
+          <p class="muted">Solo aplica cuando el tipo de evento es Mundial. Define si usas el formato 32 equipos o el de 2026 con 48 equipos y mejores terceros.</p>
+        </div>
+        <div class="event-rules" data-knockout-rules="euro">
+          <label>Reglas de Eurocopa
+            <select name="euro_rules">
+              ${ruleSelect('euro')}
+            </select>
+          </label>
+          <p class="muted">Solo aplica cuando el tipo de evento es Eurocopa. Elige entre 8, 16 o 24 equipos según el formato oficial.</p>
+        </div>
+        <div class="event-rules" data-knockout-rules="nations">
+          <label>Reglas de Nations League
+            <select name="nations_rules">
+              ${nationsRuleSelect}
+            </select>
+          </label>
+          <p class="muted">Nations League no genera un único cuadro: se guarda la estructura de ligas, ascensos/descensos, play-offs y Final Four de Liga A.</p>
+        </div>
         <label>Fecha límite de predicciones (opcional)
           <input name="deadline" type="datetime-local" />
         </label>
@@ -699,6 +1194,7 @@ function renderPorraList() {
 function renderDetail() {
   const p = state.currentPorra;
   const nextStatus = nextPorraStatus(p.status);
+  const knockoutTemplate = knockoutTemplateForEvent(p.event_type, p.scoring?.knockout?.templateId);
   const orderedTeams = sortedTeams();
   const draft = state.groupSetupDraft || (state.groups.length || state.teams.length ? buildGroupSetupDraftFromState() : null);
   const groupSetupCollapsed = Boolean(draft) && state.groupSetupCollapsed;
@@ -758,8 +1254,6 @@ function renderDetail() {
   const matchRows = state.matches.map((m, index) => {
     const team1Id = m.team1_id ?? m.team1;
     const team2Id = m.team2_id ?? m.team2;
-    const t1 = state.teams.find(t => t.team_id === team1Id);
-    const t2 = state.teams.find(t => t.team_id === team2Id);
     const when = m.kickoff ? new Date(m.kickoff).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—';
     const phaseKey = m.phase ?? (m.stage === 'group' ? 'group' : m.round_key);
     const phase = phaseKey === 'group'
@@ -785,8 +1279,8 @@ function renderDetail() {
     return `<tr class="${isGroupMatch(m) ? `match-row-draggable${draggingClass}` : `match-row${draggingClass}`}" data-match-id="${esc(m.match_id)}" data-match-phase="${esc(phaseKey)}" draggable="${draggable}">
       <td>${esc(matchday)}</td>
       <td>${esc(phase)}</td>
-      <td>${t1 ? `${esc(t1.flag || flagForTeam(t1.name))} ${esc(t1.name)}` : '—'}</td>
-      <td>${t2 ? `${esc(t2.flag || flagForTeam(t2.name))} ${esc(t2.name)}` : '—'}</td>
+      <td>${esc(matchTeamLabel(team1Id))}</td>
+      <td>${esc(matchTeamLabel(team2Id))}</td>
       <td>${esc(when)}</td>
       <td>
         <button type="button" class="btn-secondary btn-sm edit-match" data-id="${esc(m.match_id)}">Editar fecha</button>
@@ -984,6 +1478,24 @@ function renderDetail() {
         <button type="button" id="resetGroupMatchesBtn" class="btn-danger" style="margin-top:.5rem">
           Resetear fase de grupos
         </button>
+        ${knockoutTemplate ? `
+          <form id="generateKnockoutMatchesForm" class="form inline-form" style="margin-top:1rem">
+            <label>Fecha inicial de cruces (opcional)
+              <input name="knockoutFirstKickoff" type="datetime-local" />
+            </label>
+            <label>Días entre rondas
+              <input name="knockoutDaysBetween" type="number" min="1" value="2" />
+            </label>
+            <button type="submit">Generar cruces ${esc(knockoutTemplate.label)}</button>
+          </form>
+          <button type="button" id="resetKnockoutMatchesBtn" class="btn-danger" style="margin-top:.5rem">
+            Resetear cruces
+          </button>
+          <p class="muted" style="margin-top:.5rem">${esc(knockoutTemplate.label)} usa la plantilla oficial guardada en la porra y enlaza las rondas posteriores con los ganadores previos.</p>
+        ` : ''}
+        ${p.event_type === 'nations' ? `
+          <p class="muted" style="margin-top:.5rem">Nations League no usa un único cuadro de cruces. Se organiza por ligas, ascensos/descensos, play-offs y Final Four de Liga A; los partidos de estas fases se añaden manualmente.</p>
+        ` : ''}
         <p class="muted" style="margin-top:.5rem">También puedes arrastrar las filas de fase de grupos para reordenarlas.</p>
         <p class="muted" style="margin-top:.5rem">Borra solo los partidos de fase de grupos para poder regenerarlos desde cero.</p>
         <form id="addMatchForm" class="form match-form" style="margin-top:.75rem">
@@ -1092,11 +1604,22 @@ function wirePorraList() {
   if (!form) return;
   const nameInput = form.querySelector('[name=name]');
   const slugInput = form.querySelector('[name=slug]');
+  const eventTypeSelect = form.querySelector('[name=event_type]');
+  const ruleSections = [...form.querySelectorAll('[data-knockout-rules]')];
   let slugTouched = false;
   slugInput.addEventListener('input', () => { slugTouched = true; });
   nameInput.addEventListener('input', () => {
     if (!slugTouched) slugInput.value = slugify(nameInput.value);
   });
+  function toggleKnockoutRules() {
+    if (!eventTypeSelect) return;
+    const currentType = eventTypeSelect.value;
+    for (const section of ruleSections) {
+      section.hidden = section.dataset.knockoutRules !== currentType;
+    }
+  }
+  eventTypeSelect?.addEventListener('change', toggleKnockoutRules);
+  toggleKnockoutRules();
 }
 
 // ── Wire detail view ───────────────────────────────────────────────────────────
@@ -1154,16 +1677,48 @@ async function handleCreate(form) {
   const name = String(fd.get('name') || '').trim();
   const slug = String(fd.get('slug') || '').trim() || slugify(name);
   const eventType = String(fd.get('event_type') || 'custom');
+  let templateId = '';
+  if (eventType === 'worldcup') {
+    templateId = String(fd.get('worldcup_rules') || defaultKnockoutTemplateIdForEvent(eventType));
+  } else if (eventType === 'euro') {
+    templateId = String(fd.get('euro_rules') || defaultKnockoutTemplateIdForEvent(eventType));
+  } else if (eventType === 'nations') {
+    templateId = String(fd.get('nations_rules') || 'nations_2026_27');
+  }
+  const knockoutTemplate = knockoutTemplateForEvent(eventType, templateId);
+  const nationsTemplate = eventType === 'nations'
+    ? nationsLeagueTemplateForEvent(templateId)
+    : null;
   const deadlineRaw = String(fd.get('deadline') || '');
   const features = {};
   for (const f of FEATURES) features[f.key] = false;
   form.querySelectorAll('[name=feature]:checked').forEach(el => { features[el.value] = true; });
+  if (eventType === 'worldcup' || eventType === 'euro') {
+    features.bestThirds = Boolean(knockoutTemplate?.thirdPlaceQualifiers);
+  }
+  if (eventType === 'nations') {
+    features.knockout = false;
+    features.bestThirds = false;
+  }
+  const knockoutStructure = features.knockout ? defaultKnockoutStructure(eventType, templateId) : [];
+  const scoring = {
+    groupExact: 3,
+    groupSign: 2,
+    knockout: {
+      ...DEFAULT_KNOCKOUT_SCORING,
+      templateId: eventType === 'nations' ? '' : (knockoutTemplate?.id || '')
+    }
+  };
+  if (nationsTemplate) {
+    scoring.nationsLeague = { ...nationsTemplate, templateId: nationsTemplate.id };
+  }
 
   const { error } = await supabase.from('porras').insert({
     name, slug, event_type: eventType, status: 'draft',
     owner: state.user.id,
     predictions_deadline: deadlineRaw ? new Date(deadlineRaw).toISOString() : null,
-    scoring: { groupExact: 3, groupSign: 2 },
+    scoring,
+    knockout_structure: knockoutStructure,
     features
   });
   if (error) {
@@ -1625,6 +2180,30 @@ async function handleGenerateGroupMatches(form) {
   render();
 }
 
+async function handleGenerateKnockoutMatches(form) {
+  const errorEl = document.getElementById('matchError');
+  const fd = new FormData(form);
+  const firstKickoffRaw = String(fd.get('knockoutFirstKickoff') || '');
+  const daysBetweenRaw = String(fd.get('knockoutDaysBetween') || '');
+  const { rows, error } = buildKnockoutMatches(firstKickoffRaw, daysBetweenRaw);
+  if (error) {
+    errorEl.textContent = error;
+    return;
+  }
+  if (!rows.length) {
+    errorEl.textContent = 'No se pudieron generar los cruces.';
+    return;
+  }
+  const { error: insertError } = await supabase.from('porra_matches').insert(rows);
+  if (insertError) {
+    errorEl.textContent = insertError.message;
+    return;
+  }
+  form.reset();
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
 async function resetGroupMatches() {
   const groupMatches = state.matches.filter(match => (match.phase ?? match.stage) === 'group');
   if (!groupMatches.length) {
@@ -1639,6 +2218,26 @@ async function resetGroupMatches() {
     .delete()
     .eq('porra_id', state.currentPorra.id)
     .in('match_id', groupMatches.map(match => match.match_id));
+  if (error) { state.detailError = error.message; render(); return; }
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
+async function resetKnockoutMatches() {
+  const knockoutMatchIds = state.matches
+    .filter(match => (match.phase ?? match.stage) !== 'group')
+    .map(match => match.match_id);
+  if (!knockoutMatchIds.length) {
+    state.detailError = 'No hay cruces para resetear.';
+    render();
+    return;
+  }
+  if (!window.confirm(`Vas a borrar ${knockoutMatchIds.length} cruces. ¿Continuar?`)) return;
+  const { error } = await supabase
+    .from('porra_matches')
+    .delete()
+    .eq('porra_id', state.currentPorra.id)
+    .in('match_id', knockoutMatchIds);
   if (error) { state.detailError = error.message; render(); return; }
   await loadDetail(state.currentPorra.id);
   render();
@@ -1884,6 +2483,7 @@ document.addEventListener('submit', e => {
   if (e.target.classList.contains('edit-match-form')) { e.preventDefault(); handleEditMatch(e.target); }
   if (e.target.id === 'addMatchForm') { e.preventDefault(); handleAddMatch(e.target); }
   if (e.target.id === 'generateGroupMatchesForm') { e.preventDefault(); handleGenerateGroupMatches(e.target); }
+  if (e.target.id === 'generateKnockoutMatchesForm') { e.preventDefault(); handleGenerateKnockoutMatches(e.target); }
   if (e.target.id === 'addMiniQuestionForm') { e.preventDefault(); handleAddMiniQuestion(e.target); }
   if (e.target.classList.contains('edit-mini-question-form')) { e.preventDefault(); handleEditMiniQuestion(e.target); }
 });
@@ -1989,6 +2589,7 @@ document.addEventListener('click', e => {
   if (e.target.classList.contains('del-group'))  deleteGroup(e.target.dataset.id);
   if (e.target.classList.contains('del-match'))  deleteMatch(e.target.dataset.id);
   if (e.target.id === 'resetGroupMatchesBtn')     resetGroupMatches();
+  if (e.target.id === 'resetKnockoutMatchesBtn')  resetKnockoutMatches();
   if (e.target.classList.contains('move-match')) moveMatch(e.target.dataset.id, e.target.dataset.dir);
   if (e.target.classList.contains('edit-mini-question')) startEditMiniQuestion(e.target.dataset.id);
   if (e.target.classList.contains('cancel-edit-mini-question')) cancelEditMiniQuestion();

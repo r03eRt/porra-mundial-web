@@ -11,8 +11,13 @@ Eurocopa, Nations League…) sin afectar a la porra actual del Mundial 2026.
 > de jugadores, partidos y mini-porra también se pueden plegar, generación al final de
 > los partidos de grupo con fecha opcional, reset de partidos de grupo por
 > jornadas, mini-porra editable, orden manual de partidos con arrastre en fase
-> de grupos, borrado de borradores, reaparición del asistente al reset y
-> avance de estado.
+> de grupos, borrado de borradores, reaparición del asistente al reset,
+> avance de estado y cruces por plantilla de evento. En Eurocopa el asistente
+> guarda también la variante de reglas oficial: 8, 16 o 24 equipos según el
+> ciclo, con el bracket y los terceros aplicables a cada formato. En Mundial el
+> asistente guarda la variante de reglas: 32 equipos o 2026/48 equipos con
+> mejores terceros. Nations League no se trata como un único bracket, sino como
+> ligas + ascensos/descensos + play-offs + Final Four de Liga A.
 
 ## 1. Origen y objetivo
 
@@ -97,8 +102,12 @@ porra_knockout_picks  → pronóstico de cruces por jugador (estructura configur
 **El formato es configuración, no código:**
 - **Puntuación** (exacto, signo, puntos por ronda de cruces) → jsonb en `porras`.
 - **Estructura de cruces** → jsonb con las rondas
-  `[{clave, etiqueta, equipos, puntos}]`. Mundial 32→16→8→4→2→1; Eurocopa
-  16→8→…; Nations League puede no tener cruces.
+  `[{clave, etiqueta, equipos, puntos}]`. Mundial 32→16→8→4→2→1; Mundial 2026
+  48→32→16→8→4→2→1; Eurocopa 8→4→2→1, 16→8→4→2→1 y 24→16→8→4→2→1; Nations
+  League se guarda aparte como estructura de ligas, ascensos/descensos,
+  play-offs y Final Four. El dashboard puede además persistir una plantilla
+  concreta de cruces por evento en `scoring.knockout.templateId`, para que la
+  UI del admin genere la secuencia oficial de emparejamientos.
 - **¿Hay grupos? ¿cruces? ¿mini?** → flags de la porra.
 
 ## 8. Paridad de features
@@ -134,7 +143,7 @@ Regla: si una pestaña no tiene con qué alimentarse, no se muestra en esa porra
 |---|---|---|
 | 0 ✅ | Modelo de datos en Supabase (tablas nuevas + RLS), sin UI | Hecho: `supabase/platform-schema.sql` (migración `20260623000000`) |
 | 1 🚧 | Dashboard MVP: crear porra, configurar y operar manualmente | En curso: app `admin-next/` (Vite + supabase-js). Hecho: login admin, crear/listar porras, borrar borradores, detalle por porra, asistente guiado para crear grupos/equipos por pasos y generar los partidos al final con fecha opcional, mini-porra editable, generación y reset automático de partidos de grupo por jornadas con fecha inicial opcional y días entre jornadas, asistente que permanece visible/plegable/editable tras guardar, secciones de jugadores/partidos/mini-porra plegables, edición inline de la fecha/hora de cada partido, la porra puede volver a borrador desde cualquier estado, contraseña temporal visible en la tabla de jugadores cuando se crea una cuenta nueva, reaparición del asistente al reset para regenerar la misma fase de grupos, orden manual de partidos con botones y arrastre en fase de grupos, y ciclo `draft → open → playing → closed` |
-| 2 🚧 | Predicciones de jugadores + clasificación pública | En curso: app `public-next/` (Vite + supabase-js, puerto 5175). Hecho: vista pública por slug `/p/<slug>` con pestañas Clasificación (reusa `src/lib/porra-core.js`) y Partidos, login de jugador (Supabase Auth email/password vinculado por `porra_players.user_id`), y "Mi porra" para editar marcadores de grupo en `porra_predictions` mientras la porra está `open` y antes del deadline. Prerrequisito SQL: `supabase/platform-player-write.sql` (políticas RLS de escritura del jugador), **pendiente de aplicar**. Falta: clasificación de grupos calculada, entrada de resultados reales por el admin (Fase 4) para que la clasificación tenga datos |
+| 2 🚧 | Predicciones de jugadores + clasificación pública | En curso: app `public-next/` (Vite + supabase-js, puerto 5175). Hecho: vista pública por slug `/p/<slug>` con pestañas Clasificación, Partidos, Mini-porra y Cruces; login de jugador (Supabase Auth email/password vinculado por `porra_players.user_id`), "Mi porra" para editar marcadores de grupo en `porra_predictions` mientras la porra está `open` y antes del deadline, con guardado/borrado por fila y toast de confirmación/error, mini-porra pública con tabla final de pronósticos + edición de respuestas propias, y cuadro de cruces estilo legacy con puntuación por ronda y edición manual de los cruces propios. Prerrequisito SQL: `supabase/platform-player-write.sql` (políticas RLS de escritura del jugador), **pendiente de aplicar**. Falta: clasificación de grupos calculada, entrada de resultados reales por el admin (Fase 4) para que la clasificación tenga datos |
 | 3 | Mini-porras + cruces configurables | Porra completa |
 | 4 | Entrada de resultados + cálculo automático + vistas en vivo | Operativa de torneo |
 | 5 | (Opc.) goleadores/estadísticas/fuentes automáticas | Paridad total + comodidad |

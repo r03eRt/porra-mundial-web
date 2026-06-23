@@ -56,6 +56,7 @@ El dashboard en `admin-next/` tiene:
 - ✅ Tabla de equipos ordenada por grupo, con edición inline y arrastre dentro del mismo grupo
 - ✅ Bloqueo de equipos duplicados en toda la porra, incluido el asistente guiado
 - ✅ Generación automática de partidos de fase de grupos por jornadas desde grupos + equipos
+- ✅ Generación de cruces por plantilla según evento; Eurocopa tiene selector entre 8, 16 y 24 equipos según el ciclo oficial, Mundial entre 32 equipos y 2026/48 equipos, y Nations League se guarda como formato aparte de ligas + ascensos/descensos + play-offs + Final Four de Liga A
 - ✅ Asistente guiado para crear grupos y equipos por pasos, con selector de equipos con bandera, que se queda visible, plegable y editable tras guardar
 - ✅ Si se resetea la fase de grupos, el asistente reaparece para regenerar los mismos partidos a partir de la estructura guardada
 - ✅ Reset de fase de grupos para regenerar esa estructura si algo sale mal
@@ -75,14 +76,17 @@ El dashboard en `admin-next/` tiene:
 - ✅ Vista pública `/p/<slug>` con pestañas Clasificación (reusa `src/lib/porra-core.js`) y Partidos
 - ✅ Login de jugador (Supabase Auth email/password, enlazado por `porra_players.user_id`)
 - ✅ "Mi porra": editar marcadores de fase de grupos en `porra_predictions` (solo `open` + antes del deadline)
-- ✅ Menú espejo de la app legacy (array `TABS` en `main.js`). Pestañas reales: Clasificación porra, Editar mi porra, Partidos, Clasificación grupos, Equipos, Detalle jugador. El resto (Histórico, Mini-porra, Cruces, Mejores terceros, Máximos goleadores, Probabilidades, Estadísticas, Comparador) salen como placeholder "próximamente" (`ready: false`)
+- ✅ "Mi porra" confirma guardados y borrados por fila con toast, además del guardado masivo
+- ✅ Menú espejo de la app legacy (array `TABS` en `main.js`). Pestañas reales: Clasificación porra, Editar mi porra, Mini-porra, Partidos, Cruces, Clasificación grupos, Equipos y Detalle jugador. El resto (Histórico, Mejores terceros, Máximos goleadores, Probabilidades, Estadísticas, Comparador) salen como placeholder "próximamente" (`ready: false`)
 - ✅ Aspecto idéntico a la legacy: `public-next/src/styles.css` reusa la paleta y las clases de `src/styles.css` (`.hero`, `.tabs`, `.panel`, `.table-wrap`, `.rank-1/2/3`, `.points`, `.matchdays`/`.match-card`/`.match-goals`, `.group-standings-grid`, `.teams-layout`/`.team-chart-card`)
 - ✅ Partidos como la legacy: agrupados por jornada (`slot`) → grupo, `match-card` con marcador grande y "Ver/Ocultar goleadores" (lee `porra_matches.scorers`)
 - ✅ Equipos como la legacy: layout de dos columnas (lista con buscador + detalle con tarjetas y barras). Reusa `src/lib/team-stats.js` (`calculateTeamStats`, `TEAM_DETAIL_METRICS`)
 - ✅ Clasificación como la legacy: medallas (🥇🥈🥉 / 💩 último), columna Mov. (`historyPositionChange`), Total/1ª fase/Exactos/Aciertos/Cruces/Campeón, cabeceras ordenables (`sortableHeader`/`sortRankingRows`) y buscador. Campeón de `porra_knockout_picks`
 - ✅ Tarjetas de accesos rápidos (`#summary`/`.cards`) encima del menú: último partido + goleadores, siguiente partido + pronóstico más elegido, partidos con resultado, líder ⭐, purria 💩, mejor racha 🔥. Reusa `pickNextPendingMatch` y `calculateBestCurrentStreak` de la lib
-- ✅ Mini-porra: tarjetas resumen + clasificación mini ordenada con buscador + tabla de respuestas por pregunta. Lee `porra_mini_questions`/`porra_mini_answers`/`porra_mini_results`. Puntuación `scoreMiniAnswer` (clon de la legacy): variantes con `|`, y en número `+N` = "al menos N"
-- ⬜ Pendiente: columna Mov. real (necesita histórico/snapshots, hoy "se mantiene"); puntos de Cruces (sin lógica de knockout todavía)
+- ✅ Mini-porra: tarjetas resumen + clasificación mini ordenada con buscador + tabla de respuestas por pregunta + tabla final de pronósticos de todos los jugadores con puntos. Lee `porra_mini_questions`/`porra_mini_answers`/`porra_mini_results`. Puntuación `scoreMiniAnswer` (clon de la legacy): variantes con `|`, y en número `+N` = "al menos N"
+- ✅ "Mis resultados" de la mini-porra son editables si la porra está `open` y antes del deadline, con guardado/borrado por pregunta
+- ✅ Cruces: cuadro de cruces estilo legacy con selector de participante, puntuación por ronda, campeón y edición manual de los cruces propios si la porra está `open`
+- ⬜ Pendiente: columna Mov. real (necesita histórico/snapshots, hoy "se mantiene")
 - ✅ RLS de escritura del jugador aplicada: migración `supabase/migrations/20260623040000_player_write_predictions.sql` (funciones `pp_is_player`, `pp_predictions_open`; políticas `… player write` en `porra_predictions`/`porra_mini_answers`/`porra_knockout_picks`). Script suelto equivalente: `supabase/platform-player-write.sql`
 - ⬜ Clasificación de grupos calculada, entrada de resultados reales por el admin
 - ⬜ Mini-porra configurable, cruces configurables
