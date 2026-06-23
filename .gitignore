@@ -14,3 +14,7 @@ supabase/player-auth-credentials.txt
 # App nueva del dashboard (build y deps locales)
 admin-next/node_modules/
 admin-next/dist/
+
+# App pública / jugador (build y deps locales)
+public-next/node_modules/
+public-next/dist/

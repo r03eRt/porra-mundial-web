@@ -71,10 +71,21 @@ El dashboard en `admin-next/` tiene:
 **Pendiente en Fase 1:**
 - Ajustes finales de usabilidad del dashboard según pruebas reales
 
-**Fase 2 (no empezada):**
-- Vista pública `/p/<slug>` con todas las pestañas
-- Predicciones de jugadores + clasificación automática
-- Mini-porra configurable, cruces configurables
+**Fase 2 (en curso — `public-next/`):**
+- ✅ Vista pública `/p/<slug>` con pestañas Clasificación (reusa `src/lib/porra-core.js`) y Partidos
+- ✅ Login de jugador (Supabase Auth email/password, enlazado por `porra_players.user_id`)
+- ✅ "Mi porra": editar marcadores de fase de grupos en `porra_predictions` (solo `open` + antes del deadline)
+- ✅ RLS de escritura del jugador aplicada: migración `supabase/migrations/20260623040000_player_write_predictions.sql` (funciones `pp_is_player`, `pp_predictions_open`; políticas `… player write` en `porra_predictions`/`porra_mini_answers`/`porra_knockout_picks`). Script suelto equivalente: `supabase/platform-player-write.sql`
+- ⬜ Clasificación de grupos calculada, entrada de resultados reales por el admin
+- ⬜ Mini-porra configurable, cruces configurables
+
+### public-next — cómo arrancarlo
+
+```bash
+cd public-next && npm run dev   # vite --port 5175 (si está ocupado, salta de puerto)
+```
+
+Abrir una porra: `http://localhost:5175/p/<slug>` (o `?slug=<slug>`). Sin login → Clasificación + Partidos. Con login de jugador (email/password de su cuenta Auth, enlazada por `porra_players.user_id`) aparece la pestaña **Mi porra** para editar marcadores; solo guarda si la porra está `open` y antes del `predictions_deadline`. JS vanilla con event delegation, mismo patrón que `admin-next/`. **No toca la app legacy** (vive en su propia carpeta, sus propias tablas `porra_*`).
 
 ## Archivos clave
 

@@ -60,7 +60,16 @@ Dos apps en el mismo repo, compartiendo el mismo proyecto Supabase.
 |------|--------|---------|
 | 0 | ✅ | Esquema DB aplicado (`supabase/platform-schema.sql`) |
 | 1 | 🚧 | `admin-next/`: login admin, crear/listar porras, gestionar jugadores/grupos/equipos con bandera ligada, ordenados por grupo y editables/partidos/mini-porra, generar y resetear fase de grupos por jornadas, ordenar partidos con subir/bajar y arrastre en fase de grupos, y cambiar estado |
-| 2+ | ⬜ | Predicciones de jugadores, clasificación pública, mini, cruces, resultados |
+| 2 | 🚧 | `public-next/`: vista pública por slug `/p/<slug>` (pestañas Clasificación + Partidos), login de jugador (Supabase Auth), "Mi porra" para editar marcadores en `porra_predictions`. RLS de escritura del jugador **aplicada** (migración `20260623040000_player_write_predictions.sql`: funciones `pp_is_player`/`pp_predictions_open` + políticas `… player write`) |
+| 3+ | ⬜ | Mini, cruces, entrada de resultados reales por admin, vistas en vivo |
+
+### public-next — cómo arrancarlo
+
+```bash
+cd public-next && npm run dev   # → http://localhost:5175
+```
+
+Abrir una porra por slug: `http://localhost:5175/p/<slug>` (o `?slug=<slug>`). Sin login se ven Clasificación y Partidos. Con **Entrar para jugar** (email/password de la cuenta Auth del jugador, enlazada por `porra_players.user_id`) aparece la pestaña **Mi porra** para editar marcadores de fase de grupos; solo se puede guardar si la porra está `open` y antes del `predictions_deadline`. La clasificación reusa `src/lib/porra-core.js` (`scorePrediction`) sobre los `result_home`/`result_away` que meta el admin. No hay framework; JS vanilla con event delegation, mismo patrón que `admin-next/`.
 
 ### admin-next — cómo arrancarlo
 

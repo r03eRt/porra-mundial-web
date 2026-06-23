@@ -1,0 +1,74 @@
+:root {
+  --bg: #0f1420;
+  --panel: #181f2e;
+  --panel2: #1f2838;
+  --border: #2b3650;
+  --text: #e8edf6;
+  --muted: #97a3bb;
+  --accent: #5b8cff;
+  --error: #ff7b7b;
+  --me: #233047;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border);
+}
+.topbar h1 { font-size: 1.1rem; margin: 0; }
+
+.session { display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; color: var(--muted); }
+
+.tabs {
+  display: flex; gap: 0.5rem; padding: 0.75rem 1.25rem;
+  max-width: 860px; margin: 0 auto; flex-wrap: wrap;
+}
+.tab {
+  background: transparent; border: 1px solid var(--border); color: var(--muted);
+  padding: 0.45rem 0.9rem; border-radius: 999px; cursor: pointer;
+}
+.tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.app {
+  max-width: 860px; margin: 0 auto; padding: 0 1.25rem 2rem;
+  display: flex; flex-direction: column; gap: 1.25rem;
+}
+
+.card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 14px; padding: 1.25rem;
+}
+.card.narrow { max-width: 380px; }
+.card h2 { margin-top: 0; font-size: 1.05rem; }
+
+.muted { color: var(--muted); font-size: 0.85rem; }
+.error { color: var(--error); font-size: 0.85rem; min-height: 1em; }
+
+table.data { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+table.data th, table.data td {
+  text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border);
+}
+table.data th { color: var(--muted); font-weight: 600; }
+table.data tr.me { background: var(--me); }
+
+input, button {
+  font: inherit; padding: 0.55rem 0.7rem; border-radius: 9px;
+  border: 1px solid var(--border); background: var(--panel2); color: var(--text);
+}
+input:disabled { opacity: 0.5; }
+.score-input { width: 4.5rem; text-align: center; }
+
+button { cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+form label { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.9rem; color: var(--muted); margin-bottom: 0.75rem; }
+.actions { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
+code { background: var(--panel2); padding: 0.1rem 0.35rem; border-radius: 5px; }
