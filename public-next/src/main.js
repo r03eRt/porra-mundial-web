@@ -170,7 +170,10 @@ const state = {
   selectedTeamId: null, // equipo seleccionado en "Equipos"
   teamsQuery: '',        // texto del buscador de equipos
   rankingQuery: '',      // buscador de participante en Clasificación
-  rankingSort: { key: 'position', direction: 'asc' } // orden de la tabla
+  rankingSort: { key: 'position', direction: 'asc' }, // orden de la tabla
+  probabilitiesCache: null, // { key, result } de la última simulación
+  probabilitiesExpanded: { players: false, teams: false, mini: false },
+  historyCheckpointId: ''   // match_id del snapshot activo en Histórico
 };
 
 let toastTimer = null;
@@ -1305,6 +1308,7 @@ function render() {
 
   switch (state.tab) {
     case 'ranking': renderRanking(); break;
+    case 'history': renderHistory(); break;
     case 'matches': renderMatches(); break;
     case 'mine': renderMyPorra(); break;
     case 'groupStandings': renderGroupStandings(); break;
@@ -1312,6 +1316,8 @@ function render() {
     case 'player': renderPlayerDetail(); break;
     case 'mini': renderMini(); break;
     case 'knockout': renderKnockout(); break;
+    case 'bestThirds': renderBestThirds(); break;
+    case 'probabilities': renderProbabilities(); break;
     default: renderRanking();
   }
 }
@@ -1359,16 +1365,16 @@ function playerName(playerId) {
 const TABS = [
   { key: 'ranking', label: 'Clasificación porra', ready: true },
   { key: 'mine', label: '✏️ Editar mi porra', ready: true, playerOnly: true },
-  { key: 'history', label: 'Histórico', ready: false },
+  { key: 'history', label: 'Histórico', ready: true },
   { key: 'mini', label: 'Mini-porra', ready: true },
   { key: 'matches', label: 'Partidos', ready: true },
   { key: 'knockout', label: 'Cruces', ready: true },
   { key: 'groupStandings', label: 'Clasificación grupos', ready: true },
   { key: 'player', label: 'Detalle jugador', ready: true },
   { key: 'teams', label: 'Equipos', ready: true },
-  { key: 'bestThirds', label: 'Mejores terceros', ready: false },
+  { key: 'bestThirds', label: 'Mejores terceros', ready: true },
   { key: 'topScorers', label: 'Máximos goleadores', ready: false },
-  { key: 'probabilities', label: 'Probabilidades', ready: false },
+  { key: 'probabilities', label: 'Probabilidades', ready: true },
   { key: 'statistics', label: 'Estadísticas', ready: false },
   { key: 'compare', label: 'Comparador', ready: false }
 ];
@@ -1692,6 +1698,340 @@ function renderGroupStandings() {
     </div>`;
 }
 
+// --- Mejores terceros -------------------------------------------------------
+
+function calculateBestThirds() {
+  const groups = state.groups.length
+    ? state.groups
+    : [...new Set(state.matches.filter(m => m.stage === 'group').map(m => m.group_id).filter(Boolean))]
+        .map(group_id => ({ group_id, name: group_id }));
+
+  return groups
+    .map((grp, groupIndex) => {
+      const rows = computeGroupStandings(grp.group_id);
+      if (!rows[2]) return null;
+      return { ...rows[2], group: grp.name || grp.group_id, groupIndex };
+    })
+    .filter(Boolean)
+    .sort((a, b) =>
+      b.pts - a.pts ||
+      ((b.gf - b.gc) - (a.gf - a.gc)) ||
+      (b.gf - a.gf) ||
+      (a.groupIndex - b.groupIndex)
+    );
+}
+
+function renderBestThirds() {
+  const template = knockoutTemplateForPorra();
+  const qualifierCount = template?.thirdPlaceQualifiers || 0;
+  const rows = calculateBestThirds();
+
+  const hint = qualifierCount > 0
+    ? `Los ${qualifierCount} mejores pasan a la siguiente ronda (marcados con acento). Se ordenan por puntos, diferencia de goles y goles a favor.`
+    : `Se ordenan por puntos, diferencia de goles y goles a favor.`;
+
+  const tableBody = rows.length
+    ? rows.map((r, i) => {
+        const qualifies = qualifierCount > 0 && i < qualifierCount;
+        const dg = r.gf - r.gc;
+        const dgStr = dg > 0 ? `+${dg}` : String(dg);
+        return `<tr class="${qualifies ? 'qualified-third' : ''}">
+          <td>${i + 1}</td>
+          <td class="standing-team">${teamFlag(r.team)} ${esc(teamName(r.team))}</td>
+          <td>Grupo ${esc(r.group)}</td>
+          <td>${r.pj}</td>
+          <td>${r.gf}</td>
+          <td>${r.gc}</td>
+          <td>${dgStr}</td>
+          <td class="points">${r.pts}</td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="8" class="empty-state">Sin resultados de fase de grupos todavía.</td></tr>`;
+
+  $app.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Mejores terceros</h2>
+          <p class="hint">${esc(hint)}</p>
+        </div>
+      </div>
+      <div class="table-wrap best-thirds-table">
+        <table>
+          <thead><tr><th>Pos.</th><th>Selección</th><th>Grupo</th><th>PJ</th><th>GF</th><th>GC</th><th>DG</th><th>Pts</th></tr></thead>
+          <tbody>${tableBody}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// --- Histórico ---------------------------------------------------------------
+
+const HISTORY_PALETTE = ['#53e0b4','#5da9ff','#ffd76a','#ff8f6b','#c08cff','#7ce2ff','#ff6b6b','#8bd450','#f6c177','#7aa2f7','#f7768e','#9ece6a','#bb9af7','#e0af68','#73daca','#c0caf5'];
+function historyLineColor(index) { return HISTORY_PALETTE[index % HISTORY_PALETTE.length]; }
+
+// Una clasificación completa calculada sobre un subconjunto de resultados.
+function calcRankingFromResults(resultMap) {
+  const scoring = scoringConfig();
+  const groupMatches = state.matches.filter(m => m.stage === 'group');
+  const koScoring = knockoutScoringConfig();
+
+  return state.players.map(player => {
+    let groupPoints = 0, exacts = 0, signs = 0, played = 0;
+    for (const m of groupMatches) {
+      const result = resultMap.get(m.match_id);
+      if (!result) continue;
+      played++;
+      const pred = predictionFor(player.player_id, m.match_id);
+      const r = scorePrediction({ score: pred?.score }, result, scoring);
+      groupPoints += r.points;
+      if (r.exact) exacts++;
+      else if (r.sign) signs++;
+    }
+    // Puntos de cruces con los resultados disponibles en este snapshot
+    let knockoutPoints = 0;
+    const bracket = buildPlayerKnockoutBracket(player.player_id);
+    const reality = buildKnockoutRealityFromMap(resultMap);
+    for (const stage of knockoutStages()) {
+      const stageReality = reality[stage.key];
+      if (!stageReality) continue;
+      const picks = stage.key === 'champion'
+        ? [knockoutChampionPick(player.player_id)].filter(Boolean)
+        : (bracket[stage.key] || []).filter(Boolean);
+      const hits = picks.filter(t => stageReality.teams.has(knockoutTeamKey(t))).length;
+      knockoutPoints += hits * stage.points;
+    }
+    return { id: player.player_id, name: player.name, groupPoints, knockoutPoints,
+             total: groupPoints + knockoutPoints, exacts, signs, played };
+  }).sort((a, b) => b.total - a.total || b.exacts - a.exacts || b.signs - a.signs || a.name.localeCompare(b.name, 'es'))
+    .map((p, i) => ({ ...p, position: i + 1 }));
+}
+
+// buildKnockoutReality variant that uses a resultMap instead of full state.matches results
+function buildKnockoutRealityFromMap(resultMap) {
+  const roundStages = knockoutRoundStages();
+  const reality = {};
+  for (const stage of roundStages) {
+    const matches = knockoutMatches().filter(m => normalizeKnockoutStageKey(m.round_key) === stage.key);
+    const teams = new Set();
+    for (const m of matches) {
+      const r = resultMap.get(m.match_id);
+      const raw1 = m.team1_id ?? m.team1;
+      const raw2 = m.team2_id ?? m.team2;
+      const t1 = raw1 ? teamName(raw1) : '';
+      const t2 = raw2 ? teamName(raw2) : '';
+      if (t1) teams.add(knockoutTeamKey(t1));
+      if (t2) teams.add(knockoutTeamKey(t2));
+    }
+    reality[stage.key] = { key: stage.key, label: stage.label, points: stage.points,
+      expected: stage.teams, resolved: teams.size,
+      complete: stage.teams > 0 && teams.size >= stage.teams, teams };
+  }
+  const finalMatch = knockoutMatches().find(m => normalizeKnockoutStageKey(m.round_key) === 'final');
+  let champion = '';
+  if (finalMatch) {
+    const r = resultMap.get(finalMatch.match_id);
+    if (r && r.home !== r.away) {
+      champion = teamName(r.home > r.away ? (finalMatch.team1_id ?? finalMatch.team1) : (finalMatch.team2_id ?? finalMatch.team2));
+    }
+  }
+  reality.champion = { key: 'champion', label: 'Campeón', points: knockoutScoringConfig().champion,
+    expected: 1, resolved: champion ? 1 : 0, complete: Boolean(champion),
+    teams: champion ? new Set([knockoutTeamKey(champion)]) : new Set() };
+  return reality;
+}
+
+function buildHistoricalSnapshots() {
+  // Todos los partidos con resultado, ordenados por posición (orden del torneo)
+  const played = state.matches
+    .filter(m => matchResult(m))
+    .sort((a, b) => Number(a.position || 0) - Number(b.position || 0));
+
+  const resultMap = new Map();
+  return played.map((m, index) => {
+    resultMap.set(m.match_id, matchResult(m));
+    const ranking = calcRankingFromResults(new Map(resultMap));
+    return {
+      id: m.match_id,
+      order: index + 1,
+      match: m,
+      result: matchResult(m),
+      ranking,
+      leader: ranking[0] || null,
+      playedMatches: index + 1
+    };
+  });
+}
+
+function historyCheckpointLabel(snapshot) {
+  const m = snapshot.match;
+  const t1 = teamName(m.team1_id ?? m.team1);
+  const t2 = teamName(m.team2_id ?? m.team2);
+  return `${snapshot.order}. ${t1} ${snapshot.result.home}-${snapshot.result.away} ${t2}`;
+}
+
+function renderHistoryChart(snapshots, snapshot) {
+  const mobile = window.matchMedia('(max-width: 760px)').matches;
+  const width = Math.max(720, snapshots.length * 56);
+  const height = 320;
+  const pad = { top: 18, right: 22, bottom: 34, left: mobile ? 88 : 126 };
+  const cw = width - pad.left - pad.right;
+  const ch = height - pad.top - pad.bottom;
+  const playerCount = Math.max(1, state.players.length);
+  const maxIdx = Math.max(1, snapshots.length - 1);
+  const maxPos = Math.max(1, playerCount - 1);
+  const selIdx = Math.max(0, snapshots.findIndex(s => s.id === snapshot.id));
+
+  const xFor = i => pad.left + (cw * (maxIdx ? i / maxIdx : 0));
+  const yFor = p => pad.top + (ch * (maxPos ? (p - 1) / maxPos : 0));
+
+  const visibleIds = new Set((mobile ? snapshot.ranking.slice(0, 8) : snapshot.ranking).map(r => r.id));
+  const series = state.players
+    .filter(p => visibleIds.has(p.player_id))
+    .map((p, index) => {
+      const color = historyLineColor(index);
+      const points = snapshots.map((s, si) => {
+        const row = s.ranking.find(r => r.id === p.player_id);
+        return { si, position: row?.position || playerCount, total: row?.total || 0 };
+      });
+      const selPoint = points[selIdx] || points[points.length - 1];
+      return { player: p, color, points, selPoint };
+    });
+
+  const gridMarks = [...new Set([1, Math.ceil(playerCount / 2), playerCount])].sort((a, b) => a - b);
+  const gridMarkup = gridMarks.map(m => `
+    <g>
+      <line x1="${pad.left}" y1="${yFor(m).toFixed(1)}" x2="${width - pad.right}" y2="${yFor(m).toFixed(1)}" stroke="rgba(153,166,194,0.18)" stroke-width="1"/>
+      <text x="${pad.left - 10}" y="${(yFor(m) + 4).toFixed(1)}" fill="var(--muted)" font-size="11" text-anchor="end">${m}</text>
+    </g>`).join('');
+
+  const linesMarkup = series.map(item => {
+    const path = item.points.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${xFor(pt.si).toFixed(1)} ${yFor(pt.position).toFixed(1)}`).join(' ');
+    const sx = xFor(item.selPoint.si).toFixed(1);
+    const sy = yFor(item.selPoint.position).toFixed(1);
+    const firstY = yFor(item.points[0].position).toFixed(1);
+    const isLeader = item.player.player_id === snapshot.leader?.id;
+    return `
+      <path d="${path}" fill="none" stroke="${item.color}" stroke-width="${isLeader ? 3.5 : 2}" stroke-linecap="round" stroke-linejoin="round" opacity="${isLeader ? 1 : 0.7}"/>
+      <text x="${(pad.left - 8).toFixed(1)}" y="${(Number(firstY) + 2).toFixed(1)}" fill="${item.color}" font-size="7" font-weight="700" text-anchor="end">${esc(item.player.name)}</text>
+      <circle cx="${sx}" cy="${sy}" r="${isLeader ? 4.5 : 3.2}" fill="${item.color}"/>`;
+  }).join('');
+
+  const xLabels = snapshots.map((s, i) =>
+    `<text x="${xFor(i).toFixed(1)}" y="${height - 10}" fill="var(--muted)" font-size="10" text-anchor="middle">${s.order}</text>`
+  ).join('');
+
+  const markerX = xFor(selIdx).toFixed(1);
+
+  const legend = [...series]
+    .sort((a, b) => a.selPoint.position - b.selPoint.position || b.selPoint.total - a.selPoint.total)
+    .map(item => `
+      <div class="history-legend-item">
+        <span class="history-legend-swatch" style="background:${item.color}"></span>
+        <span class="history-legend-name">${esc(item.player.name)}</span>
+        <span class="history-legend-meta">#${item.selPoint.position} · ${item.selPoint.total} pts</span>
+      </div>`).join('');
+
+  return `
+    <div class="history-chart-head">
+      <div>
+        <h3>Gráfica de posiciones</h3>
+        <p class="hint">${mobile ? 'La gráfica muestra los 8 mejores del punto seleccionado en móvil.' : 'La gráfica muestra a todos los participantes.'} La línea vertical marca el partido activo.</p>
+      </div>
+      <span class="pill">${mobile ? 'Top 8' : `${series.length} jugadores`} · ${snapshots.length} hitos</span>
+    </div>
+    <div class="history-chart-wrap">
+      <svg class="history-chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfica histórica de posiciones">
+        <rect x="${pad.left}" y="${pad.top}" width="${cw}" height="${ch}" rx="14" fill="rgba(16,24,43,0.6)" stroke="rgba(153,166,194,0.14)"/>
+        ${gridMarkup}
+        <line x1="${markerX}" y1="${pad.top}" x2="${markerX}" y2="${height - pad.bottom}" stroke="rgba(255,215,106,0.7)" stroke-width="2" stroke-dasharray="6 6"/>
+        ${linesMarkup}
+        ${xLabels}
+      </svg>
+    </div>
+    <div class="history-chart-legend">${legend}</div>`;
+}
+
+function renderHistory() {
+  const snapshots = buildHistoricalSnapshots();
+
+  if (!snapshots.length) {
+    $app.innerHTML = `
+      <div class="panel">
+        <div class="panel-head"><div><h2>Histórico</h2><p class="hint">Evolución de la clasificación tras cada partido con resultado.</p></div></div>
+        <p class="empty-state">Aún no hay suficientes resultados para construir el histórico.</p>
+      </div>`;
+    return;
+  }
+
+  if (!state.historyCheckpointId || !snapshots.some(s => s.id === state.historyCheckpointId)) {
+    state.historyCheckpointId = snapshots[snapshots.length - 1].id;
+  }
+
+  const snapshot = snapshots.find(s => s.id === state.historyCheckpointId) || snapshots[snapshots.length - 1];
+  const previousSnapshot = snapshots.find(s => s.order === snapshot.order - 1) || null;
+  const leaderChange = previousSnapshot?.leader && snapshot.leader && previousSnapshot.leader.id !== snapshot.leader.id;
+  const MEDALS = ['🥇', '🥈', '🥉'];
+  const totalMatches = state.matches.filter(m => m.stage === 'group').length;
+  const hasKnockout = knockoutMatches().length > 0;
+
+  const selectOpts = snapshots.map(s =>
+    `<option value="${esc(s.id)}" ${s.id === snapshot.id ? 'selected' : ''}>${esc(historyCheckpointLabel(s))}</option>`
+  ).join('');
+
+  const summaryCards = `
+    <article class="card"><b>${snapshot.playedMatches}/${totalMatches}</b><span>partidos computados</span></article>
+    <article class="card"><b>${snapshot.leader ? `⭐ ${esc(snapshot.leader.name)}` : '—'}</b><span>líder tras este partido</span></article>
+    <article class="card"><b>${snapshot.leader?.total || 0}</b><span>puntos del líder</span></article>
+    <article class="card"><b>${leaderChange ? 'Sí' : 'No'}</b><span>cambio de líder</span></article>`;
+
+  const tableRows = snapshot.ranking.map(player => {
+    const mov = historyPositionChange(player, previousSnapshot);
+    return `<tr class="${player.position <= 3 ? 'rank-' + player.position : ''}">
+      <td class="ranking-position">${MEDALS[player.position - 1] || player.position}</td>
+      <td class="${mov.className}" title="${esc(mov.label)}">${mov.symbol}${mov.delta ? ` ${mov.delta}` : ''}</td>
+      <td>${esc(player.name)}${player.id === state.myPlayerId ? ' <span class="pill">tú</span>' : ''}</td>
+      <td class="points">${player.total}</td>
+      <td>${player.groupPoints}</td>
+      <td>${player.exacts}</td>
+      <td>${player.signs + player.exacts}</td>
+      ${hasKnockout ? `<td>${player.knockoutPoints}</td>` : ''}
+      <td>${player.played}</td>
+    </tr>`;
+  }).join('');
+
+  $app.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <div><h2>Histórico</h2><p class="hint">Evolución de la clasificación tras cada partido con resultado.</p></div>
+        <div class="filters">
+          <select data-action="history-checkpoint" aria-label="Punto del histórico">${selectOpts}</select>
+        </div>
+      </div>
+      <div class="cards">${summaryCards}</div>
+      <div class="history-chart-card">${renderHistoryChart(snapshots, snapshot)}</div>
+      <div class="history-controls">
+        <label class="history-slider-label" for="history-slider">
+          <span>Desliza para avanzar partido a partido</span>
+          <input id="history-slider" class="history-slider" type="range" data-action="history-slider"
+            min="1" max="${snapshots.length}" value="${snapshot.order}" aria-label="Avanzar histórico por partidos"/>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>#</th><th>Mov.</th><th>Participante</th>
+            <th class="table-center">Total</th><th class="table-center">1ª fase</th>
+            <th class="table-center">Exactos</th><th class="table-center">Aciertos</th>
+            ${hasKnockout ? '<th class="table-center">Cruces</th>' : ''}
+            <th class="table-center">Jugados</th>
+          </tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
 // --- Equipos (layout de dos columnas, reusa src/lib/team-stats.js) ---------
 const TEAM_METRIC_BAD = new Set(['goalsAgainst', 'losses', 'failedToScore']);
 
@@ -1788,6 +2128,34 @@ function renderPlayerDetail() {
   });
 
   const total = rows.reduce((acc, r) => acc + (r.s ? r.s.points : 0), 0);
+
+  // Agrupar por jornada (slot)
+  const bySlot = new Map();
+  for (const row of rows) {
+    const slot = matchdayOf(row.m);
+    if (!bySlot.has(slot)) bySlot.set(slot, []);
+    bySlot.get(slot).push(row);
+  }
+  const sortedSlots = [...bySlot.keys()].sort((a, b) => Number(a) - Number(b));
+
+  const tableBody = sortedSlots.length
+    ? sortedSlots.map(slot => {
+        const slotRows = bySlot.get(slot);
+        const slotPts = slotRows.reduce((acc, r) => acc + (r.s?.points || 0), 0);
+        return `
+          <tr class="matchday-header">
+            <td colspan="5">Jornada ${esc(String(slot))}<span class="matchday-pts">${slotPts} pts</span></td>
+          </tr>
+          ${slotRows.map(({ m, pred, result, s }) => `<tr>
+            <td class="muted" style="font-size:.8rem">${esc(m.group_id || '')}</td>
+            <td>${teamFlag(m.team1)} ${esc(teamName(m.team1))} – ${esc(teamName(m.team2))} ${teamFlag(m.team2)}</td>
+            <td>${pred?.score ? esc(pred.score) : '<span class="muted">—</span>'}</td>
+            <td>${result ? `${result.home}–${result.away}` : '<span class="muted">pdte</span>'}</td>
+            <td class="table-center ${s && s.points ? 'points' : 'muted'}">${s ? (s.exact ? `${s.points} ✔` : (s.sign ? `${s.points} ~` : '0')) : '—'}</td>
+          </tr>`).join('')}`;
+      }).join('')
+    : `<tr><td colspan="5" class="empty-state">Sin partidos.</td></tr>`;
+
   $app.innerHTML = `
     <div class="panel">
       <div class="panel-head">
@@ -1800,19 +2168,11 @@ function renderPlayerDetail() {
           </select>
         </label>
       </div>
-      <p class="hint">Total acumulado: <span class="points">${total}</span> puntos.</p>
+      <p class="hint">Total acumulado fase de grupos: <span class="points">${total}</span> puntos.</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Grupo</th><th>Partido</th><th>Pronóstico</th><th>Resultado</th><th class="table-center">Puntos</th></tr></thead>
-          <tbody>
-            ${rows.map(({ m, pred, result, s }) => `<tr>
-              <td>${esc(m.group_id || '')}</td>
-              <td>${teamFlag(m.team1)} ${esc(teamName(m.team1))} – ${esc(teamName(m.team2))} ${teamFlag(m.team2)}</td>
-              <td>${pred?.score ? esc(pred.score) : '<span class="muted">—</span>'}</td>
-              <td>${result ? `${result.home} - ${result.away}` : '<span class="muted">pdte</span>'}</td>
-              <td class="table-center ${s && s.points ? 'points' : 'muted'}">${s ? (s.exact ? `${s.points} ✔` : (s.sign ? `${s.points} ~` : '0')) : '—'}</td>
-            </tr>`).join('') || `<tr><td colspan="5" class="empty-state">Sin partidos.</td></tr>`}
-          </tbody>
+          <thead><tr><th>Grupo</th><th>Partido</th><th>Pronóstico</th><th>Resultado</th><th class="table-center">Pts</th></tr></thead>
+          <tbody>${tableBody}</tbody>
         </table>
       </div>
     </div>`;
@@ -2422,6 +2782,532 @@ function renderLoginForm() {
 }
 
 // ---------------------------------------------------------------------------
+// Probabilidades — Monte Carlo
+// ---------------------------------------------------------------------------
+
+// Seeded LCG random number generator (reproducible per-run)
+function makeLcgRng(seed) {
+  let s = seed >>> 0;
+  return function rng() {
+    s = (Math.imul(1664525, s) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+// Clave de caché: número de resultados conocidos + predicciones totales + respuestas mini
+function probabilitiesCacheKey() {
+  const resultCount = state.matches.filter(m => matchResult(m)).length;
+  const predCount = state.predictions.length;
+  const miniCount = state.miniResults.length;
+  return `${resultCount}:${predCount}:${miniCount}`;
+}
+
+// Para un partido de grupo sin resultado, elige un marcador de entre las
+// predicciones de los jugadores (muestreo ponderado por frecuencia).
+// Si nadie predijo ese partido, genera marcadores aleatorios 0-3.
+function sampleGroupScore(match, rng) {
+  const preds = state.predictions
+    .filter(p => p.match_id === match.match_id && p.score)
+    .map(p => p.score);
+  if (preds.length) {
+    return preds[Math.floor(rng() * preds.length)];
+  }
+  const g = () => Math.floor(rng() * 4); // 0-3
+  return `${g()}-${g()}`;
+}
+
+// Asigna los mejores terceros a los slots del bracket, igual que
+// buildPredictedThirdPlaceAssignments pero usando resultados oficiales.
+function assignRealThirdPlaceToSlots(template, thirdPlaceByGroup) {
+  if (!template?.thirdPlaceQualifiers) return new Map();
+  const thirds = [...thirdPlaceByGroup.values()]
+    .filter(Boolean)
+    .sort((a, b) =>
+      b.pts - a.pts ||
+      ((b.gf - b.gc) - (a.gf - a.gc)) ||
+      (b.gf - a.gf) ||
+      String(a.group).localeCompare(String(b.group), 'es')
+    )
+    .slice(0, template.thirdPlaceQualifiers);
+  const bestGroups = new Set(thirds.map(r => r.group));
+  const assignments = new Map();
+  const used = new Set();
+  for (const fixture of template.knockout || []) {
+    for (const side of ['home', 'away']) {
+      const groups = parseThirdPlaceGroups(fixture[side]);
+      if (!groups.length) continue;
+      const cands = groups.filter(g => bestGroups.has(g) && !used.has(g));
+      const sel = cands[0] || groups.find(g => !used.has(g)) || groups[0];
+      const row = thirdPlaceByGroup.get(sel);
+      if (row) { assignments.set(`${fixture.id}:${side}`, row.team); used.add(sel); }
+    }
+  }
+  return assignments;
+}
+
+// Una iteración de Monte Carlo: simula el resto del torneo y devuelve
+// { groupStandings, stageTeams, champion }
+function simulateOneTournament(rng) {
+  const scoring = scoringConfig();
+  // 1. Fase de grupos: resultados conocidos + simulados
+  const simResults = new Map(); // match_id → { home, away }
+  for (const m of state.matches.filter(m => m.stage === 'group')) {
+    const real = matchResult(m);
+    if (real) { simResults.set(m.match_id, real); continue; }
+    const score = sampleGroupScore(m, rng);
+    const parsed = score.split('-').map(Number);
+    if (parsed.length === 2 && !isNaN(parsed[0]) && !isNaN(parsed[1])) {
+      simResults.set(m.match_id, { home: parsed[0], away: parsed[1] });
+    }
+  }
+
+  // 2. Clasificaciones simuladas de grupo
+  const groupIds = state.groups.length
+    ? state.groups.map(g => g.group_id)
+    : [...new Set(state.matches.filter(m => m.stage === 'group').map(m => m.group_id).filter(Boolean))];
+
+  const standingsByGroup = new Map();
+  const thirdPlaceByGroup = new Map();
+  for (const groupId of groupIds) {
+    const gMatches = state.matches.filter(m => m.stage === 'group' && m.group_id === groupId);
+    const teamIds = [...new Set(gMatches.flatMap(m => [m.team1, m.team2]).filter(Boolean))];
+    const rows = teamIds.map((team, idx) => ({ group: groupId, team, idx, pts: 0, gf: 0, gc: 0 }));
+    const byTeam = new Map(rows.map(r => [r.team, r]));
+    for (const m of gMatches) {
+      const r = simResults.get(m.match_id);
+      if (!r) continue;
+      const home = byTeam.get(m.team1), away = byTeam.get(m.team2);
+      if (!home || !away) continue;
+      home.gf += r.home; home.gc += r.away;
+      away.gf += r.away; away.gc += r.home;
+      if (r.home > r.away) home.pts += 3;
+      else if (r.away > r.home) away.pts += 3;
+      else { home.pts++; away.pts++; }
+    }
+    const sorted = rows.sort((a, b) =>
+      b.pts - a.pts || ((b.gf - b.gc) - (a.gf - a.gc)) || b.gf - a.gf || a.idx - b.idx
+    );
+    standingsByGroup.set(groupId, sorted);
+    if (sorted[2]) thirdPlaceByGroup.set(groupId, sorted[2]);
+  }
+
+  // 3. Knockout: resolver semillas y simular rondas
+  const template = knockoutTemplateForPorra();
+  const thirdAssignments = assignRealThirdPlaceToSlots(template, thirdPlaceByGroup);
+
+  // Resuelve token a nombre de equipo usando clasificaciones simuladas
+  function resolveToken(token, fixtureId, side, winnerMap) {
+    const raw = String(token || '').trim();
+    if (!raw) return '';
+    const directTeam = teamByToken(raw);
+    if (directTeam) return directTeam.name;
+    const groupSeed = raw.match(/^([A-Z]+)([12])$/);
+    if (groupSeed) {
+      const standings = standingsByGroup.get(groupSeed[1]) || [];
+      return standings[Number(groupSeed[2]) - 1]?.team || raw;
+    }
+    const thirdGroups = parseThirdPlaceGroups(raw);
+    if (thirdGroups.length) {
+      return thirdAssignments.get(`${fixtureId}:${side}`) || raw;
+    }
+    const winnerOf = raw.match(/^W:(.+)$/i);
+    if (winnerOf) return winnerMap.get(winnerOf[1].toUpperCase()) || '';
+    return raw;
+  }
+
+  // Para cada ronda knockout, los equipos que llegan a cada etapa
+  const stageTeams = {}; // stageKey → Set of team names
+  const winnerMap = new Map(); // fixture id → winner name
+  const koMatches = knockoutMatches();
+
+  // Agrupa partidos knockout por ronda en orden de KNOCKOUT_STAGE_ORDER
+  const roundKeys = KNOCKOUT_STAGE_ORDER.filter(k => k !== 'champion');
+  for (const stageKey of roundKeys) {
+    const matches = koMatches.filter(m => normalizeKnockoutStageKey(m.round_key) === stageKey);
+    if (!matches.length) continue;
+    const teamsThisRound = new Set();
+    for (const m of matches) {
+      const fid = String(m.match_id || '').toUpperCase();
+      const t1 = resolveToken(m.team1_id ?? m.team1 ?? '', fid, 'home', winnerMap);
+      const t2 = resolveToken(m.team2_id ?? m.team2 ?? '', fid, 'away', winnerMap);
+      if (t1) teamsThisRound.add(knockoutTeamKey(t1));
+      if (t2) teamsThisRound.add(knockoutTeamKey(t2));
+
+      // Si hay resultado real, usa el ganador real; si no, elige aleatoriamente
+      // ponderando por cuántos jugadores eligieron cada equipo en esta ronda
+      const real = matchResult(m);
+      let winner = '';
+      if (real && real.home !== real.away) {
+        winner = real.home > real.away ? teamName(m.team1_id ?? m.team1) : teamName(m.team2_id ?? m.team2);
+      } else if (t1 && t2) {
+        // contar votos de jugadores para cada equipo en esta ronda
+        const votes1 = state.knockoutPicks.filter(p =>
+          normalizeKnockoutStageKey(p.stage) === stageKey &&
+          knockoutTeamKey(p.team) === knockoutTeamKey(t1)
+        ).length;
+        const votes2 = state.knockoutPicks.filter(p =>
+          normalizeKnockoutStageKey(p.stage) === stageKey &&
+          knockoutTeamKey(p.team) === knockoutTeamKey(t2)
+        ).length;
+        const w1 = 1 + votes1, w2 = 1 + votes2;
+        winner = rng() < w1 / (w1 + w2) ? t1 : t2;
+      }
+      if (winner) winnerMap.set(fid, winner);
+    }
+    stageTeams[stageKey] = teamsThisRound;
+  }
+
+  // Campeón: ganador de la final
+  const finalMatch = koMatches.find(m => normalizeKnockoutStageKey(m.round_key) === 'final');
+  let champion = '';
+  if (finalMatch) {
+    const fid = String(finalMatch.match_id || '').toUpperCase();
+    champion = winnerMap.get(fid) || '';
+  }
+
+  return { simResults, standingsByGroup, stageTeams, champion };
+}
+
+// Puntos que un jugador obtendría en una simulación dada
+function scorePlayerInSim(playerId, simResults, stageTeams, champion) {
+  const scoring = scoringConfig();
+  let groupPoints = 0, exacts = 0;
+  for (const m of state.matches.filter(m => m.stage === 'group')) {
+    const result = simResults.get(m.match_id);
+    if (!result) continue;
+    const pred = predictionFor(playerId, m.match_id);
+    if (!pred) continue;
+    const r = scorePrediction({ score: pred.score }, result, scoring);
+    groupPoints += r.points;
+    if (r.exact) exacts++;
+  }
+
+  // Knockout: comparar picks del jugador contra equipos simulados por ronda
+  const koScoring = knockoutScoringConfig();
+  let koPoints = 0;
+  const playerBracket = buildPlayerKnockoutBracket(playerId);
+  for (const stageKey of KNOCKOUT_STAGE_ORDER.filter(k => k !== 'champion')) {
+    const teams = stageTeams[stageKey];
+    if (!teams) continue;
+    const picks = (playerBracket[stageKey] || []).filter(Boolean);
+    const hits = picks.filter(t => teams.has(knockoutTeamKey(t))).length;
+    koPoints += hits * (koScoring[stageKey] || 0);
+  }
+  const champPick = knockoutChampionPick(playerId);
+  if (champion && champPick && knockoutTeamKey(champPick) === knockoutTeamKey(champion)) {
+    koPoints += koScoring.champion || 0;
+  }
+
+  return { total: groupPoints + koPoints, groupPoints, koPoints, exacts };
+}
+
+// Puntos de mini-porra que un jugador obtendría con un resultado simulado de mini
+function scoreMiniInSim(playerId, simMiniResults) {
+  let points = 0, correct = 0;
+  for (const q of state.miniQuestions) {
+    const result = simMiniResults[q.question_id];
+    if (!result) continue;
+    const answer = miniAnswerFor(playerId, q.question_id);
+    const s = scoreMiniAnswer(q, answer, result);
+    points += s.points;
+    if (s.correct) correct++;
+  }
+  return { points, correct };
+}
+
+// Para preguntas mini sin resultado oficial, muestrea la respuesta más votada
+// con algo de variabilidad (no siempre la más común, para que la distribución
+// refleje incertidumbre)
+function sampleMiniResults(rng) {
+  const simMiniResults = {};
+  for (const q of state.miniQuestions) {
+    const official = miniResultFor(q.question_id);
+    if (official) { simMiniResults[q.question_id] = official; continue; }
+    // recoger respuestas de los jugadores
+    const answers = state.miniAnswers
+      .filter(a => a.question_id === q.question_id && a.answer)
+      .map(a => a.answer);
+    if (!answers.length) continue;
+    // muestrear de la distribución de respuestas
+    simMiniResults[q.question_id] = answers[Math.floor(rng() * answers.length)];
+  }
+  return simMiniResults;
+}
+
+const PROB_ITERATIONS = 2000;
+
+function runProbabilitiesSimulation() {
+  const rng = makeLcgRng(20260617);
+  const playerCount = state.players.length;
+  if (!playerCount) return null;
+
+  // Acumuladores
+  const playerTotals = new Map(state.players.map(p => [p.player_id, { sum: 0, wins: 0, exacts: 0 }]));
+  const miniTotals = new Map(state.players.map(p => [p.player_id, { sum: 0, wins: 0 }]));
+  const teamStageProb = new Map(); // teamKey → { r32:0, r16:0, qf:0, sf:0, final:0, champion:0 }
+  for (const t of state.teams) teamStageProb.set(knockoutTeamKey(t.name), { r32: 0, r16: 0, qf: 0, sf: 0, final: 0, champion: 0 });
+
+  const hasMini = state.miniQuestions.length > 0;
+  const pendingMatches = state.matches.filter(m => m.stage === 'group' && !matchResult(m)).length;
+
+  for (let i = 0; i < PROB_ITERATIONS; i++) {
+    const { simResults, stageTeams, champion } = simulateOneTournament(rng);
+    const simMiniResults = hasMini ? sampleMiniResults(rng) : {};
+
+    // Puntuar jugadores
+    let maxTotal = -Infinity, maxMini = -Infinity;
+    const iterScores = new Map();
+    const iterMiniScores = new Map();
+
+    for (const p of state.players) {
+      const s = scorePlayerInSim(p.player_id, simResults, stageTeams, champion);
+      iterScores.set(p.player_id, s);
+      if (s.total > maxTotal) maxTotal = s.total;
+
+      if (hasMini) {
+        const ms = scoreMiniInSim(p.player_id, simMiniResults);
+        iterMiniScores.set(p.player_id, ms);
+        if (ms.points > maxMini) maxMini = ms.points;
+      }
+    }
+
+    // Acumular — ganadores comparten victoria
+    const winners = state.players.filter(p => iterScores.get(p.player_id)?.total === maxTotal);
+    const share = 1 / winners.length;
+    for (const p of state.players) {
+      const s = iterScores.get(p.player_id);
+      const acc = playerTotals.get(p.player_id);
+      acc.sum += s.total;
+      if (s.total === maxTotal) acc.wins += share;
+      acc.exacts += s.exacts;
+    }
+
+    if (hasMini && maxMini > -Infinity) {
+      const miniWinners = state.players.filter(p => iterMiniScores.get(p.player_id)?.points === maxMini);
+      const miniShare = 1 / miniWinners.length;
+      for (const p of state.players) {
+        const ms = iterMiniScores.get(p.player_id);
+        const acc = miniTotals.get(p.player_id);
+        acc.sum += ms.points;
+        if (ms.points === maxMini) acc.wins += miniShare;
+      }
+    }
+
+    // Acumular probabilidades por equipo y ronda
+    for (const [stageKey, teams] of Object.entries(stageTeams)) {
+      for (const teamKey of teams) {
+        if (teamStageProb.has(teamKey)) teamStageProb.get(teamKey)[stageKey] = (teamStageProb.get(teamKey)[stageKey] || 0) + 1;
+      }
+    }
+    if (champion) {
+      const ck = knockoutTeamKey(champion);
+      if (teamStageProb.has(ck)) teamStageProb.get(ck).champion = (teamStageProb.get(ck).champion || 0) + 1;
+    }
+  }
+
+  // Normalizar y construir resultados
+  const currentRanking = computeRanking();
+  const currentById = new Map(currentRanking.map(r => [r.id, r]));
+
+  const players = state.players.map(p => {
+    const acc = playerTotals.get(p.player_id);
+    return {
+      id: p.player_id,
+      name: p.name,
+      winProbability: acc.wins / PROB_ITERATIONS,
+      averagePoints: acc.sum / PROB_ITERATIONS,
+      currentPoints: currentById.get(p.player_id)?.total || 0
+    };
+  }).sort((a, b) => b.winProbability - a.winProbability || b.averagePoints - a.averagePoints);
+
+  const roundStageKeys = KNOCKOUT_STAGE_ORDER.filter(k => k !== 'champion');
+  const teams = [...teamStageProb.entries()]
+    .map(([key, counts]) => {
+      const team = state.teams.find(t => knockoutTeamKey(t.name) === key);
+      if (!team) return null;
+      const entry = { team: team.name, flag: team.flag || '' };
+      for (const k of roundStageKeys) entry[k] = (counts[k] || 0) / PROB_ITERATIONS;
+      entry.champion = (counts.champion || 0) / PROB_ITERATIONS;
+      return entry;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.champion - a.champion);
+
+  const miniPlayers = hasMini
+    ? state.players.map(p => {
+        const acc = miniTotals.get(p.player_id);
+        const miniRow = computeMiniRanking().find(r => r.id === p.player_id);
+        return {
+          id: p.player_id,
+          name: p.name,
+          winProbability: acc.wins / PROB_ITERATIONS,
+          averagePoints: acc.sum / PROB_ITERATIONS,
+          currentPoints: miniRow?.miniPoints || 0
+        };
+      }).sort((a, b) => b.winProbability - a.winProbability || b.averagePoints - a.averagePoints)
+    : [];
+
+  return {
+    players,
+    teams,
+    miniPlayers,
+    meta: {
+      iterations: PROB_ITERATIONS,
+      pendingMatches,
+      resolvedMini: state.miniResults.length
+    }
+  };
+}
+
+function ensureProbabilities() {
+  const key = probabilitiesCacheKey();
+  if (state.probabilitiesCache?.key === key) return state.probabilitiesCache.result;
+  const result = runProbabilitiesSimulation();
+  state.probabilitiesCache = { key, result };
+  return result;
+}
+
+function fmtProb(p) {
+  return `${(Number(p || 0) * 100).toFixed(1)}%`;
+}
+
+function renderProbabilities() {
+  const result = ensureProbabilities();
+  if (!result) {
+    $app.innerHTML = `<div class="panel"><div class="panel-head"><h2>Probabilidades</h2></div><p class="empty-state">No hay participantes todavía.</p></div>`;
+    return;
+  }
+
+  const { players, teams, miniPlayers, meta } = result;
+  const hasMini = miniPlayers.length > 0;
+  const hasKnockout = knockoutMatches().length > 0;
+
+  const MAX_ROWS = 8;
+  const expPlayers = state.probabilitiesExpanded.players;
+  const expTeams = state.probabilitiesExpanded.teams;
+  const expMini = state.probabilitiesExpanded.mini;
+
+  // --- Tabla jugadores porra ---
+  const showPlayers = expPlayers ? players : players.slice(0, MAX_ROWS);
+  const playerRows = showPlayers.map((r, i) => `
+    <tr class="${i < 3 ? 'rank-' + (i + 1) : ''}">
+      <td class="table-center">${i + 1}</td>
+      <td class="standing-team">${esc(r.name)}${r.id === state.myPlayerId ? ' <span class="pill">tú</span>' : ''}</td>
+      <td class="table-center points">${fmtProb(r.winProbability)}</td>
+      <td class="table-center">${r.averagePoints.toFixed(1)}</td>
+      <td class="table-center">${r.currentPoints}</td>
+    </tr>`).join('');
+  const playersToggle = players.length > MAX_ROWS
+    ? `<button class="link-btn" data-action="prob-toggle-players">${expPlayers ? 'Ver menos' : `Ver todos (${players.length})`}</button>` : '';
+
+  // --- Tabla selecciones (solo si hay cruces) ---
+  let teamsCard = '';
+  if (hasKnockout && teams.length) {
+    const roundStages = knockoutRoundStages();
+    const stageCols = roundStages.map(s => `<th class="table-center">${esc(s.label)}</th>`).join('');
+    const showTeams = expTeams ? teams : teams.slice(0, MAX_ROWS);
+    const teamRows = showTeams.map((r, i) => {
+      const stageCells = roundStages.map(s => `<td class="table-center">${fmtProb(r[s.key])}</td>`).join('');
+      return `<tr class="${i < 3 ? 'rank-' + (i + 1) : ''}">
+        <td class="table-center">${i + 1}</td>
+        <td class="standing-team">${r.flag} ${esc(r.team)}</td>
+        ${stageCells}
+        <td class="table-center points">${fmtProb(r.champion)}</td>
+      </tr>`;
+    }).join('');
+    const teamsToggle = teams.length > MAX_ROWS
+      ? `<button class="link-btn" data-action="prob-toggle-teams">${expTeams ? 'Ver menos' : `Ver todas (${teams.length})`}</button>` : '';
+    teamsCard = `
+      <section class="probability-card">
+        <div class="section-head">
+          <h3>Selecciones</h3>
+          <p class="hint">Probabilidad estimada de llegar a cada ronda y de salir campeona.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Selección</th>${stageCols}<th class="table-center">Campeón</th></tr></thead>
+            <tbody>${teamRows}</tbody>
+          </table>
+        </div>
+        <div class="probability-actions">${teamsToggle}</div>
+      </section>`;
+  }
+
+  // --- Tabla mini-porra ---
+  let miniCard = '';
+  if (hasMini) {
+    const showMini = expMini ? miniPlayers : miniPlayers.slice(0, MAX_ROWS);
+    const miniRows = showMini.map((r, i) => `
+      <tr class="${i < 3 ? 'rank-' + (i + 1) : ''}">
+        <td class="table-center">${i + 1}</td>
+        <td class="standing-team">${esc(r.name)}${r.id === state.myPlayerId ? ' <span class="pill">tú</span>' : ''}</td>
+        <td class="table-center points">${fmtProb(r.winProbability)}</td>
+        <td class="table-center">${r.averagePoints.toFixed(1)}</td>
+        <td class="table-center">${r.currentPoints}</td>
+      </tr>`).join('');
+    const miniToggle = miniPlayers.length > MAX_ROWS
+      ? `<button class="link-btn" data-action="prob-toggle-mini">${expMini ? 'Ver menos' : `Ver todos (${miniPlayers.length})`}</button>` : '';
+    miniCard = `
+      <section class="probability-card">
+        <div class="section-head">
+          <h3>Jugadores mini-porra</h3>
+          <p class="hint">Estimación heurística según resultados ya cerrados y preguntas aún abiertas.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Participante</th><th class="table-center">Prob. ganar</th><th class="table-center">Media pts</th><th class="table-center">Pts actuales</th></tr></thead>
+            <tbody>${miniRows}</tbody>
+          </table>
+        </div>
+        <div class="probability-actions">${miniToggle}</div>
+      </section>`;
+  }
+
+  const pendingMiniInfo = hasMini
+    ? ` · ${meta.resolvedMini}/${state.miniQuestions.length} preguntas mini resueltas`
+    : '';
+
+  $app.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Probabilidades</h2>
+          <p class="hint">Simulación Monte Carlo (${meta.iterations.toLocaleString('es')} iteraciones) · ${meta.pendingMatches} partidos pendientes${pendingMiniInfo}</p>
+        </div>
+      </div>
+
+      <article class="info-card probabilities-info">
+        <h3>Cómo se calcula</h3>
+        <ul>
+          <li>Porra principal: se simulan los partidos pendientes usando como base los marcadores pronosticados por los participantes, y en cada simulación se recalcula la clasificación completa.</li>
+          <li>Jugadores porra: el porcentaje mostrado es la frecuencia con la que cada participante termina primero. Si hay empate en cabeza, esa simulación se reparte entre los empatados.</li>
+          ${hasKnockout ? '<li>Selecciones: se estima la probabilidad de llegar a cada ronda y de salir campeona.</li>' : ''}
+          ${hasMini ? '<li>Mini-porra: mezcla resultados ya resueltos con una estimación heurística para las preguntas abiertas, por lo que esta tabla es más orientativa que la de la porra principal.</li>' : ''}
+        </ul>
+      </article>
+
+      <div class="probability-sections">
+        <section class="probability-card">
+          <div class="section-head">
+            <h3>Jugadores porra</h3>
+            <p class="hint">Probabilidad estimada de acabar primero en la porra principal.</p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>#</th><th>Participante</th><th class="table-center">Prob. ganar</th><th class="table-center">Media pts</th><th class="table-center">Pts actuales</th></tr></thead>
+              <tbody>${playerRows || '<tr><td colspan="5" class="empty-state">Sin participantes.</td></tr>'}</tbody>
+            </table>
+          </div>
+          <div class="probability-actions">${playersToggle}</div>
+        </section>
+
+        ${teamsCard}
+        ${miniCard}
+      </div>
+    </div>`;
+}
+
+// ---------------------------------------------------------------------------
 // Acciones
 // ---------------------------------------------------------------------------
 document.addEventListener('click', async (e) => {
@@ -2480,6 +3366,9 @@ document.addEventListener('click', async (e) => {
   if (!action) return;
 
   if (action === 'show-login') { renderLoginForm(); return; }
+  if (action === 'prob-toggle-players') { state.probabilitiesExpanded.players = !state.probabilitiesExpanded.players; renderProbabilities(); return; }
+  if (action === 'prob-toggle-teams') { state.probabilitiesExpanded.teams = !state.probabilitiesExpanded.teams; renderProbabilities(); return; }
+  if (action === 'prob-toggle-mini') { state.probabilitiesExpanded.mini = !state.probabilitiesExpanded.mini; renderProbabilities(); return; }
   if (action === 'logout') {
     await supabase.auth.signOut();
     await refreshSession();
@@ -2542,7 +3431,19 @@ document.addEventListener('change', (e) => {
     state.knockoutPlayerId = knockoutSel.value;
     render();
   }
+
+  const historySel = e.target.closest('[data-action="history-checkpoint"]');
+  if (historySel) { state.historyCheckpointId = historySel.value; renderHistory(); }
 });
+
+document.addEventListener('input', (e) => {
+  const slider = e.target.closest('[data-action="history-slider"]');
+  if (slider) {
+    const snapshots = buildHistoricalSnapshots();
+    const snap = snapshots[Number(slider.value) - 1];
+    if (snap) { state.historyCheckpointId = snap.id; renderHistory(); }
+  }
+}, true);
 
 document.addEventListener('submit', async (e) => {
   if (e.target.matches('[data-mini-answer-form]')) {
