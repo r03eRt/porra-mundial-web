@@ -1392,6 +1392,7 @@ function render() {
     case 'mini': renderMini(); break;
     case 'knockout': renderKnockout(); break;
     case 'bestThirds': renderBestThirds(); break;
+    case 'topScorers': renderTopScorers(); break;
     case 'probabilities': renderProbabilities(); break;
     case 'statistics': renderStatistics(); break;
     default: renderRanking();
@@ -1449,7 +1450,7 @@ const TABS = [
   { key: 'player', label: 'Detalle jugador', ready: true },
   { key: 'teams', label: 'Equipos', ready: true },
   { key: 'bestThirds', label: 'Mejores terceros', ready: true },
-  { key: 'topScorers', label: 'Máximos goleadores', ready: false },
+  { key: 'topScorers', label: 'Máximos goleadores', ready: true },
   { key: 'probabilities', label: 'Probabilidades', ready: true },
   { key: 'statistics', label: 'Estadísticas', ready: true },
   { key: 'compare', label: 'Comparador', ready: false }
@@ -1836,6 +1837,59 @@ function renderBestThirds() {
         <table>
           <thead><tr><th>Pos.</th><th>Selección</th><th>Grupo</th><th>PJ</th><th>GF</th><th>GC</th><th>DG</th><th>Pts</th></tr></thead>
           <tbody>${tableBody}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// --- Máximos goleadores ------------------------------------------------------
+// Agrega los goleadores de `porra_matches.scorers` (el mismo jsonb que alimenta
+// el desplegable "Ver goleadores" de cada partido) en una clasificación global.
+// Cuenta solo goles válidos: ignora los goles en propia puerta, como la legacy.
+function calculateTopScorers() {
+  const scorers = new Map();
+  for (const m of state.matches) {
+    const goals = goalBreakdown(m);
+    if (!goals) continue;
+    for (const [teamToken, events] of [[m.team1, goals.team1], [m.team2, goals.team2]]) {
+      const team = teamName(teamToken);
+      for (const g of events) {
+        if (!g.name || g.ownGoal) continue;
+        const key = `${knockoutTeamKey(g.name)}__${knockoutTeamKey(team)}`;
+        const scorer = scorers.get(key) || { name: g.name, team, goals: 0 };
+        scorer.goals += 1;
+        scorers.set(key, scorer);
+      }
+    }
+  }
+  return [...scorers.values()]
+    .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name, 'es'))
+    .slice(0, 15);
+}
+
+function renderTopScorers() {
+  const scorers = calculateTopScorers();
+  const body = scorers.length
+    ? scorers.map((s, i) => `<tr>
+        <td class="${i === 0 ? 'rank-1' : ''}">${i + 1}</td>
+        <td class="scorer-name">${esc(s.name)}</td>
+        <td class="standing-team">${teamFlag(s.team)} ${esc(s.team)}</td>
+        <td class="points">${s.goals}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="4" class="empty-state">Todavía no hay goleadores registrados.</td></tr>`;
+
+  $app.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Máximos goleadores</h2>
+          <p class="hint">Goleadores registrados por el organizador en los partidos. Los goles en propia puerta no cuentan.</p>
+        </div>
+      </div>
+      <div class="table-wrap top-scorers-table">
+        <table>
+          <thead><tr><th>Pos.</th><th>Jugador</th><th>Selección</th><th>Goles</th></tr></thead>
+          <tbody>${body}</tbody>
         </table>
       </div>
     </div>`;

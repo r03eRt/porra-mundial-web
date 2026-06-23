@@ -121,6 +121,8 @@ tr:hover td{background:#111c33}
 .rank-3 td{background:rgba(205,127,50,.10)}
 .qualified-third td:first-child{border-left:3px solid var(--accent)}
 .best-thirds-table th:not(:nth-child(2)),.best-thirds-table td:not(:nth-child(2)){text-align:center}
+.top-scorers-table th:not(:nth-child(2)),.top-scorers-table td:not(:nth-child(2)){text-align:center}
+.top-scorers-table .scorer-name{text-align:left;font-weight:600}
 .prob-section-title{margin:1.5rem 0 .5rem;font-size:.9rem;text-transform:uppercase;letter-spacing:.05em;color:var(--accent2)}
 .link-btn{background:none;border:none;color:var(--accent);cursor:pointer;font-size:.85rem;padding:.5rem 0;text-decoration:underline}
 .muted{color:var(--muted)}

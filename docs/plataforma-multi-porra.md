@@ -123,8 +123,10 @@ Clasificación de grupos, Detalle de jugador, Equipos, Probabilidades, Comparado
 - Mejores terceros → solo si el torneo clasifica mejores terceros.
 
 **Dependen de datos extra o fuente externa (pestaña activable por porra):**
-- Máximos goleadores → requiere que el admin introduzca goleadores por partido
-  (o fuente automática).
+- Máximos goleadores → ✅ implementada en `public-next` (`calculateTopScorers`/
+  `renderTopScorers`): agrega `porra_matches.scorers` (jsonb que mete el admin por
+  partido) en un ranking global, sin autogoles. Si no hay goleadores cargados,
+  muestra empty-state. La fuente automática por evento se portará más adelante.
 - Estadísticas (rankings jugadores/equipos) → específica de AS; por evento.
 - Tarjeta de directo → específica de AS; por evento.
 
