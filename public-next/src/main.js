@@ -1636,6 +1636,11 @@ function renderRanking() {
   const showKnockout = features.knockout !== false && !state.porra?.scoring?.nationsLeague?.templateId; // Nations League no usa un cuadro único
   const ranking = computeRanking();
   const total = ranking.length;
+  // Variación de posición respecto al estado ANTES del último partido jugado:
+  // el snapshot `length-2` es la clasificación previa al resultado más reciente
+  // (el último snapshot equivale a la clasificación actual). Igual que la legacy.
+  const snapshots = buildHistoricalSnapshots();
+  const previousSnapshot = snapshots.length > 1 ? snapshots[snapshots.length - 2] : null;
   const q = (state.rankingQuery || '').toLowerCase();
   const rows = sortRankingRows(
     ranking.filter(r => r.name.toLowerCase().includes(q)),
@@ -1667,7 +1672,7 @@ function renderRanking() {
         <table>
           <thead>${head}</thead>
           <tbody>${rows.map(r => {
-            const mov = historyPositionChange(r, null); // sin histórico aún → "Se mantiene"
+            const mov = historyPositionChange(r, previousSnapshot);
             const posCell = MEDALS[r.position - 1] || (r.position === total ? '💩' : r.position);
             return `
               <tr class="${r.position <= 3 ? 'rank-' + r.position : ''}">
