@@ -117,17 +117,20 @@ Deno.serve(async req => {
       porra_id?: string;
       email?: string;
       display_name?: string;
+      user_id?: string;   // reutilizar una cuenta de Auth existente directamente
     } | null;
     const porraId = String(body?.porra_id || '').trim();
-    const email = normalizeEmail(String(body?.email || ''));
+    let email = normalizeEmail(String(body?.email || ''));
     const displayName = String(body?.display_name || '').trim();
+    const reuseUserId = String(body?.user_id || '').trim();
 
-    if (!porraId || !email || !displayName) {
+    // Para crear/buscar por email se exige email; para reutilizar basta user_id.
+    if (!porraId || !displayName || (!email && !reuseUserId)) {
       return jsonResponse({ error: 'Faltan datos obligatorios.' }, { status: 400 });
     }
 
-    const { data: userData, error: userError } = await userClient.auth.getUser();
-    if (userError || !userData.user) {
+    const { data: callerData, error: callerError } = await userClient.auth.getUser();
+    if (callerError || !callerData.user) {
       return jsonResponse({ error: 'Debes iniciar sesión.' }, { status: 401 });
     }
 
@@ -137,22 +140,30 @@ Deno.serve(async req => {
       return jsonResponse({ error: 'No puedes modificar esta porra.' }, { status: 403 });
     }
 
-    const [existingByEmail, existingByUserId] = await Promise.all([
-      adminClient.from('porra_players')
-        .select('player_id')
-        .eq('porra_id', porraId)
-        .eq('email', email),
-      adminClient.from('porra_players')
-        .select('player_id')
-        .eq('porra_id', porraId)
-        .eq('user_id', userData.user.id)
-    ]);
-
-    if (existingByEmail.data?.length || existingByUserId.data?.length) {
-      return jsonResponse({ error: 'Ese usuario ya está añadido a esta porra.' }, { status: 409 });
+    // Resolver la cuenta de Auth: por user_id (reutilizar) o por email (crear/enlazar).
+    let user; let created = false; let tempPassword: string | undefined;
+    if (reuseUserId) {
+      const { data: got, error: getErr } = await adminClient.auth.admin.getUserById(reuseUserId);
+      if (getErr || !got?.user) {
+        return jsonResponse({ error: 'No se encontró la cuenta a reutilizar.' }, { status: 404 });
+      }
+      user = got.user;
+      email = normalizeEmail(user.email || email);
+    } else {
+      const fc = await findOrCreateUser(adminClient, email, displayName);
+      user = fc.user; created = fc.created; tempPassword = fc.tempPassword;
     }
 
-    const { user, created, tempPassword } = await findOrCreateUser(adminClient, email, displayName);
+    // No duplicar: comprobar por user_id y por email dentro de esta porra.
+    const [existingByUserId, existingByEmail] = await Promise.all([
+      adminClient.from('porra_players').select('player_id').eq('porra_id', porraId).eq('user_id', user.id),
+      email
+        ? adminClient.from('porra_players').select('player_id').eq('porra_id', porraId).eq('email', email)
+        : Promise.resolve({ data: [] as { player_id: string }[] })
+    ]);
+    if (existingByUserId.data?.length || existingByEmail.data?.length) {
+      return jsonResponse({ error: 'Ese usuario ya está añadido a esta porra.' }, { status: 409 });
+    }
     const playerId = String(user.user_metadata?.player_id || slugify(displayName || email.split('@')[0]) || `player-${crypto.randomUUID().slice(0, 8)}`);
 
     const { data: inserted, error: insertError } = await adminClient

@@ -4,6 +4,12 @@ const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw';
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
+// Base de la web pública (public-next). Cámbialo al desplegar a producción.
+const PUBLIC_SITE_BASE = 'http://localhost:5175';
+function publicPorraUrl(slug) {
+  return `${PUBLIC_SITE_BASE}/p/${encodeURIComponent(slug)}`;
+}
+
 const EVENT_TYPES = [
   { value: 'worldcup', label: 'Mundial' },
   { value: 'euro', label: 'Eurocopa' },
@@ -343,6 +349,7 @@ const state = {
   collapsedSlots: new Set(),
   editingPlayerPasswordId: null, // player_id cuya contraseña se está cambiando
   editingPlayerEmailId: null,    // player_id cuyo email se está cambiando
+  knownPlayers: [],              // jugadores distintos de otras porras (para reutilizar)
   detailError: '',
   error: ''
 };
@@ -1183,6 +1190,36 @@ async function loadDetail(porraId) {
   if (state.editingMiniQuestionId && !state.miniQuestions.find(question => question.question_id === state.editingMiniQuestionId)) {
     state.editingMiniQuestionId = null;
   }
+  await loadKnownPlayers(porraId);
+}
+
+// Jugadores distintos que ya existen en OTRAS porras (por cuenta de Auth = user_id,
+// con email como respaldo) para poder reutilizarlos al añadir. La Edge Function
+// admin-next-add-player los enlaza por user_id (o email), conservando su login.
+async function loadKnownPlayers(currentPorraId) {
+  const { data, error } = await supabase
+    .from('porra_players')
+    .select('porra_id, display_name, name, email, user_id');
+  if (error) { state.knownPlayers = []; return; }
+  // Identidades ya presentes en esta porra (no ofrecer duplicados).
+  const currentUserIds = new Set((state.players || []).map(p => p.user_id).filter(Boolean));
+  const currentEmails = new Set(
+    (state.players || []).map(p => String(p.email || '').toLowerCase()).filter(Boolean)
+  );
+  const byKey = new Map();
+  for (const row of data || []) {
+    const userId = row.user_id || null;
+    const email = String(row.email || '').trim().toLowerCase();
+    const key = userId || (email ? `email:${email}` : null);
+    if (!key) continue;                                 // sin identidad reutilizable
+    if (row.porra_id === currentPorraId) continue;      // ya está en esta porra
+    if (userId && currentUserIds.has(userId)) continue; // ya añadido aquí (por cuenta)
+    if (email && currentEmails.has(email)) continue;    // ya añadido aquí (por email)
+    if (!byKey.has(key)) {
+      byKey.set(key, { userId, email, name: row.display_name || row.name || email || userId });
+    }
+  }
+  state.knownPlayers = [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name, 'es'));
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────────
@@ -1842,7 +1879,10 @@ function renderDetail() {
            </form>`
         : `<h2 style="margin:0">${esc(p.name)} <button type="button" id="renamePorraBtn" class="btn-secondary btn-sm" title="Cambiar nombre">✎</button></h2>`
       }
-      <code class="muted">${esc(p.slug)}</code>
+      <a class="porra-public-link" href="${esc(publicPorraUrl(p.slug))}" target="_blank" rel="noopener" title="Abrir la página pública de la porra">
+        <code class="muted">/p/${esc(p.slug)}</code> ↗
+      </a>
+      <button type="button" id="copyPorraLinkBtn" class="btn-secondary btn-sm" data-link="${esc(publicPorraUrl(p.slug))}" title="Copiar enlace">Copiar enlace</button>
       <span class="status-pill">${esc(porraStatusLabel(p.status))}</span>
       <button type="button" id="advanceStatusBtn" class="btn-secondary" ${nextStatus ? '' : 'disabled'}>
         ${nextStatus ? `Pasar a ${esc(porraStatusLabel(nextStatus).toLowerCase())}` : 'Porra cerrada'}
@@ -1871,10 +1911,23 @@ function renderDetail() {
               <tbody>${playersRows}</tbody>
             </table></div>`
           : `<p class="muted">Sin jugadores todavía.</p>`}
+        ${state.knownPlayers.length ? `
+        <div class="reuse-player-row" style="margin-top:.75rem;display:flex;gap:.5rem;align-items:end;flex-wrap:wrap">
+          <label style="flex:1;min-width:220px">
+            <span class="muted" style="font-size:.85rem;display:block">Reutilizar jugador ya existente (${state.knownPlayers.length})</span>
+            <select id="reusePlayerSelect" style="width:100%;margin-top:.25rem">
+              <option value="">— elegir jugador —</option>
+              ${state.knownPlayers.map((kp, i) =>
+                `<option value="${i}">${esc(kp.name)}${kp.email ? ` · ${esc(kp.email)}` : ''}</option>`).join('')}
+            </select>
+          </label>
+          <button type="button" id="addReusePlayerBtn" class="btn-secondary">+ Añadir seleccionado</button>
+        </div>
+        <p class="muted" style="font-size:.8rem;margin:.35rem 0 0">Conserva su cuenta y contraseña de otras porras.</p>` : ''}
         <form id="addPlayerForm" class="form inline-form" style="margin-top:.75rem">
           <input name="displayName" type="text" placeholder="Nombre visible" required style="flex:1" />
           <input name="email" type="email" placeholder="jugador@correo.com" required style="flex:1" />
-          <button type="submit">+ Añadir jugador</button>
+          <button type="submit">+ Añadir jugador nuevo</button>
         </form>
         <span class="error" id="playerError"></span>
         ${state.playerMessage ? `<span class="muted" id="playerMessage" style="display:block;margin-top:.35rem">${esc(state.playerMessage)}</span>` : ''}
@@ -2072,6 +2125,7 @@ function wireDetail() {
     select.addEventListener('change', () => syncGroupSetupCustomFields(select.closest('.card') || document));
   });
   syncGroupSetupCustomFields();
+
 }
 
 // ── Handlers ───────────────────────────────────────────────────────────────────
@@ -3399,6 +3453,39 @@ async function handleAddPlayer(form) {
   btn.disabled = false;
 }
 
+// Reutiliza un jugador ya existente (de otra porra) seleccionado en el dropdown:
+// lo enlaza a esta porra por user_id (o email) conservando su cuenta/login.
+async function addReusePlayer() {
+  const errorEl = document.getElementById('playerError');
+  const select = document.getElementById('reusePlayerSelect');
+  const btn = document.getElementById('addReusePlayerBtn');
+  if (!select || select.value === '') {
+    if (errorEl) errorEl.textContent = 'Elige un jugador de la lista.';
+    return;
+  }
+  const kp = state.knownPlayers[Number(select.value)];
+  if (!kp) return;
+  if (btn) btn.disabled = true;
+  if (errorEl) errorEl.textContent = '';
+
+  const { data, error } = await supabase.functions.invoke('admin-next-add-player', {
+    body: {
+      porra_id: state.currentPorra.id,
+      user_id: kp.userId || undefined,
+      email: kp.email || undefined,
+      display_name: kp.name
+    }
+  });
+  if (error || data?.error) {
+    if (errorEl) errorEl.textContent = error?.message || data?.error || 'No se pudo añadir el jugador.';
+    if (btn) btn.disabled = false;
+    return;
+  }
+  state.playerMessage = `Jugador reutilizado y enlazado a esta porra: ${kp.name}.`;
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
 async function handleSetPlayerPassword(form) {
   const errorEl = form.querySelector('.pw-error');
   const playerId = form.dataset.id;
@@ -3485,16 +3572,29 @@ async function revertPorraToDraft() {
 async function handleRenamePorra(form) {
   const newName = new FormData(form).get('porraName')?.trim();
   if (!newName || !state.currentPorra) return;
+  // Al cambiar el nombre se regenera el slug a partir de él. El slug es único,
+  // así que si choca con otra porra se le añade un sufijo corto.
+  let newSlug = slugify(newName) || state.currentPorra.slug;
+  if (newSlug !== state.currentPorra.slug) {
+    const { data: clash } = await supabase
+      .from('porras')
+      .select('id')
+      .eq('slug', newSlug)
+      .neq('id', state.currentPorra.id)
+      .maybeSingle();
+    if (clash) newSlug = `${newSlug}-${state.currentPorra.id.slice(0, 4)}`;
+  }
   const { error } = await supabase
     .from('porras')
-    .update({ name: newName })
+    .update({ name: newName, slug: newSlug })
     .eq('id', state.currentPorra.id);
   if (error) { state.detailError = error.message; render(); return; }
   state.currentPorra.name = newName;
+  state.currentPorra.slug = newSlug;
   state.editingPorraName = false;
   // Update in the porras list too
   const idx = state.porras.findIndex(p => p.id === state.currentPorra.id);
-  if (idx !== -1) state.porras[idx].name = newName;
+  if (idx !== -1) { state.porras[idx].name = newName; state.porras[idx].slug = newSlug; }
   render();
 }
 
@@ -3657,6 +3757,13 @@ document.addEventListener('click', e => {
   if (e.target.id === 'advanceStatusBtn')       advancePorraStatus();
   if (e.target.id === 'revertDraftBtn')         revertPorraToDraft();
   if (e.target.id === 'deletePorraBtn')         deletePorra(state.currentPorra?.id);
+  if (e.target.id === 'copyPorraLinkBtn') {
+    const link = e.target.dataset.link;
+    navigator.clipboard?.writeText(link).then(() => {
+      e.target.textContent = '¡Copiado!';
+      setTimeout(() => { e.target.textContent = 'Copiar enlace'; }, 1500);
+    }).catch(() => {});
+  }
   if (e.target.id === 'renamePorraBtn')         { state.editingPorraName = true; render(); }
   if (e.target.id === 'cancelRenamePorraBtn')   { state.editingPorraName = false; render(); }
   if (e.target.id === 'toggleGroupSetupBtn')     toggleGroupSetupCollapsed();
@@ -3668,6 +3775,7 @@ document.addEventListener('click', e => {
   if (e.target.id === 'cancelGroupSetupBtn')     cancelGroupSetup();
   if (e.target.classList.contains('open-porra')) openPorra(e.target.dataset.id);
   if (e.target.classList.contains('delete-porra')) deletePorra(e.target.dataset.id);
+  if (e.target.id === 'addReusePlayerBtn') addReusePlayer();
   if (e.target.classList.contains('del-player')) deletePlayer(e.target.dataset.id);
   if (e.target.classList.contains('set-player-password')) { state.editingPlayerPasswordId = e.target.dataset.id; state.editingPlayerEmailId = null; state.playerMessage = ''; render(); }
   if (e.target.classList.contains('cancel-set-player-password')) { state.editingPlayerPasswordId = null; render(); }

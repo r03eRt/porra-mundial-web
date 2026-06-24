@@ -104,6 +104,8 @@ button:disabled { opacity: 0.6; cursor: default; }
 /* Detail header */
 .detail-header { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .detail-header h2 { flex: 1; }
+.porra-public-link { text-decoration: none; }
+.porra-public-link:hover code { color: var(--accent); }
 .status-pill {
   display: inline-flex;
   align-items: center;
