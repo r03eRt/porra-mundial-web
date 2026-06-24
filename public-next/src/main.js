@@ -942,9 +942,27 @@ function allowedTeamsForChampionSlot(playerId, bracket, finalStageKey) {
   return uniqueTeamList((bracket?.[finalStageKey] || []).filter(Boolean));
 }
 
+// ¿Tiene el jugador ALGÚN dato propio de cruces? O picks explícitos de cruces, o
+// predicciones de grupo (de las que se deriva la primera ronda). Sin nada de esto
+// no debe mostrarse un cuadro derivado de las semillas por defecto: un jugador
+// recién añadido no ha pronosticado nada y su cruce debe salir vacío.
+function playerHasKnockoutInput(playerId) {
+  const hasKnockoutPicks = state.knockoutPicks.some(p => p.player_id === playerId && String(p.team || '').trim());
+  if (hasKnockoutPicks) return true;
+  const hasGroupPredictions = state.predictions.some(p =>
+    p.player_id === playerId && parseScore(p.score));
+  return hasGroupPredictions;
+}
+
 function buildPlayerKnockoutBracket(playerId) {
   const roundStages = knockoutRoundStages();
   if (!roundStages.length) return {};
+  // Jugador sin ningún pronóstico → cuadro vacío (no derivar de semillas por defecto).
+  if (!playerHasKnockoutInput(playerId)) {
+    const empty = {};
+    for (const stage of roundStages) empty[stage.key] = Array.from({ length: stage.teams }, () => '');
+    return empty;
+  }
 
   const bracket = {};
   const standingsByGroup = predictedStandingsByPlayer(playerId);
@@ -2608,8 +2626,9 @@ function renderMini() {
             />
           </div>
           <div class="mini-answer-actions">
-            <button type="submit" class="primary" ${canEditMini ? '' : 'disabled'}>Guardar</button>
-            <button type="button" data-clear-mini-answer="${esc(question.question_id)}" ${canEditMini ? '' : 'disabled'}>Limpiar</button>
+            ${canEditMini ? `
+            <button type="submit" class="primary">Guardar</button>
+            <button type="button" data-clear-mini-answer="${esc(question.question_id)}">Limpiar</button>` : ''}
             <span class="mini-answer-status hint" data-mini-status="${esc(question.question_id)}"></span>
           </div>
         </form>
@@ -2772,10 +2791,10 @@ function renderKnockoutEditorPick(stageKey, slot, active, allowedTeams = []) {
           <option value="${esc(option)}"${option === selected ? ' selected' : ''}>${teamFlag(option) || '🏳️'} ${esc(option)}</option>
         `).join('')}
       </select>
-      <div class="knockout-edit-actions">
-        <button type="button" class="primary" data-save-knockout="${esc(`${stageKey}:${slot}`)}"${disabled}>Guardar</button>
-        <button type="button" data-clear-knockout="${esc(`${stageKey}:${slot}`)}"${disabled}>Limpiar</button>
-      </div>
+      ${knockoutEditOpen() ? `<div class="knockout-edit-actions">
+        <button type="button" class="primary" data-save-knockout="${esc(`${stageKey}:${slot}`)}">Guardar</button>
+        <button type="button" data-clear-knockout="${esc(`${stageKey}:${slot}`)}">Limpiar</button>
+      </div>` : ''}
       <span class="knockout-edit-status hint" data-knockout-status="${esc(`${stageKey}:${slot}`)}"></span>
     </div>
   `;
@@ -3013,6 +3032,41 @@ function renderMyPorra() {
     ? new Date(state.porra.predictions_deadline).toLocaleString('es-ES')
     : 'sin límite';
 
+  // Agrupar por jornada (slot)
+  const bySlot = new Map();
+  for (const m of groupMatches) {
+    const slot = matchdayOf(m);
+    if (!bySlot.has(slot)) bySlot.set(slot, []);
+    bySlot.get(slot).push(m);
+  }
+  const sortedSlots = [...bySlot.keys()].sort((a, b) => Number(a) - Number(b));
+
+  const colspan = open ? 4 : 3;
+  const tableBody = sortedSlots.map(slot => {
+    const slotMatches = bySlot.get(slot);
+    return `
+      <tr class="matchday-header">
+        <td colspan="${colspan}">Jornada ${esc(String(slot))}</td>
+      </tr>
+      ${slotMatches.map(m => {
+        const saved = predictionFor(state.myPlayerId, m.match_id);
+        const val = state.myDraft[m.match_id] ?? (saved ? saved.score : '');
+        return `<tr>
+          <td class="muted" style="font-size:.8rem">${esc(m.group_id || '')}</td>
+          <td>${teamFlag(m.team1)} ${esc(teamName(m.team1))} – ${esc(teamName(m.team2))} ${teamFlag(m.team2)}</td>
+          <td class="table-center"><input class="score-input" data-match="${esc(m.match_id)}"
+               value="${esc(val)}" placeholder="2-1" ${open ? '' : 'disabled'} /></td>
+          ${open ? `<td class="table-center">
+            <div class="row-actions">
+              <button class="primary" data-save-match="${esc(m.match_id)}">Guardar</button>
+              <button data-clear-match="${esc(m.match_id)}">Limpiar</button>
+              <span class="row-status hint" data-status="${esc(m.match_id)}"></span>
+            </div>
+          </td>` : ''}
+        </tr>`;
+      }).join('')}`;
+  }).join('');
+
   $app.innerHTML = `
     <div class="panel">
       <div class="panel-head">
@@ -3024,25 +3078,7 @@ function renderMyPorra() {
       <div class="table-wrap">
         <table>
           <thead><tr><th>Grupo</th><th>Partido</th><th class="table-center">Mi marcador</th>${open ? '<th class="table-center">Acciones</th>' : ''}</tr></thead>
-          <tbody>
-            ${groupMatches.map(m => {
-              const saved = predictionFor(state.myPlayerId, m.match_id);
-              const val = state.myDraft[m.match_id] ?? (saved ? saved.score : '');
-              return `<tr>
-                <td>${esc(m.group_id || '')}</td>
-                <td>${teamFlag(m.team1)} ${esc(teamName(m.team1))} – ${esc(teamName(m.team2))} ${teamFlag(m.team2)}</td>
-                <td class="table-center"><input class="score-input" data-match="${esc(m.match_id)}"
-                     value="${esc(val)}" placeholder="2-1" ${open ? '' : 'disabled'} /></td>
-                ${open ? `<td class="table-center">
-                  <div class="row-actions">
-                    <button class="primary" data-save-match="${esc(m.match_id)}">Guardar</button>
-                    <button data-clear-match="${esc(m.match_id)}">Limpiar</button>
-                    <span class="row-status hint" data-status="${esc(m.match_id)}"></span>
-                  </div>
-                </td>` : ''}
-              </tr>`;
-            }).join('')}
-          </tbody>
+          <tbody>${tableBody}</tbody>
         </table>
       </div>
       ${open ? `<div class="actions"><button data-action="save-mine" class="primary">Guardar todo</button>
