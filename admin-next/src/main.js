@@ -339,7 +339,10 @@ const state = {
   playerSectionCollapsed: false,
   miniSectionCollapsed: false,
   knockoutSectionCollapsed: true,
+  knockoutEditTeams: null,  // match_id del cruce cuyos equipos se están editando inline
   collapsedSlots: new Set(),
+  editingPlayerPasswordId: null, // player_id cuya contraseña se está cambiando
+  editingPlayerEmailId: null,    // player_id cuyo email se está cambiando
   detailError: '',
   error: ''
 };
@@ -624,6 +627,20 @@ function computeAdminGroupStandings(groupId) {
   );
 }
 
+// Devuelve el token (team_id o semilla) del equipo que pasa de ronda en un cruce,
+// o null si aún no está decidido. En empate usa pen_winner (ganador por penaltis).
+function knockoutWinnerToken(match) {
+  if (!match) return null;
+  const result = matchResult(match);
+  if (!result) return null;
+  if (result.home > result.away) return match.team1_id ?? match.team1;
+  if (result.away > result.home) return match.team2_id ?? match.team2;
+  // Empate: decide el ganador por penaltis si está marcado.
+  if (match.pen_winner === 'team1') return match.team1_id ?? match.team1;
+  if (match.pen_winner === 'team2') return match.team2_id ?? match.team2;
+  return null;
+}
+
 function resolveKnockoutSeed(token, seen = new Set()) {
   const raw = String(token || '').trim();
   if (!raw) return '';
@@ -643,9 +660,8 @@ function resolveKnockoutSeed(token, seen = new Set()) {
   if (winnerSeed) {
     const matchId = winnerSeed[1].toUpperCase();
     const match = state.matches.find(item => String(item.match_id || '').toUpperCase() === matchId);
-    const result = matchResult(match);
-    if (!match || !result || result.home === result.away) return raw;
-    const winnerToken = result.home > result.away ? (match.team1_id ?? match.team1) : (match.team2_id ?? match.team2);
+    const winnerToken = knockoutWinnerToken(match);
+    if (!winnerToken) return raw;
     return resolveKnockoutSeed(winnerToken, seen);
   }
 
@@ -656,7 +672,31 @@ function matchTeamLabel(token) {
   const resolved = resolveKnockoutSeed(token);
   const team = teamByToken(resolved);
   if (team) return `${team.flag || flagForTeam(team.name)} ${team.name}`.trim();
-  return knockoutSeedLabel(token) || '—';
+  // Si no es un equipo real, etiqueta el token YA RESUELTO (p.ej. W:R32-1 que en
+  // empate+penaltis resuelve a la semilla 2B → «2º Grupo B»), no el token original.
+  return knockoutSeedLabel(resolved) || knockoutSeedLabel(token) || '—';
+}
+
+// Opciones para el selector de equipo en cada casilla del cuadro de cruces.
+// `currentToken` es lo que hay guardado en team1_id/team2_id: puede ser un
+// team_id real o una semilla (A1, B2, W:R16-1). Si es semilla, se ofrece como
+// opción «Auto» para poder volver a la resolución automática por resultados.
+function knockoutTeamSelectOptions(currentToken, teamOptionsHtml) {
+  const token = String(currentToken || '');
+  const isRealTeam = Boolean(teamByToken(token));  // el token guardado es un equipo fijado a mano
+  // Etiqueta resuelta: si el token ya propaga a un equipo real o a una semilla
+  // concreta (p.ej. W:R32-1 → 2B → «2º Grupo B»), muéstralo en vez del token crudo.
+  const autoLabel = matchTeamLabel(token);
+  // Opción para conservar la semilla/token automático cuando no es un equipo fijo.
+  const autoOption = token && !isRealTeam
+    ? `<option value="${esc(token)}" selected>Auto · ${esc(autoLabel || token)}</option>`
+    : `<option value="">— sin equipo —</option>`;
+  // Marca el equipo real seleccionado si lo hay.
+  const options = teamOptionsHtml.replace(
+    `value="${esc(token)}"`,
+    `value="${esc(token)}" selected`
+  );
+  return `${autoOption}${options}`;
 }
 
 function porraHasTeamName(name, ignoreTeamId = null) {
@@ -1330,10 +1370,15 @@ function renderKnockoutSection(teamOptions = '', knockoutOpts = '', knockoutTemp
     <section class="card mini-section-card">
       <div class="section-collapsible-header">
         <h2>Cruces</h2>
+        <button type="button" id="toggleKnockoutSectionBtn" class="btn-secondary btn-sm">
+          ${state.knockoutSectionCollapsed ? 'Abrir' : 'Contraer'}
+        </button>
       </div>
-      ${genControls}
-      <p class="muted" style="margin-top:1rem">O añade un cruce manualmente:</p>
-      ${addForm}
+      <div class="section-collapsible-body${state.knockoutSectionCollapsed ? ' is-collapsed' : ''}">
+        ${genControls}
+        <p class="muted" style="margin-top:1rem">O añade un cruce manualmente:</p>
+        ${addForm}
+      </div>
     </section>`;
   }
 
@@ -1366,25 +1411,43 @@ function renderKnockoutSection(teamOptions = '', knockoutOpts = '', knockoutTemp
       const team2Id = m.team2_id ?? m.team2;
       const label1 = matchTeamLabel(team1Id);
       const label2 = matchTeamLabel(team2Id);
+      const editing = state.knockoutEditTeams === m.match_id;
       const result = matchResult(m);
+      const isDraw = result && result.home === result.away;
 
-      const won1 = result && result.home > result.away;
-      const won2 = result && result.away > result.home;
+      const won1 = result && (result.home > result.away || (isDraw && m.pen_winner === 'team1'));
+      const won2 = result && (result.away > result.home || (isDraw && m.pen_winner === 'team2'));
 
       const scoreDisplay = result
         ? `<span class="ko-score">${esc(String(result.home))}–${esc(String(result.away))}</span>`
         : `<span class="ko-score ko-score-pending">vs</span>`;
 
+      const teamRows = editing
+        ? `<form class="ko-team-edit-form" data-id="${esc(m.match_id)}">
+            <select name="team1" aria-label="Equipo local">
+              ${knockoutTeamSelectOptions(team1Id, teamOptions)}
+            </select>
+            <select name="team2" aria-label="Equipo visitante">
+              ${knockoutTeamSelectOptions(team2Id, teamOptions)}
+            </select>
+            <div class="ko-team-edit-actions">
+              <button type="submit" class="btn-secondary btn-sm" title="Guardar equipos">✓</button>
+              <button type="button" class="btn-secondary btn-sm ko-cancel-edit-teams" title="Cancelar">✕</button>
+            </div>
+          </form>`
+        : `<div class="ko-team-row${won1 ? ' ko-won' : won2 ? ' ko-lost' : ''}">
+            <span class="ko-team-name">${esc(label1)}</span>
+            ${result ? `<span class="ko-team-score">${esc(String(result.home))}</span>` : ''}
+          </div>
+          <div class="ko-team-row${won2 ? ' ko-won' : won1 ? ' ko-lost' : ''}">
+            <span class="ko-team-name">${esc(label2)}</span>
+            ${result ? `<span class="ko-team-score">${esc(String(result.away))}</span>` : ''}
+          </div>
+          <button type="button" class="ko-edit-teams-btn" data-id="${esc(m.match_id)}" title="Editar equipos">✎</button>`;
+
       return `<div class="ko-slot" style="margin-top:${matchIdx === 0 ? (gapMultiplier - 1) * 28 : (gapMultiplier * 2 - 1) * 28}px" data-match-id="${esc(m.match_id)}">
-        <div class="ko-team-row${won1 ? ' ko-won' : won2 ? ' ko-lost' : ''}">
-          <span class="ko-team-name">${esc(label1)}</span>
-          ${result ? `<span class="ko-team-score">${esc(String(result.home))}</span>` : ''}
-        </div>
-        <div class="ko-team-row${won2 ? ' ko-won' : won1 ? ' ko-lost' : ''}">
-          <span class="ko-team-name">${esc(label2)}</span>
-          ${result ? `<span class="ko-team-score">${esc(String(result.away))}</span>` : ''}
-        </div>
-        <div class="ko-slot-actions">
+        ${teamRows}
+        ${editing ? '' : `<div class="ko-slot-actions">
           <form class="inline-result-form" data-id="${esc(m.match_id)}">
             <input name="home" type="number" min="0" step="1" inputmode="numeric"
               value="${result ? esc(String(result.home)) : ''}" placeholder="–" aria-label="Goles local" />
@@ -1395,6 +1458,11 @@ function renderKnockoutSection(teamOptions = '', knockoutOpts = '', knockoutTemp
             ${result ? `<button type="button" class="btn-secondary btn-sm clear-result" data-id="${esc(m.match_id)}" title="Borrar">✕</button>` : ''}
           </form>
         </div>
+        ${isDraw ? `<div class="ko-pen-row">
+          <span class="ko-pen-label">Empate · pasa por penaltis:</span>
+          <button type="button" class="btn-secondary btn-sm ko-pen-btn${m.pen_winner === 'team1' ? ' ko-pen-active' : ''}" data-id="${esc(m.match_id)}" data-pen="team1" title="${esc(label1)} pasa">${esc(label1)}</button>
+          <button type="button" class="btn-secondary btn-sm ko-pen-btn${m.pen_winner === 'team2' ? ' ko-pen-active' : ''}" data-id="${esc(m.match_id)}" data-pen="team2" title="${esc(label2)} pasa">${esc(label2)}</button>
+        </div>` : ''}`}
       </div>`;
     }).join('');
 
@@ -1409,14 +1477,9 @@ function renderKnockoutSection(teamOptions = '', knockoutOpts = '', knockoutTemp
   let championCol = '';
   if (finalKey) {
     const finalMatch = byRound.get('final')?.[0];
-    const finalResult = finalMatch ? matchResult(finalMatch) : null;
     let championLabel = '—';
-    if (finalMatch && finalResult && finalResult.home !== finalResult.away) {
-      const winnerToken = finalResult.home > finalResult.away
-        ? (finalMatch.team1_id ?? finalMatch.team1)
-        : (finalMatch.team2_id ?? finalMatch.team2);
-      championLabel = matchTeamLabel(winnerToken);
-    }
+    const championToken = knockoutWinnerToken(finalMatch);
+    if (championToken) championLabel = matchTeamLabel(championToken);
     const decided = championLabel !== '—';
     // Vertically center against the single final slot.
     const gapMultiplier = Math.pow(2, sortedRounds.length - 1);
@@ -1463,17 +1526,53 @@ function renderDetail() {
   const orderedTeams = sortedTeams();
   const draft = state.groupSetupDraft || (state.groups.length || state.teams.length ? buildGroupSetupDraftFromState() : null);
   const groupSetupCollapsed = Boolean(draft) && state.groupSetupCollapsed;
+  // La sección «Partidos» solo muestra fase de grupos; los cruces viven en su propia
+  // sección. El contador del header debe reflejar solo los partidos de grupo.
+  const groupMatchCount = state.matches.filter(m => (m.phase ?? m.stage) === 'group').length;
 
-  const playersRows = state.players.map(player => `
+  const playersRows = state.players.map(player => {
+    const editingPw = state.editingPlayerPasswordId === player.player_id;
+    const passwordCell = editingPw
+      ? `<form class="set-player-password-form" data-id="${esc(player.player_id)}">
+          <div class="pw-input-wrap">
+            <input name="password" type="password" placeholder="Nueva contraseña (vacío = generar)" autocomplete="new-password" minlength="6" />
+            <button type="button" class="btn-secondary btn-sm toggle-pw-visibility" title="Mostrar/ocultar">👁</button>
+          </div>
+          <div class="pw-actions">
+            <button type="submit" class="btn-secondary btn-sm" title="Guardar contraseña">✓</button>
+            <button type="button" class="btn-secondary btn-sm cancel-set-player-password" title="Cancelar">✕</button>
+          </div>
+          <span class="error pw-error"></span>
+        </form>`
+      : esc(state.playerTempPasswords[player.player_id] || '—');
+    const editingEmail = state.editingPlayerEmailId === player.player_id;
+    const emailCell = editingEmail
+      ? `<form class="set-player-email-form" data-id="${esc(player.player_id)}">
+          <div class="pw-input-wrap">
+            <input name="email" type="email" value="${esc(player.email ?? '')}" placeholder="nuevo@email" autocomplete="off" required />
+          </div>
+          <div class="pw-actions">
+            <button type="submit" class="btn-secondary btn-sm" title="Guardar email">✓</button>
+            <button type="button" class="btn-secondary btn-sm cancel-set-player-email" title="Cancelar">✕</button>
+          </div>
+          <span class="error pw-error"></span>
+        </form>`
+      : `<span class="player-email-value">${esc(player.email ?? '—')}</span>
+         <button type="button" class="btn-secondary btn-sm set-player-email" data-id="${esc(player.player_id)}" title="Cambiar email">✎</button>`;
+    return `
     <tr>
       <td>${esc(player.display_name ?? player.name ?? player.player_id)}</td>
-      <td>${esc(player.email ?? '—')}</td>
+      <td class="player-email-cell">${emailCell}</td>
       <td><code>${esc(player.player_id)}</code></td>
-      <td>${esc(state.playerTempPasswords[player.player_id] || '—')}</td>
+      <td>${passwordCell}</td>
       <td>${esc(player.joined_at ? new Date(player.joined_at).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : '—')}</td>
-      <td><button type="button" class="btn-danger btn-sm del-player" data-id="${esc(player.player_id)}">✕</button></td>
+      <td class="player-row-actions">
+        <button type="button" class="btn-secondary btn-sm set-player-password" data-id="${esc(player.player_id)}" title="Cambiar contraseña">🔑</button>
+        <button type="button" class="btn-danger btn-sm del-player" data-id="${esc(player.player_id)}" title="Borrar jugador">✕</button>
+      </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   const groupOptions = state.groups.map(g =>
     `<option value="${esc(g.group_id)}">${esc(g.name)}</option>`).join('');
@@ -1784,13 +1883,13 @@ function renderDetail() {
 
     <section class="card match-section-card">
       <div class="match-section-header">
-        <h2>Partidos <span class="muted">(${state.matches.length})</span></h2>
+        <h2>Partidos <span class="muted">(${groupMatchCount})</span></h2>
         <button type="button" id="toggleMatchSectionBtn" class="btn-secondary btn-sm">
           ${state.matchSectionCollapsed ? 'Abrir' : 'Contraer'}
         </button>
       </div>
       <div class="match-section-body${state.matchSectionCollapsed ? ' is-collapsed' : ''}">
-        ${state.matches.length
+        ${groupMatchCount
           ? `<div class="table-wrap"><table class="data-table">
               <thead><tr><th>Jornada</th><th>Fase</th><th>Local</th><th>Visitante</th><th>Resultado</th><th>Fecha</th><th>Orden</th></tr></thead>
               <tbody data-match-dropzone="group">${matchRows}</tbody>
@@ -2544,8 +2643,12 @@ async function handleSetResult(form) {
   const btn = form.querySelector('button[type="submit"]');
   if (btn) btn.disabled = true;
 
+  // Si el nuevo marcador es decisivo, se limpia cualquier ganador por penaltis previo.
+  const update = { result_home: home, result_away: away, score_home: home, score_away: away };
+  if (home !== away) update.pen_winner = null;
+
   const { error } = await supabase.from('porra_matches')
-    .update({ result_home: home, result_away: away, score_home: home, score_away: away })
+    .update(update)
     .eq('porra_id', state.currentPorra.id)
     .eq('match_id', matchId);
 
@@ -2557,7 +2660,7 @@ async function handleSetResult(form) {
 
   // Actualiza state.matches sin recargar todo.
   const match = state.matches.find(m => m.match_id === matchId);
-  if (match) { match.result_home = home; match.result_away = away; match.score_home = home; match.score_away = away; }
+  if (match) { match.result_home = home; match.result_away = away; match.score_home = home; match.score_away = away; if (home !== away) match.pen_winner = null; }
   // Knockout: re-render the whole bracket so the winner propagates to the next round,
   // but keep any other unsaved inputs the user is editing.
   // Group/flat table: surgical patch is enough.
@@ -2566,6 +2669,57 @@ async function handleSetResult(form) {
   } else {
     patchResultCell(matchId);
   }
+}
+
+// Guarda los equipos elegidos manualmente para un cruce. El valor puede ser un
+// team_id real (equipo fijado a mano) o conservar la semilla/token automático.
+async function handleSetKnockoutTeams(form) {
+  const matchId = form.dataset.id;
+  const fd = new FormData(form);
+  const team1 = String(fd.get('team1') || '');
+  const team2 = String(fd.get('team2') || '');
+
+  if (team1 && team2 && team1 === team2) {
+    showFormError(form, 'Los dos equipos deben ser distintos.');
+    return;
+  }
+
+  const btn = form.querySelector('button[type="submit"]');
+  if (btn) btn.disabled = true;
+
+  const { error } = await supabase.from('porra_matches')
+    .update({ team1, team2, team1_id: team1, team2_id: team2 })
+    .eq('porra_id', state.currentPorra.id)
+    .eq('match_id', matchId);
+
+  if (error) {
+    if (btn) btn.disabled = false;
+    showFormError(form, error.message);
+    return;
+  }
+
+  const match = state.matches.find(m => m.match_id === matchId);
+  if (match) { match.team1 = team1; match.team2 = team2; match.team1_id = team1; match.team2_id = team2; }
+  state.knockoutEditTeams = null;
+  // Re-render: los equipos fijados se propagan como ganadores a rondas siguientes.
+  renderPreservingKnockoutInputs();
+}
+
+// Marca (o desmarca, si ya estaba) el ganador por penaltis de un cruce con empate.
+// Propaga el ganador a la ronda siguiente al re-renderizar.
+async function setKnockoutPenWinner(matchId, side) {
+  const match = state.matches.find(m => m.match_id === matchId);
+  if (!match) return;
+  const next = match.pen_winner === side ? null : side;
+
+  const { error } = await supabase.from('porra_matches')
+    .update({ pen_winner: next })
+    .eq('porra_id', state.currentPorra.id)
+    .eq('match_id', matchId);
+  if (error) { state.detailError = error.message; render(); return; }
+
+  match.pen_winner = next;
+  renderPreservingKnockoutInputs();
 }
 
 // Capture unsaved values in every knockout result form, render, then restore them.
@@ -2767,7 +2921,8 @@ function showFormError(form, message) {
 
 async function clearMatchResult(matchId) {
   const { error } = await supabase.from('porra_matches')
-    .update({ result_home: null, result_away: null, score_home: null, score_away: null })
+    // Al borrar el marcador se borra también el ganador por penaltis: ya no aplica.
+    .update({ result_home: null, result_away: null, score_home: null, score_away: null, pen_winner: null })
     .eq('porra_id', state.currentPorra.id)
     .eq('match_id', matchId);
   if (error) {
@@ -2776,7 +2931,7 @@ async function clearMatchResult(matchId) {
     return;
   }
   const match = state.matches.find(m => m.match_id === matchId);
-  if (match) { match.result_home = null; match.result_away = null; match.score_home = null; match.score_away = null; }
+  if (match) { match.result_home = null; match.result_away = null; match.score_home = null; match.score_away = null; match.pen_winner = null; }
   if (match && (match.phase ?? match.stage) !== 'group') {
     renderPreservingKnockoutInputs();
   } else {
@@ -3244,6 +3399,63 @@ async function handleAddPlayer(form) {
   btn.disabled = false;
 }
 
+async function handleSetPlayerPassword(form) {
+  const errorEl = form.querySelector('.pw-error');
+  const playerId = form.dataset.id;
+  const fd = new FormData(form);
+  const password = String(fd.get('password') || '').trim();
+  if (password && password.length < 6) {
+    if (errorEl) errorEl.textContent = 'Mínimo 6 caracteres (o déjalo vacío para generar una).';
+    return;
+  }
+  const btn = form.querySelector('button[type="submit"]');
+  if (btn) btn.disabled = true;
+  if (errorEl) errorEl.textContent = '';
+
+  const { data, error } = await supabase.functions.invoke('admin-next-set-player-password', {
+    body: { porra_id: state.currentPorra.id, player_id: playerId, password }
+  });
+  if (error || data?.error) {
+    if (errorEl) errorEl.textContent = error?.message || data?.error || 'No se pudo cambiar la contraseña.';
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  // Muestra la contraseña resultante (la introducida o la generada) en la columna.
+  if (data?.password) state.playerTempPasswords[playerId] = data.password;
+  state.editingPlayerPasswordId = null;
+  state.playerMessage = `Contraseña actualizada${password ? '' : ` (generada): ${data?.password || ''}`}.`;
+  render();
+}
+
+async function handleSetPlayerEmail(form) {
+  const errorEl = form.querySelector('.pw-error');
+  const playerId = form.dataset.id;
+  const fd = new FormData(form);
+  const email = String(fd.get('email') || '').trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (errorEl) errorEl.textContent = 'Email no válido.';
+    return;
+  }
+  const btn = form.querySelector('button[type="submit"]');
+  if (btn) btn.disabled = true;
+  if (errorEl) errorEl.textContent = '';
+
+  const { data, error } = await supabase.functions.invoke('admin-next-set-player-email', {
+    body: { porra_id: state.currentPorra.id, player_id: playerId, email }
+  });
+  if (error || data?.error) {
+    if (errorEl) errorEl.textContent = error?.message || data?.error || 'No se pudo cambiar el email.';
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  state.editingPlayerEmailId = null;
+  state.playerMessage = `Email actualizado a ${email}.`;
+  await loadDetail(state.currentPorra.id);
+  render();
+}
+
 async function advancePorraStatus() {
   const nextStatus = nextPorraStatus(state.currentPorra?.status);
   if (!nextStatus) return;
@@ -3340,6 +3552,8 @@ document.addEventListener('submit', e => {
   if (e.target.id === 'createForm')   { e.preventDefault(); handleCreate(e.target); }
   if (e.target.id === 'renamePorraForm') { e.preventDefault(); handleRenamePorra(e.target); }
   if (e.target.id === 'addPlayerForm') { e.preventDefault(); handleAddPlayer(e.target); }
+  if (e.target.classList.contains('set-player-password-form')) { e.preventDefault(); handleSetPlayerPassword(e.target); }
+  if (e.target.classList.contains('set-player-email-form')) { e.preventDefault(); handleSetPlayerEmail(e.target); }
   if (e.target.id === 'startGroupSetupForm') { e.preventDefault(); handleStartGroupSetup(e.target); }
   if (e.target.id === 'saveGroupSetupForm') { e.preventDefault(); handleSaveGroupSetup(e.target); }
   if (e.target.id === 'regenerateGroupMatchesForm') { e.preventDefault(); handleGenerateGroupMatches(e.target); }
@@ -3348,6 +3562,7 @@ document.addEventListener('submit', e => {
   if (e.target.classList.contains('edit-team-form')) { e.preventDefault(); handleEditTeam(e.target); }
   if (e.target.classList.contains('edit-match-form')) { e.preventDefault(); handleEditMatch(e.target); }
   if (e.target.classList.contains('inline-result-form')) { e.preventDefault(); handleSetResult(e.target); }
+  if (e.target.classList.contains('ko-team-edit-form')) { e.preventDefault(); handleSetKnockoutTeams(e.target); }
   if (e.target.classList.contains('inline-mini-result-form')) { e.preventDefault(); handleSetMiniResult(e.target); }
   if (e.target.id === 'addMatchForm') { e.preventDefault(); handleAddMatch(e.target); }
   if (e.target.id === 'addKnockoutMatchForm') { e.preventDefault(); handleAddKnockoutMatch(e.target); }
@@ -3454,6 +3669,14 @@ document.addEventListener('click', e => {
   if (e.target.classList.contains('open-porra')) openPorra(e.target.dataset.id);
   if (e.target.classList.contains('delete-porra')) deletePorra(e.target.dataset.id);
   if (e.target.classList.contains('del-player')) deletePlayer(e.target.dataset.id);
+  if (e.target.classList.contains('set-player-password')) { state.editingPlayerPasswordId = e.target.dataset.id; state.editingPlayerEmailId = null; state.playerMessage = ''; render(); }
+  if (e.target.classList.contains('cancel-set-player-password')) { state.editingPlayerPasswordId = null; render(); }
+  if (e.target.classList.contains('set-player-email')) { state.editingPlayerEmailId = e.target.dataset.id; state.editingPlayerPasswordId = null; state.playerMessage = ''; render(); }
+  if (e.target.classList.contains('cancel-set-player-email')) { state.editingPlayerEmailId = null; render(); }
+  if (e.target.classList.contains('toggle-pw-visibility')) {
+    const input = e.target.closest('.pw-input-wrap')?.querySelector('input[name="password"]');
+    if (input) input.type = input.type === 'password' ? 'text' : 'password';
+  }
   if (e.target.classList.contains('edit-match'))  startEditMatch(e.target.dataset.id);
   if (e.target.classList.contains('cancel-edit-match')) cancelEditMatch();
   if (e.target.classList.contains('edit-team'))  startEditTeam(e.target.dataset.id);
@@ -3461,6 +3684,9 @@ document.addEventListener('click', e => {
   if (e.target.classList.contains('del-team'))   deleteTeam(e.target.dataset.id);
   if (e.target.classList.contains('del-group'))  deleteGroup(e.target.dataset.id);
   if (e.target.classList.contains('del-match'))  deleteMatch(e.target.dataset.id);
+  if (e.target.classList.contains('ko-edit-teams-btn')) { state.knockoutEditTeams = e.target.dataset.id; renderPreservingKnockoutInputs(); }
+  if (e.target.classList.contains('ko-cancel-edit-teams')) { state.knockoutEditTeams = null; renderPreservingKnockoutInputs(); }
+  if (e.target.classList.contains('ko-pen-btn')) setKnockoutPenWinner(e.target.dataset.id, e.target.dataset.pen);
   if (e.target.classList.contains('clear-result')) clearMatchResult(e.target.dataset.id);
   if (e.target.classList.contains('clear-mini-result')) clearMiniResult(e.target.dataset.id);
   if (e.target.id === 'resetGroupMatchesBtn')     resetGroupMatches();

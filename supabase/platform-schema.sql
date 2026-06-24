@@ -88,6 +88,8 @@ create table if not exists public.porra_matches (
   kickoff timestamptz,
   result_home int,
   result_away int,
+  pen_winner text                                       -- ganador por penaltis en cruce con empate
+    check (pen_winner is null or pen_winner in ('team1', 'team2')),
   scorers jsonb default '[]'::jsonb,                    -- goleadores opcionales
   position int not null default 0,
   primary key (porra_id, match_id)

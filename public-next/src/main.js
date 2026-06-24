@@ -426,6 +426,43 @@ function computeGroupStandingsByMatches(groupId) {
   );
 }
 
+// ¿Están jugados TODOS los partidos de un grupo? Solo entonces la clasificación
+// (y por tanto las semillas A1/B2…) es "realidad" y no una proyección.
+function groupIsComplete(groupId) {
+  const matches = state.matches.filter(match => match.stage === 'group' && (match.group_id ?? match.group_label) === groupId);
+  if (!matches.length) return false;
+  return matches.every(match => matchResult(match));
+}
+
+// Resuelve un token de cruce a NOMBRE de equipo real SOLO si está realmente
+// decidido: una semilla de grupo (A1/B2) exige que el grupo haya terminado; un
+// token de ganador (W:matchId) exige que ese partido tenga resultado. Devuelve ''
+// mientras no esté decidido, para no puntuar cruces con grupos a medio jugar.
+function knockoutRealityTeamName(token) {
+  const raw = String(token || '').trim();
+  if (!raw) return '';
+  // Equipo real fijado a mano: cuenta directamente.
+  if (teamByToken(raw)) return teamName(raw);
+
+  const seed = parseGroupSeed(raw);
+  if (seed) {
+    if (!groupIsComplete(seed.letter)) return '';
+    return teamName(raw);
+  }
+
+  const winnerSeed = raw.match(/^W:(.+)$/i);
+  if (winnerSeed) {
+    const matchId = winnerSeed[1].toUpperCase();
+    const match = state.matches.find(item => String(item.match_id || '').toUpperCase() === matchId);
+    const winnerToken = knockoutWinnerToken(match);
+    if (!winnerToken) return '';
+    return knockoutRealityTeamName(winnerToken);
+  }
+
+  // Otros placeholders (mejores terceros 3A/B/C…): aún no resolubles → no cuentan.
+  return '';
+}
+
 function computePredictedGroupStandings(playerId, groupId) {
   const matches = state.matches.filter(match => match.stage === 'group' && (match.group_id ?? match.group_label) === groupId);
   const teams = state.teams.filter(team => String(team.group_id ?? '') === String(groupId));
@@ -664,6 +701,19 @@ function knockoutFixtureTeam(match, side) {
   return '';
 }
 
+// Devuelve el token del equipo que pasa de ronda en un cruce, o '' si no está
+// decidido. En empate usa pen_winner (ganador por penaltis) introducido por el admin.
+function knockoutWinnerToken(match) {
+  if (!match) return '';
+  const result = matchResult(match);
+  if (!result) return '';
+  if (result.home > result.away) return match.team1_id ?? match.team1;
+  if (result.away > result.home) return match.team2_id ?? match.team2;
+  if (match.pen_winner === 'team1') return match.team1_id ?? match.team1;
+  if (match.pen_winner === 'team2') return match.team2_id ?? match.team2;
+  return '';
+}
+
 function resolveKnockoutSeed(token, seen = new Set()) {
   const raw = String(token || '').trim();
   if (!raw) return '';
@@ -683,9 +733,8 @@ function resolveKnockoutSeed(token, seen = new Set()) {
   if (winnerSeed) {
     const matchId = winnerSeed[1].toUpperCase();
     const match = state.matches.find(item => String(item.match_id || '').toUpperCase() === matchId);
-    const result = matchResult(match);
-    if (!match || !result || result.home === result.away) return raw;
-    const winnerToken = result.home > result.away ? (match.team1_id ?? match.team1) : (match.team2_id ?? match.team2);
+    const winnerToken = knockoutWinnerToken(match);
+    if (!winnerToken) return raw;
     return resolveKnockoutSeed(winnerToken, seen);
   }
 
@@ -963,12 +1012,10 @@ function knockoutChampionPick(playerId) {
 }
 
 function winnerFromMatch(match) {
-  const result = matchResult(match);
-  if (!result) return '';
   // team1/team2 pueden ser semillas (A1) o ganadores (W:id); resuélvelas a NOMBRE real.
-  if (result.home > result.away) return teamName(match.team1_id ?? match.team1);
-  if (result.away > result.home) return teamName(match.team2_id ?? match.team2);
-  return '';
+  // En empate, knockoutWinnerToken usa pen_winner.
+  const winnerToken = knockoutWinnerToken(match);
+  return winnerToken ? teamName(winnerToken) : '';
 }
 
 function buildKnockoutReality() {
@@ -980,12 +1027,13 @@ function buildKnockoutReality() {
     const teams = new Set();
     for (const match of matches) {
       // Las plantillas guardan semillas (A1, B2) o ganadores (W:matchId) en team1/team2.
-      // Resuélvelas a NOMBRE de equipo real (los pronósticos del jugador se guardan
-      // por nombre, no por team_id) usando los resultados oficiales.
+      // Resuélvelas a NOMBRE de equipo real SOLO si la ronda está realmente decidida
+      // (grupo terminado para semillas, partido con resultado para ganadores): así no
+      // se puntúan cruces mientras la fase de grupos sigue en juego.
       const raw1 = match.team1_id ?? match.team1;
       const raw2 = match.team2_id ?? match.team2;
-      const t1 = raw1 ? teamName(raw1) : '';
-      const t2 = raw2 ? teamName(raw2) : '';
+      const t1 = knockoutRealityTeamName(raw1);
+      const t2 = knockoutRealityTeamName(raw2);
       if (t1) teams.add(knockoutTeamKey(t1));
       if (t2) teams.add(knockoutTeamKey(t2));
     }
@@ -2010,6 +2058,42 @@ function calcRankingFromResults(resultMap) {
     .map((p, i) => ({ ...p, position: i + 1 }));
 }
 
+// ¿Están todos los partidos del grupo en el resultMap del snapshot? (variante de
+// groupIsComplete para el histórico, que solo conoce los resultados hasta ese punto)
+function groupIsCompleteInMap(groupId, resultMap) {
+  const matches = state.matches.filter(match => match.stage === 'group' && (match.group_id ?? match.group_label) === groupId);
+  if (!matches.length) return false;
+  return matches.every(match => resultMap.has(match.match_id));
+}
+
+// Resuelve un token a equipo real respetando solo los resultados del snapshot.
+function knockoutRealityTeamNameFromMap(token, resultMap) {
+  const raw = String(token || '').trim();
+  if (!raw) return '';
+  if (teamByToken(raw)) return teamName(raw);
+  const seed = parseGroupSeed(raw);
+  if (seed) {
+    if (!groupIsCompleteInMap(seed.letter, resultMap)) return '';
+    return teamName(raw);
+  }
+  const winnerSeed = raw.match(/^W:(.+)$/i);
+  if (winnerSeed) {
+    const matchId = winnerSeed[1].toUpperCase();
+    const m = state.matches.find(item => String(item.match_id || '').toUpperCase() === matchId);
+    if (!m) return '';
+    const r = resultMap.get(m.match_id);
+    if (!r) return '';
+    let wt = '';
+    if (r.home > r.away) wt = m.team1_id ?? m.team1;
+    else if (r.away > r.home) wt = m.team2_id ?? m.team2;
+    else if (m.pen_winner === 'team1') wt = m.team1_id ?? m.team1;
+    else if (m.pen_winner === 'team2') wt = m.team2_id ?? m.team2;
+    if (!wt) return '';
+    return knockoutRealityTeamNameFromMap(wt, resultMap);
+  }
+  return '';
+}
+
 // buildKnockoutReality variant that uses a resultMap instead of full state.matches results
 function buildKnockoutRealityFromMap(resultMap) {
   const roundStages = knockoutRoundStages();
@@ -2018,11 +2102,10 @@ function buildKnockoutRealityFromMap(resultMap) {
     const matches = knockoutMatches().filter(m => normalizeKnockoutStageKey(m.round_key) === stage.key);
     const teams = new Set();
     for (const m of matches) {
-      const r = resultMap.get(m.match_id);
       const raw1 = m.team1_id ?? m.team1;
       const raw2 = m.team2_id ?? m.team2;
-      const t1 = raw1 ? teamName(raw1) : '';
-      const t2 = raw2 ? teamName(raw2) : '';
+      const t1 = knockoutRealityTeamNameFromMap(raw1, resultMap);
+      const t2 = knockoutRealityTeamNameFromMap(raw2, resultMap);
       if (t1) teams.add(knockoutTeamKey(t1));
       if (t2) teams.add(knockoutTeamKey(t2));
     }
@@ -2033,10 +2116,8 @@ function buildKnockoutRealityFromMap(resultMap) {
   const finalMatch = knockoutMatches().find(m => normalizeKnockoutStageKey(m.round_key) === 'final');
   let champion = '';
   if (finalMatch) {
-    const r = resultMap.get(finalMatch.match_id);
-    if (r && r.home !== r.away) {
-      champion = teamName(r.home > r.away ? (finalMatch.team1_id ?? finalMatch.team1) : (finalMatch.team2_id ?? finalMatch.team2));
-    }
+    // Campeón = ganador del token del partido final, resuelto solo con el snapshot.
+    champion = knockoutRealityTeamNameFromMap(`W:${finalMatch.match_id}`, resultMap);
   }
   reality.champion = { key: 'champion', label: 'Campeón', points: knockoutScoringConfig().champion,
     expected: 1, resolved: champion ? 1 : 0, complete: Boolean(champion),
@@ -3134,12 +3215,13 @@ function simulateOneTournament(rng) {
       if (t1) teamsThisRound.add(knockoutTeamKey(t1));
       if (t2) teamsThisRound.add(knockoutTeamKey(t2));
 
-      // Si hay resultado real, usa el ganador real; si no, elige aleatoriamente
-      // ponderando por cuántos jugadores eligieron cada equipo en esta ronda
-      const real = matchResult(m);
+      // Si hay resultado real (incluido el ganador por penaltis en empate), usa el
+      // ganador real; si no, elige aleatoriamente ponderando por cuántos jugadores
+      // eligieron cada equipo en esta ronda
+      const realWinnerToken = knockoutWinnerToken(m);
       let winner = '';
-      if (real && real.home !== real.away) {
-        winner = real.home > real.away ? teamName(m.team1_id ?? m.team1) : teamName(m.team2_id ?? m.team2);
+      if (realWinnerToken) {
+        winner = teamName(realWinnerToken);
       } else if (t1 && t2) {
         // contar votos de jugadores para cada equipo en esta ronda
         const votes1 = state.knockoutPicks.filter(p =>
