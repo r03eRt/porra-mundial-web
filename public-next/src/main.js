@@ -3,7 +3,7 @@ import {
   scorePrediction, historyPositionChange,
   calculateBestCurrentStreak, pickNextPendingMatch
 } from '../../src/lib/porra-core.js';
-import { parseScore, normalize, statsCountryFlag, statsCountryLabel } from '../../src/lib/statistics-utils.js';
+import { parseScore, normalize, statsCountryFlag, statsCountryLabel, signFromScore } from '../../src/lib/statistics-utils.js';
 import { calculateTeamStats, TEAM_DETAIL_METRICS } from '../../src/lib/team-stats.js';
 
 const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
@@ -1521,11 +1521,15 @@ function renderSummary() {
 
   const cards = [];
 
+  // helper: atributos que hacen una tarjeta de partido pulsable para abrir el modal de pronósticos
+  const matchCardAttrs = m =>
+    `role="button" tabindex="0" data-match-id="${esc(m.match_id)}" aria-label="Ver pronósticos de ${esc(teamName(m.team1))} contra ${esc(teamName(m.team2))}"`;
+
   // último partido
   if (lastPlayed) {
     const r = matchResult(lastPlayed);
     cards.push(`
-      <article class="card next-match-card last-match-card">
+      <article class="card next-match-card last-match-card summary-match-card" ${matchCardAttrs(lastPlayed)}>
         <b>${teamFlag(lastPlayed.team1)} ${esc(teamName(lastPlayed.team1))}<span class="next-match-separator">-</span>${teamFlag(lastPlayed.team2)} ${esc(teamName(lastPlayed.team2))}</b>
         <strong class="last-match-score">${r.home} - ${r.away}</strong>
         <span>último partido</span>
@@ -1536,7 +1540,7 @@ function renderSummary() {
   // siguiente partido
   if (nextMatch) {
     cards.push(`
-      <article class="card next-match-card">
+      <article class="card next-match-card summary-match-card" ${matchCardAttrs(nextMatch)}>
         <b>${teamFlag(nextMatch.team1)} ${esc(teamName(nextMatch.team1))}<span class="next-match-separator">-</span>${teamFlag(nextMatch.team2)} ${esc(teamName(nextMatch.team2))}</b>
         <span>siguiente partido</span>
         <span class="card-detail">${esc(matchScheduleText(nextMatch))}</span>
@@ -1560,6 +1564,70 @@ function renderSummary() {
     </article>`);
 
   $summary.innerHTML = cards.join('');
+}
+
+// Modal con los pronósticos de todos los jugadores para un partido (puerto del
+// `openMatchPredictions` de la legacy). Se dispara al pulsar las tarjetas de
+// "último partido" / "siguiente partido". El <dialog> se crea bajo demanda.
+function matchPredictionsDialog() {
+  let dialog = document.getElementById('matchPredictionsDialog');
+  if (!dialog) {
+    dialog = document.createElement('dialog');
+    dialog.id = 'matchPredictionsDialog';
+    dialog.className = 'predictions-dialog';
+    dialog.innerHTML = '<div id="matchPredictionsContent"></div>';
+    document.body.appendChild(dialog);
+    // Cerrar al pulsar fuera del contenido (backdrop) o en el botón ×.
+    dialog.addEventListener('click', e => {
+      if (e.target === dialog || e.target.closest('[data-close-predictions]')) dialog.close();
+    });
+  }
+  return dialog;
+}
+
+function openMatchPredictions(matchId) {
+  const match = state.matches.find(m => String(m.match_id) === String(matchId));
+  if (!match) return;
+  const result = matchResult(match);
+  const scoring = scoringConfig();
+  const dialog = matchPredictionsDialog();
+
+  const rows = state.players
+    .map(player => {
+      const pred = predictionFor(player.player_id, match.match_id);
+      const score = result ? scorePrediction({ score: pred?.score }, result, scoring) : null;
+      return { name: player.name, score: pred?.score || '', sign: signFromScore(pred?.score) || '', points: score ? score.points : null };
+    })
+    .sort((a, b) => (b.points ?? -1) - (a.points ?? -1) || a.name.localeCompare(b.name, 'es'));
+
+  const stageLabel = match.stage === 'group' ? `Grupo ${esc(match.group_id || '?')}` : 'Cruce';
+  const body = rows.map(r => `
+    <tr>
+      <td>${esc(r.name)}</td>
+      <td class="prediction-score">${r.score ? esc(r.score) : '—'}</td>
+      <td>${r.sign || '—'}</td>
+      <td class="${r.points ? 'points' : 'muted'}">${r.points == null ? '—' : r.points}</td>
+    </tr>`).join('');
+
+  document.getElementById('matchPredictionsContent').innerHTML = `
+    <div class="predictions-dialog-head">
+      <div>
+        <span class="pill">${stageLabel} · ${esc(match.match_id)}</span>
+        <h2>${teamFlag(match.team1)} ${esc(teamName(match.team1))} - ${esc(teamName(match.team2))} ${teamFlag(match.team2)}</h2>
+        <p class="match-schedule">${esc(matchScheduleText(match))}</p>
+        <p>${result ? `Resultado: ${result.home}-${result.away}` : 'Partido pendiente'}</p>
+        ${result ? renderGoalBreakdown(match) : ''}
+      </div>
+      <button type="button" class="dialog-close" data-close-predictions aria-label="Cerrar">×</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Participante</th><th>Pronóstico</th><th>Quiniela</th><th>Puntos</th></tr></thead>
+        <tbody>${body || '<tr><td colspan="4" class="empty-state">Sin jugadores.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+
+  dialog.showModal();
 }
 
 function renderRanking() {
@@ -3567,6 +3635,9 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  const matchCard = e.target.closest('[data-match-id]');
+  if (matchCard) { openMatchPredictions(matchCard.dataset.matchId); return; }
+
   const teamBtn = e.target.closest('[data-team-select]');
   if (teamBtn) { state.selectedTeamId = teamBtn.dataset.teamSelect; render(); return; }
 
@@ -3635,6 +3706,14 @@ document.addEventListener('click', async (e) => {
     return;
   }
   if (action === 'save-mine') { await saveMine(); return; }
+});
+
+// Accesibilidad: las tarjetas de partido del resumen son `role="button"`,
+// así que Enter/Espacio sobre una enfocada abre el modal de pronósticos.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const matchCard = e.target.closest('[data-match-id]');
+  if (matchCard) { e.preventDefault(); openMatchPredictions(matchCard.dataset.matchId); }
 });
 
 document.addEventListener('input', (e) => {
