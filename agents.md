@@ -53,6 +53,7 @@ El dashboard en `admin-next/` tiene:
 - ✅ Vista de detalle por porra: asistente de fase de grupos, partidos y mini-porra
 - ✅ Vista de detalle por porra: asistente de fase de grupos, jugadores, partidos y mini-porra plegables
 - ✅ Gestión de jugadores: añadir por nombre y email, listar y eliminar; si el email no existe en Auth, el panel crea la cuenta, la enlaza y muestra su contraseña temporal en la tabla
+- ✅ **Reutilizar jugador ya existente**: selector `reusePlayerSelect` + botón «Añadir seleccionado» (`addReusePlayer`) con jugadores distintos de otras porras (`loadKnownPlayers`/`state.knownPlayers`, **dedup por `user_id`**, email de respaldo). `admin-next-add-player` acepta `user_id` y enlaza la cuenta existente sin crear otra (mismo login entre porras). Dedup por `user_id` porque el email suele no estar en `porra_players.email`
 - ✅ **Cambiar contraseña de un jugador**: botón 🔑 por fila → campo de contraseña **ofuscado** (`type="password"` + toggle 👁); vacío = genera una al azar. Edge Function `admin-next-set-player-password` (verifica `pp_owns`, busca `user_id` del jugador, `auth.admin.updateUserById`); `handleSetPlayerPassword`/`state.editingPlayerPasswordId`. Deploy: `npx supabase functions deploy admin-next-set-player-password`
 - ✅ **Cambiar email de un jugador**: botón ✎ en la celda de email → input de email inline. Edge Function `admin-next-set-player-email` (verifica `pp_owns`, actualiza email de Auth con `updateUserById`+`email_confirm` si hay cuenta enlazada y `porra_players.email`; 409 si el email ya existe en Auth); `handleSetPlayerEmail`/`state.editingPlayerEmailId`. Deploy: `npx supabase functions deploy admin-next-set-player-email`
 - ✅ Equipos con bandera ligada desde catálogo, con opción de equipo personalizado
@@ -68,6 +69,7 @@ El dashboard en `admin-next/` tiene:
 - ✅ Edición inline de la fecha de cada partido desde la sección de partidos
 - ✅ Entrada manual del resultado real de cada partido inline (columna «Resultado»; `handleSetResult`/`clearMatchResult` escriben `result_home`/`result_away` + `score_home`/`score_away`). Es el fallback de la fuente automática por API
 - ✅ La porra se puede devolver a borrador desde cualquier estado
+- ✅ **Enlace público en el detalle**: cabecera con link a `/p/<slug>` (abre en pestaña nueva) + botón «Copiar enlace» (`PUBLIC_SITE_BASE`/`publicPorraUrl`). Al **cambiar el nombre** de la porra se **regenera el slug** desde el nombre (`slugify`, sufijo del id si choca); cambia la URL pública
 - ✅ Reordenación por arrastre de las filas de fase de grupos
 - ✅ Estructura de partidos: jornadas, orden manual y fechas
 - ✅ Sección de partidos plegable desde la cabecera, igual que el asistente de grupos
