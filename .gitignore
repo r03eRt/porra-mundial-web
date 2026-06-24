@@ -11,6 +11,14 @@ supabase/backup/
 # Credenciales de Supabase Auth de los jugadores (email + contraseña en claro): privado.
 supabase/player-auth-credentials.txt
 
+# Secretos: service_role key y cualquier .env. NUNCA subir al repo.
+.env
+.env.*
+*.env
+**/.service-role-key
+*service-role*
+*service_role*
+
 # App nueva del dashboard (build y deps locales)
 admin-next/node_modules/
 admin-next/dist/
