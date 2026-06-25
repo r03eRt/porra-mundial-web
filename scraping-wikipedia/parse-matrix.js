@@ -77,8 +77,10 @@ const legacyOut = header + lines.join(',\n') + '\n};\n';
 fs.writeFileSync(path.join(__dirname, '..', 'data', 'third-place-matrix.js'), legacyOut);
 console.log('\n>> Escrito data/third-place-matrix.js (' + Object.keys(matrix).length + ' entradas)');
 
-// admin-next: ES module (export const). Mismo contenido, distinto preámbulo.
+// admin-next y public-next: ES module (export const). Mismo contenido, distinto preámbulo.
 const esHeader = header.replace('window.THIRD_PLACE_MATRIX =', 'export const THIRD_PLACE_MATRIX =');
 const esOut = esHeader + lines.join(',\n') + '\n};\n';
-fs.writeFileSync(path.join(__dirname, '..', 'admin-next', 'src', 'third-place-matrix.js'), esOut);
-console.log('>> Escrito admin-next/src/third-place-matrix.js (' + Object.keys(matrix).length + ' entradas)');
+for (const app of ['admin-next', 'public-next']) {
+  fs.writeFileSync(path.join(__dirname, '..', app, 'src', 'third-place-matrix.js'), esOut);
+  console.log('>> Escrito ' + app + '/src/third-place-matrix.js (' + Object.keys(matrix).length + ' entradas)');
+}

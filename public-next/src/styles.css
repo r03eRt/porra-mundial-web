@@ -32,7 +32,8 @@ main{padding:24px clamp(16px,4vw,56px) 52px}
 .card.next-match-card{text-align:center}
 .card.next-match-card b{font-size:15px;line-height:1.2}
 .last-match-score{display:block;margin:10px 0 4px;color:var(--accent);font-size:28px;line-height:1}
-.last-match-card .last-match-events{margin-top:12px;justify-items:center}
+.last-match-card .last-match-events{margin-top:12px;grid-template-columns:1fr}
+.last-match-card .last-match-events .live-event-chip{width:100%;justify-content:flex-start}
 .next-match-separator{display:block}
 .summary-leader b{font-size:22px}
 .summary-match-card{cursor:pointer;transition:border-color .15s ease,transform .15s ease}

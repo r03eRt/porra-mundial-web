@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { THIRD_PLACE_MATRIX } from './third-place-matrix.js';
 import {
   scorePrediction, historyPositionChange,
   calculateBestCurrentStreak, pickNextPendingMatch
@@ -488,10 +489,60 @@ function groupIsComplete(groupId) {
   return matches.every(match => matchResult(match));
 }
 
+// ---------------------------------------------------------------------------
+// Terceros del Mundial 2026 — matriz oficial FIFA (Anexo C). Misma lógica que la
+// legacy y el admin: la asignación de los 8 mejores terceros a los slots de
+// dieciseisavos sale de THIRD_PLACE_MATRIX (495 combinaciones), no se calcula.
+// ---------------------------------------------------------------------------
+const THIRD_SLOT_BY_GROUPSET = {
+  ABCDF: '1E', CDFGH: '1I', CEFHI: '1A', EHIJK: '1L',
+  BEFIJ: '1D', AEHIJ: '1G', EFGIJ: '1B', DEIJL: '1K'
+};
+
+// Los 8 mejores terceros (uno por grupo) ordenados pts↓/DG↓/GF↓/grupo, con sus
+// nombres de equipo. Cacheado por render. Cada item: { group(letra), team(id), … }.
+let _bestThirdsCache = null;
+function bestThirdsByMatches() {
+  if (_bestThirdsCache) return _bestThirdsCache;
+  const letters = [...new Set(state.groups.map(g => String(g.name)).filter(Boolean))].sort();
+  const thirds = letters.map((letter, groupIndex) => {
+    const st = computeGroupStandingsByMatches(letter);
+    const third = st[2];
+    if (!third) return null;
+    return { group: letter, team: third.team, points: third.pts, goalDifference: third.gf - third.gc, goalsFor: third.gf, groupIndex };
+  }).filter(Boolean);
+  thirds.sort((a, b) =>
+    b.points - a.points || b.goalDifference - a.goalDifference || b.goalsFor - a.goalsFor || a.groupIndex - b.groupIndex
+  );
+  _bestThirdsCache = thirds.slice(0, 8);
+  return _bestThirdsCache;
+}
+function invalidateBestThirdsCache() { _bestThirdsCache = null; }
+
+// Resuelve un token de tercero (3A/B/C/D/F) al team_id que la matriz le asigna.
+// Solo cuando TODOS los grupos han terminado (la combinación de 8 terceros está
+// decidida y existe en la matriz). Devuelve null si aún no.
+function resolveThirdSeed(raw) {
+  const m = raw.match(/^3([A-L](?:\/[A-L])+)$/i);
+  if (!m) return null;
+  const slot = THIRD_SLOT_BY_GROUPSET[m[1].toUpperCase().split('/').sort().join('')];
+  if (!slot) return null;
+  // Todos los grupos deben estar completos para que los terceros sean "realidad".
+  const letters = [...new Set(state.groups.map(g => String(g.name)).filter(Boolean))];
+  if (!letters.length || !letters.every(groupIsComplete)) return null;
+  const best = bestThirdsByMatches();
+  if (best.length !== 8) return null;
+  const entry = THIRD_PLACE_MATRIX[best.map(t => t.group).sort().join('')];
+  if (!entry) return null;
+  const hit = best.find(t => t.group === entry[slot]);
+  return hit ? hit.team : null;
+}
+
 // Resuelve un token de cruce a NOMBRE de equipo real SOLO si está realmente
 // decidido: una semilla de grupo (A1/B2) exige que el grupo haya terminado; un
-// token de ganador (W:matchId) exige que ese partido tenga resultado. Devuelve ''
-// mientras no esté decidido, para no puntuar cruces con grupos a medio jugar.
+// token de ganador (W:matchId) exige que ese partido tenga resultado; un tercero
+// (3A/B/C…) exige que TODOS los grupos hayan terminado (matriz oficial). Devuelve
+// '' mientras no esté decidido, para no puntuar cruces con grupos a medio jugar.
 function knockoutRealityTeamName(token) {
   const raw = String(token || '').trim();
   if (!raw) return '';
@@ -513,7 +564,13 @@ function knockoutRealityTeamName(token) {
     return knockoutRealityTeamName(winnerToken);
   }
 
-  // Otros placeholders (mejores terceros 3A/B/C…): aún no resolubles → no cuentan.
+  // Mejor tercero (3A/B/C…): asignación oficial por la matriz FIFA, solo si TODOS
+  // los grupos han terminado (resolveThirdSeed devuelve null en otro caso).
+  if (/^3[A-L](\/[A-L])+$/i.test(raw)) {
+    const teamId = resolveThirdSeed(raw);
+    return teamId ? teamName(teamId) : '';
+  }
+
   return '';
 }
 
@@ -783,6 +840,12 @@ function resolveKnockoutSeed(token, seen = new Set()) {
     return standings[seed.pos - 1]?.team || raw;
   }
 
+  // Tercero clasificado: asignación oficial por la matriz FIFA (Anexo C).
+  if (/^3[A-L](\/[A-L])+$/i.test(raw)) {
+    const teamId = resolveThirdSeed(raw);
+    return teamId || raw;
+  }
+
   const winnerSeed = raw.match(/^W:(.+)$/i);
   if (winnerSeed) {
     const matchId = winnerSeed[1].toUpperCase();
@@ -1006,6 +1069,69 @@ function playerHasKnockoutInput(playerId) {
   const hasGroupPredictions = state.predictions.some(p =>
     p.player_id === playerId && parseScore(p.score));
   return hasGroupPredictions;
+}
+
+// match_ids que ALIMENTAN un cruce: lee los tokens "W:<match_id>" de sus dos lados.
+// (Octavos W:R32-2 vs W:R32-5 → este cruce lo alimentan R32-2 y R32-5.)
+function knockoutFeedMatchIds(match) {
+  const ids = [];
+  for (const side of ['home', 'away']) {
+    const w = String(knockoutFixtureTeam(match, side) || '').match(/^W:(.+)$/i);
+    if (w) ids.push(w[1].toUpperCase());
+  }
+  return ids;
+}
+
+// Cuadro REAL: el bracket que definen los cruces de la porra (porra_matches), con
+// cada slot resuelto a equipo real (grupos + matriz de terceros + ganadores).
+// Reordena cada ronda siguiendo el ÁRBOL del torneo (de la final hacia atrás) para
+// que los cruces que alimentan al mismo partido siguiente queden adyacentes: así, si
+// Alemania y Francia van primeras, salen colocadas para cruzarse en su ronda. Misma
+// forma que buildPlayerKnockoutBracket: { stageKey: [t1, t2, …] }.
+function buildRealityKnockoutBracket() {
+  const roundStages = knockoutRoundStages();
+  if (!roundStages.length) return {};
+
+  // Partidos por ronda (orden inicial por position/match_id).
+  const byStage = new Map(roundStages.map(s => [s.key, knockoutRoundMatches(s.key)]));
+
+  // Ordenar de la última ronda a la primera: cada ronda hereda el orden que imponen
+  // los feed-ids de la ronda siguiente, ya ordenada.
+  for (let i = roundStages.length - 2; i >= 0; i--) {
+    const nextMatches = byStage.get(roundStages[i + 1].key) || [];
+    const cur = byStage.get(roundStages[i].key) || [];
+    if (!nextMatches.length || !cur.length) continue;
+    const byId = new Map(cur.map(m => [String(m.match_id || '').toUpperCase(), m]));
+    const ordered = [];
+    for (const nm of nextMatches) {
+      for (const feedId of knockoutFeedMatchIds(nm)) {
+        if (byId.has(feedId)) ordered.push(byId.get(feedId));
+      }
+    }
+    // Añadir los que no encajaron (por si algún token no es W:) sin perderlos.
+    for (const m of cur) if (!ordered.includes(m)) ordered.push(m);
+    if (ordered.length === cur.length) byStage.set(roundStages[i].key, ordered);
+  }
+
+  const bracket = {};
+  for (const stage of roundStages) {
+    const matches = byStage.get(stage.key) || [];
+    if (!matches.length) {
+      bracket[stage.key] = Array.from({ length: stage.teams }, () => '');
+      continue;
+    }
+    bracket[stage.key] = matches.flatMap(match => {
+      // knockoutRealityTeamName solo devuelve nombre cuando la plaza está DECIDIDA:
+      // semilla de grupo → grupo completo; tercero → todos los grupos completos;
+      // ganador → cruce con resultado. Si no, '' («Por definir»). Así el cuadro real
+      // no muestra equipos provisionales ni repetidos por clasificaciones a medias.
+      return [
+        knockoutRealityTeamName(knockoutFixtureTeam(match, 'home')),
+        knockoutRealityTeamName(knockoutFixtureTeam(match, 'away'))
+      ];
+    });
+  }
+  return bracket;
 }
 
 function buildPlayerKnockoutBracket(playerId) {
@@ -1485,6 +1611,7 @@ const $session = document.getElementById('session');
 const $tabs = document.getElementById('tabs');
 
 function render() {
+  invalidateBestThirdsCache(); // recalcular terceros con el estado actual
   if (!state.slug) { renderNoSlug(); return; }
   if (!state.porra) { renderNotFound(); return; }
 
@@ -2994,6 +3121,49 @@ function bracketGridStyle(halfRoundCount) {
   return `grid-template-columns:${columns};min-width:${minWidth}`;
 }
 
+// Render de una ronda del CUADRO REAL: solo equipos resueltos, sin puntuación.
+function renderRealityBracketRound(stage, teams, { matchOffset = 0, side = 'left' } = {}) {
+  const matches = [];
+  for (let index = 0; index < teams.length; index += 2) {
+    matches.push(`
+      <article class="bracket-match ${side === 'right' ? 'right-side' : ''}">
+        <span class="bracket-match-number">Cruce ${matchOffset + index / 2 + 1}</span>
+        ${renderBracketTeam(teams[index], teams[index] ? 'correct' : 'pending')}
+        ${renderBracketTeam(teams[index + 1], teams[index + 1] ? 'correct' : 'pending')}
+      </article>
+    `);
+  }
+  return `
+    <section class="bracket-round ${side === 'right' ? 'right-bracket-round' : ''}" style="--matches:${Math.max(matches.length, 1)}">
+      <div class="bracket-round-head">
+        <h3>${esc(stage.label)}</h3>
+      </div>
+      <div class="bracket-matches">${matches.join('')}</div>
+    </section>
+  `;
+}
+
+function renderRealityBracketFinal(finalStage, finalTeams, champion) {
+  return `
+    <section class="bracket-round bracket-final-round" style="--matches:1">
+      <div class="bracket-round-head">
+        <h3>${esc(finalStage.label)}</h3>
+      </div>
+      <div class="bracket-matches">
+        <article class="bracket-match">
+          <span class="bracket-match-number">${esc(finalStage.label)}</span>
+          ${renderBracketTeam(finalTeams[0], finalTeams[0] ? 'correct' : 'pending')}
+          ${renderBracketTeam(finalTeams[1], finalTeams[1] ? 'correct' : 'pending')}
+        </article>
+        <article class="bracket-match champion-card">
+          <span class="trophy" aria-hidden="true">★</span>
+          ${renderBracketTeam(champion, champion ? 'correct' : 'pending')}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
 function renderKnockoutRound(stage, teams, stageScore, { matchOffset = 0, side = 'left' } = {}) {
   const matches = [];
   for (let index = 0; index < teams.length; index += 2) {
@@ -3190,7 +3360,49 @@ function renderKnockout() {
   const ownBracket = state.myPlayerId ? buildPlayerKnockoutBracket(state.myPlayerId) : {};
   const ownFinalTeams = finalStage && state.myPlayerId ? (ownBracket[finalStage.key] || ['', '']) : ['', ''];
 
+  // Cuadro real actual: bracket resuelto con los resultados reales de la porra
+  // (grupos + matriz de terceros + ganadores de cruces).
+  const realBracket = buildRealityKnockoutBracket();
+  const realHasAny = Object.values(realBracket).some(arr => (arr || []).some(t => t));
+  const realFinalTeams = realBracket[finalStage.key] || ['', ''];
+  const realChampion = (() => {
+    const finalMatch = knockoutRoundMatches(finalStage.key)[0];
+    const w = finalMatch ? winnerFromMatch(finalMatch) : '';
+    return w && teamByToken(w) ? teamName(w) : '';
+  })();
+  const realLeftRounds = halfRounds.map(stage => ({
+    stage,
+    teams: (realBracket[stage.key] || []).slice(0, (realBracket[stage.key] || []).length / 2),
+    matchOffset: 0
+  }));
+  const realRightRounds = halfRounds.map(stage => ({
+    stage,
+    teams: (realBracket[stage.key] || []).slice((realBracket[stage.key] || []).length / 2),
+    matchOffset: (realBracket[stage.key] || []).length / 4
+  })).reverse();
+
   $app.innerHTML = `
+    ${realHasAny ? `
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>🏆 Cuadro real</h2>
+          <span class="hint">Según los resultados reales de grupos y cruces.</span>
+        </div>
+      </div>
+      <div class="bracket-wrap">
+        <div class="bracket" style="${bracketGridStyle(halfRounds.length)}">
+          ${realLeftRounds.map(({ stage, teams, matchOffset }) =>
+            renderRealityBracketRound(stage, teams, { matchOffset })
+          ).join('')}
+          ${renderRealityBracketFinal(finalStage, realFinalTeams, realChampion)}
+          ${realRightRounds.map(({ stage, teams, matchOffset }) =>
+            renderRealityBracketRound(stage, teams, { matchOffset, side: 'right' })
+          ).join('')}
+        </div>
+      </div>
+    </div>
+    ` : ''}
     <div class="panel">
       <div class="panel-head">
         <div>
