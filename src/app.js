@@ -1059,6 +1059,17 @@ function buildRealityBracket() {
     }
     const thirdMatch = seed.match(/^3([A-L](?:\/[A-L])+)$/i);
     if (thirdMatch) {
+      // Asignación oficial FIFA: identificar el slot de este token y devolver el
+      // tercero que la matriz pone ahí (sin repetir equipos entre cruces).
+      const groupSet = thirdMatch[1].toUpperCase().split('/').sort().join('');
+      const slot = THIRD_SLOT_BY_GROUPSET[groupSet];
+      const assignments = assignThirdPlacedTeamsToRoundOf32(bestThirds);
+      if (slot && assignments) {
+        const hit = assignments.find(a => a.slot === slot);
+        if (hit?.thirdTeam) return hit.thirdTeam.team || '';
+      }
+      // Fallback (combinación aún no decidida): el mejor tercero de la lista que
+      // pertenezca a esos grupos, como hacía antes.
       const groupList = thirdMatch[1].toUpperCase().split('/');
       const qualifiedThirds = bestThirds.filter(t => groupList.includes(t.group));
       return qualifiedThirds[0]?.team || '';
@@ -2734,11 +2745,69 @@ function calculateAllThirds() {
 
 // Solo los terceros que clasifican (los 8 mejores). Lo usan resolveSeed y el bracket.
 function calculateBestThirds() {
-  return calculateAllThirds().slice(0, BEST_THIRDS_QUALIFY_COUNT);
+  return rankThirdPlacedTeams(calculateAllThirds()).slice(0, BEST_THIRDS_QUALIFY_COUNT);
+}
+
+// ---------------------------------------------------------------------------
+// Terceros del Mundial 2026 — matriz oficial FIFA del Anexo C
+// ---------------------------------------------------------------------------
+// El problema que resuelve: antes cada slot de tercero (3A/B/C/D/F, …) cogía
+// "el mejor tercero de esa lista", lo que repetía el mismo equipo en varios
+// cruces. La asignación oficial NO se calcula: es una tabla de 495 combinaciones
+// (window.THIRD_PLACE_MATRIX, data/third-place-matrix.js) cuya clave es el
+// conjunto de 8 grupos cuyos terceros clasifican.
+
+// Identifica el slot oficial (1A,1B,1D,1E,1G,1I,1K,1L) a partir del conjunto de
+// grupos candidatos de un token de tercero del fixture (p.ej. "A/B/C/D/F" → 1E).
+const THIRD_SLOT_BY_GROUPSET = {
+  'ABCDF': '1E',
+  'CDFGH': '1I',
+  'CEFHI': '1A',
+  'EHIJK': '1L',
+  'BEFIJ': '1D',
+  'AEHIJ': '1G',
+  'EFGIJ': '1B',
+  'DEIJL': '1K'
+};
+
+// Ordena los terceros por: pts ↓, DG ↓, GF ↓, fair play ↓, ranking FIFA ↑.
+// fairPlayScore y fifaRanking pueden no existir en los datos (legacy): si faltan,
+// el último desempate cae al orden alfabético de grupo (groupIndex), como antes.
+function rankThirdPlacedTeams(thirdPlacedTeams) {
+  return [...thirdPlacedTeams].sort((a, b) => {
+    if ((b.points || 0) !== (a.points || 0)) return (b.points || 0) - (a.points || 0);
+    if ((b.goalDifference || 0) !== (a.goalDifference || 0)) return (b.goalDifference || 0) - (a.goalDifference || 0);
+    if ((b.goalsFor || 0) !== (a.goalsFor || 0)) return (b.goalsFor || 0) - (a.goalsFor || 0);
+    const fpA = a.fairPlayScore, fpB = b.fairPlayScore;
+    if (fpA != null && fpB != null && fpB !== fpA) return fpB - fpA;
+    const frA = a.fifaRanking, frB = b.fifaRanking;
+    if (frA != null && frB != null && frA !== frB) return frA - frB;
+    return (a.groupIndex ?? 0) - (b.groupIndex ?? 0);
+  });
+}
+
+// Clave de combinación: los grupos de los 8 mejores terceros, ordenados alfabéticamente.
+function getThirdPlaceCombination(bestThirds) {
+  return bestThirds.map(t => t.group).sort().join('');
+}
+
+// Asigna los 8 mejores terceros a los slots de dieciseisavos según la matriz oficial.
+// Devuelve [{ slot, thirdGroup, thirdTeam }]. Si la combinación no existe, devuelve
+// null (no lanza: la legacy resuelve a medida que se completan grupos y puede haber
+// estados intermedios sin combinación válida todavía).
+function assignThirdPlacedTeamsToRoundOf32(bestThirds) {
+  if (!bestThirds || bestThirds.length !== BEST_THIRDS_QUALIFY_COUNT) return null;
+  const combination = getThirdPlaceCombination(bestThirds);
+  const entry = window.THIRD_PLACE_MATRIX?.[combination];
+  if (!entry) return null;
+  const byGroup = Object.fromEntries(bestThirds.map(t => [t.group, t]));
+  return Object.entries(entry).map(([slot, thirdGroup]) => ({
+    slot, thirdGroup, thirdTeam: byGroup[thirdGroup]
+  }));
 }
 
 function renderBestThirds() {
-  const allThirds = calculateAllThirds();
+  const allThirds = rankThirdPlacedTeams(calculateAllThirds());
   const showAll = state.bestThirdsShowAll;
   const rows = showAll ? allThirds : allThirds.slice(0, BEST_THIRDS_QUALIFY_COUNT);
   const hiddenCount = allThirds.length - BEST_THIRDS_QUALIFY_COUNT;
