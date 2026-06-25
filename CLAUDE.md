@@ -56,8 +56,13 @@ La pestaña **Cruces** de la legacy (`src/app.js`) muestra dos cuadros:
    - **Orden de bracket FIFA 2026**: los cruces de R32 se reordenan siguiendo el árbol del torneo (Final→SF→QF→R16→R32 con `extractFeedNums`) para que los matches que se cruzan en la siguiente ronda estén adyacentes.
    - **Confirmación**: cada equipo muestra ✓ si está confirmado (`isSeedConfirmed`): grupo completo para seeds simples, todos los grupos completos para mejores terceros, o resultado del partido para tokens `W<num>`.
    - **Badge de grupo**: letra del grupo junto al nombre del equipo (`TEAM_GROUP_MAP`).
+   - **Botón toggle**: el cuadro real aparece **colapsado por defecto**; un botón «▼ Mostrar cuadro real / ▲ Ocultar cuadro real» (`.btn-reality-toggle`, id `btnToggleRealityBracket`) controla `state.realityBracketOpen` y re-renderiza con `renderKnockout()`.
    - **Admin: entrada manual de ganadores** (fallback antes de que la API actualice): botones ⬆/⬇ por cruce para marcar quién pasa + ✕ para borrar + «🗑 Resetear ganadores manuales». **Persistido en Supabase** (tabla `knockout_manual_winners`, migración `20260625120000_knockout_manual_winners.sql`) para compartirse entre todos los dispositivos/usuarios; `localStorage` (`state.knockoutManualWinners`, clave `porra.knockoutManualWinners.v1`) queda solo como caché local. `setKnockoutManualWinner`/`clearKnockoutManualWinner`/`resetKnockoutManualWinners` escriben en BD (`upsert`/`delete`); `loadKnockoutManualWinnersFromSupabase()` los carga al arrancar (lectura pública por RLS, escritura `authenticated`). `winnerFromApiMatch()` comprueba el override manual antes del score de la API. Los ganadores manuales propagan a rondas siguientes vía tokens `W<num>`. El cuadro real sigue siendo **derivado**: combina estos overrides con los resultados de la API (`worldcup_results_cache`), no se guarda resuelto.
 2. **Pronóstico del jugador**: selector debajo del cuadro real, puntos por ronda y bracket visual con los picks de cada participante (sin cambios respecto al original).
+
+### App legacy — Mejores terceros
+
+La pestaña **Mejores terceros** muestra por defecto solo los **8 clasificados** (`BEST_THIRDS_QUALIFY_COUNT`). `calculateAllThirds()` devuelve el tercero de cada grupo ordenado por pts/DG/GF/grupo; `calculateBestThirds()` = top-8 (lo usan `resolveSeed`/bracket). `renderBestThirds()` añade un botón **«▼ Mostrar todos (N) / ▲ Mostrar solo los clasificados»** (`#bestThirdsToggle`, `.btn-best-thirds-toggle` en `index.html`) que alterna `state.bestThirdsShowAll`; al expandir, los terceros que no clasifican aparecen sin la clase `qualified-third`.
 
 ## Tablas (plataforma multi-porra, prefijo `porra_`)
 

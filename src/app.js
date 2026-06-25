@@ -101,6 +101,7 @@ const state = {
   apiResults: loadStoredJson(LS_KEYS.apiResults, {}),
   apiFixtures: loadStoredJson(LS_KEYS.apiFixtures, []),
   knockoutManualWinners: loadStoredJson(LS_KEYS.knockoutManualWinners, {}),
+  realityBracketOpen: false,
   playerRankings: null,
   teamRankings: null,
   statsMode: 'players',
@@ -119,6 +120,7 @@ const state = {
   probabilitiesError: '',
   probabilitiesExpanded: { players: false, teams: false, mini: false },
   groupStandingsView: 'actual',
+  bestThirdsShowAll: false,
   matchGoalsExpanded: {},
   compareMatchId: '',
   comparePlayers: [],
@@ -2711,7 +2713,10 @@ function renderGroupStandings() {
   }).join('');
 }
 
-function calculateBestThirds() {
+const BEST_THIRDS_QUALIFY_COUNT = 8;
+
+// Todos los terceros clasificados de cada grupo, ordenados por pts/DG/GF.
+function calculateAllThirds() {
   const groups = [...new Set(DATA.matches.map(match => match.group))].sort();
   return groups
     .map((group, groupIndex) => ({
@@ -2724,18 +2729,25 @@ function calculateBestThirds() {
       || b.goalDifference - a.goalDifference
       || b.goalsFor - a.goalsFor
       || a.groupIndex - b.groupIndex
-    )
-    .slice(0, 8);
+    );
+}
+
+// Solo los terceros que clasifican (los 8 mejores). Lo usan resolveSeed y el bracket.
+function calculateBestThirds() {
+  return calculateAllThirds().slice(0, BEST_THIRDS_QUALIFY_COUNT);
 }
 
 function renderBestThirds() {
-  const bestThirds = calculateBestThirds();
+  const allThirds = calculateAllThirds();
+  const showAll = state.bestThirdsShowAll;
+  const rows = showAll ? allThirds : allThirds.slice(0, BEST_THIRDS_QUALIFY_COUNT);
+  const hiddenCount = allThirds.length - BEST_THIRDS_QUALIFY_COUNT;
   document.getElementById('bestThirdsTable').innerHTML = html`
     <thead>
       <tr><th>Pos.</th><th>Selección</th><th>Grupo</th><th>GF</th><th>GC</th><th>DG</th><th>Pts.</th></tr>
     </thead>
-    <tbody>${bestThirds.map((team, index) => html`
-      <tr class="qualified-third">
+    <tbody>${rows.map((team, index) => html`
+      <tr class="${index < BEST_THIRDS_QUALIFY_COUNT ? 'qualified-third' : ''}">
         <td class="group-position">${index + 1}</td>
         <td class="standing-team">${teamLabel(team.team)}</td>
         <td>${team.group}</td>
@@ -2748,6 +2760,13 @@ function renderBestThirds() {
       </tr>
     `).join('')}</tbody>
   `;
+  const toggle = document.getElementById('bestThirdsToggle');
+  if (toggle) {
+    toggle.hidden = hiddenCount <= 0;
+    toggle.textContent = showAll
+      ? '▲ Mostrar solo los clasificados'
+      : `▼ Mostrar todos (${allThirds.length})`;
+  }
 }
 
 function calculateTopScorers() {
@@ -3099,18 +3118,25 @@ function renderRealityBracket() {
   const hasManualWinners = isAdmin() && Object.keys(state.knockoutManualWinners).length > 0;
 
   document.getElementById('knockoutRealityBracket').innerHTML = html`
-    <details class="reality-bracket-details" open>
-      <summary class="bracket-title reality-title">
-        <span>🏆 Cuadro real</span>
-        <small>Según clasificación de grupos y resultados</small>
-      </summary>
-      ${hasManualWinners ? '<button class="btn-reset-knockout" id="resetKnockoutManual">🗑 Resetear ganadores manuales</button>' : ''}
-      <div class="bracket">
-        ${leftRounds.map(({ stage, teams, confirmed, nums, matchOffset }) => renderRealityBracketRound(stage, teams, confirmed, nums, neutralScores[stage], { matchOffset })).join('')}
-        ${renderRealityFinalRound(realBracket.FINAL, realChampion, realConfirmed.FINAL, matchNums.FINAL || [], neutralScores.FINAL, championNeutral)}
-        ${rightRounds.map(({ stage, teams, confirmed, nums, matchOffset }) => renderRealityBracketRound(stage, teams, confirmed, nums, neutralScores[stage], { matchOffset, side: 'right' })).join('')}
+    <div class="reality-bracket-toggle-wrap">
+      <button class="btn-reality-toggle" id="btnToggleRealityBracket">
+        ${state.realityBracketOpen ? '▲ Ocultar cuadro real' : '▼ Mostrar cuadro real'}
+      </button>
+    </div>
+    ${state.realityBracketOpen ? html`
+      <div class="reality-bracket-open">
+        <div class="reality-bracket-header">
+          <span class="reality-bracket-title">🏆 Cuadro real</span>
+          <small class="reality-bracket-sub">Según clasificación de grupos y resultados</small>
+        </div>
+        ${hasManualWinners ? '<button class="btn-reset-knockout" id="resetKnockoutManual">🗑 Resetear ganadores manuales</button>' : ''}
+        <div class="bracket">
+          ${leftRounds.map(({ stage, teams, confirmed, nums, matchOffset }) => renderRealityBracketRound(stage, teams, confirmed, nums, neutralScores[stage], { matchOffset })).join('')}
+          ${renderRealityFinalRound(realBracket.FINAL, realChampion, realConfirmed.FINAL, matchNums.FINAL || [], neutralScores.FINAL, championNeutral)}
+          ${rightRounds.map(({ stage, teams, confirmed, nums, matchOffset }) => renderRealityBracketRound(stage, teams, confirmed, nums, neutralScores[stage], { matchOffset, side: 'right' })).join('')}
+        </div>
       </div>
-    </details>
+    ` : ''}
   `;
 }
 
@@ -4406,6 +4432,16 @@ document.addEventListener('click', e => {
   if (clearBtn) {
     const matchNum = clearBtn.dataset.knockoutClear;
     clearKnockoutManualWinner(matchNum);
+    return;
+  }
+  if (e.target.id === 'btnToggleRealityBracket') {
+    state.realityBracketOpen = !state.realityBracketOpen;
+    renderKnockout();
+    return;
+  }
+  if (e.target.id === 'bestThirdsToggle') {
+    state.bestThirdsShowAll = !state.bestThirdsShowAll;
+    renderBestThirds();
     return;
   }
   if (e.target.id === 'resetKnockoutManual') {
