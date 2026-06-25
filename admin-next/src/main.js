@@ -1230,6 +1230,173 @@ function knockoutMatchesExist() {
   return state.matches.some(match => (match.phase ?? match.stage) !== 'group');
 }
 
+function knockoutRoundLabel(roundKey) {
+  return KNOCKOUT_ROUNDS.find(round => round.key === roundKey)?.label ?? roundKey ?? '—';
+}
+
+function knockoutFeedMatchIds(match) {
+  const ids = [];
+  for (const token of [match?.team1_id ?? match?.team1, match?.team2_id ?? match?.team2]) {
+    const winnerRef = String(token || '').trim().match(/^W:(.+)$/i);
+    if (winnerRef) ids.push(winnerRef[1].toUpperCase());
+  }
+  return ids;
+}
+
+function orderedKnockoutMatchesByRound(knockoutMatches) {
+  const roundOrder = KNOCKOUT_ROUNDS.map(round => round.key);
+  const byRound = new Map();
+  for (const match of knockoutMatches) {
+    const roundKey = String(match.round_key ?? match.phase ?? '').trim().toLowerCase();
+    if (!roundKey) continue;
+    if (!byRound.has(roundKey)) byRound.set(roundKey, []);
+    byRound.get(roundKey).push(match);
+  }
+
+  const sortedRounds = [...byRound.keys()].sort((a, b) => {
+    const ia = roundOrder.indexOf(a);
+    const ib = roundOrder.indexOf(b);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
+
+  for (let index = sortedRounds.length - 2; index >= 0; index -= 1) {
+    const currentKey = sortedRounds[index];
+    const nextKey = sortedRounds[index + 1];
+    const currentMatches = byRound.get(currentKey) || [];
+    const nextMatches = byRound.get(nextKey) || [];
+    if (!currentMatches.length || !nextMatches.length) continue;
+
+    const byId = new Map(currentMatches.map(match => [
+      String(match.match_id || '').toUpperCase(),
+      match
+    ]));
+    const ordered = [];
+    for (const nextMatch of nextMatches) {
+      for (const feedId of knockoutFeedMatchIds(nextMatch)) {
+        const fedMatch = byId.get(feedId);
+        if (fedMatch && !ordered.includes(fedMatch)) ordered.push(fedMatch);
+      }
+    }
+    for (const match of currentMatches) {
+      if (!ordered.includes(match)) ordered.push(match);
+    }
+    if (ordered.length === currentMatches.length) byRound.set(currentKey, ordered);
+  }
+
+  return { byRound, sortedRounds };
+}
+
+function adminKnockoutBracketGridStyle(halfRoundCount) {
+  const columns = halfRoundCount > 0
+    ? `repeat(${halfRoundCount}, 220px) 240px repeat(${halfRoundCount}, 220px)`
+    : '240px';
+  const minWidth = halfRoundCount > 0
+    ? `${240 + (halfRoundCount * 2 * 220) + (halfRoundCount * 2 * 28)}px`
+    : '240px';
+  return `grid-template-columns:${columns};min-width:${minWidth}`;
+}
+
+function renderAdminKnockoutMatchCard(match, teamOptions = '') {
+  const team1Id = match.team1_id ?? match.team1;
+  const team2Id = match.team2_id ?? match.team2;
+  const label1 = matchTeamLabel(team1Id);
+  const label2 = matchTeamLabel(team2Id);
+  const editing = state.knockoutEditTeams === match.match_id;
+  const result = matchResult(match);
+  const isDraw = result && result.home === result.away;
+  const won1 = result && (result.home > result.away || (isDraw && match.pen_winner === 'team1'));
+  const won2 = result && (result.away > result.home || (isDraw && match.pen_winner === 'team2'));
+
+  const teamRows = editing
+    ? `<form class="ko-team-edit-form" data-id="${esc(match.match_id)}">
+        <select name="team1" aria-label="Equipo local">
+          ${knockoutTeamSelectOptions(team1Id, teamOptions)}
+        </select>
+        <select name="team2" aria-label="Equipo visitante">
+          ${knockoutTeamSelectOptions(team2Id, teamOptions)}
+        </select>
+        <div class="ko-team-edit-actions">
+          <button type="submit" class="btn-secondary btn-sm" title="Guardar equipos">✓</button>
+          <button type="button" class="btn-secondary btn-sm ko-cancel-edit-teams" title="Cancelar">✕</button>
+        </div>
+      </form>`
+    : `<div class="ko-team-row${won1 ? ' ko-won' : won2 ? ' ko-lost' : ''}">
+        <span class="ko-team-name">${esc(label1)}</span>
+        ${result ? `<span class="ko-team-score">${esc(String(result.home))}</span>` : ''}
+      </div>
+      <div class="ko-team-row${won2 ? ' ko-won' : won1 ? ' ko-lost' : ''}">
+        <span class="ko-team-name">${esc(label2)}</span>
+        ${result ? `<span class="ko-team-score">${esc(String(result.away))}</span>` : ''}
+      </div>
+      <button type="button" class="ko-edit-teams-btn" data-id="${esc(match.match_id)}" title="Editar equipos">✎</button>`;
+
+  return `
+    ${teamRows}
+    ${editing ? '' : `<div class="ko-slot-actions">
+      <form class="inline-result-form" data-id="${esc(match.match_id)}">
+        <input name="home" type="number" min="0" step="1" inputmode="numeric"
+          value="${result ? esc(String(result.home)) : ''}" placeholder="–" aria-label="Goles local" />
+        <span class="result-sep">-</span>
+        <input name="away" type="number" min="0" step="1" inputmode="numeric"
+          value="${result ? esc(String(result.away)) : ''}" placeholder="–" aria-label="Goles visitante" />
+        <button type="submit" class="btn-secondary btn-sm" title="Guardar">✓</button>
+        ${result ? `<button type="button" class="btn-secondary btn-sm clear-result" data-id="${esc(match.match_id)}" title="Borrar">✕</button>` : ''}
+      </form>
+    </div>
+    ${isDraw ? `<div class="ko-pen-row">
+      <span class="ko-pen-label">Empate · pasa por penaltis:</span>
+      <button type="button" class="btn-secondary btn-sm ko-pen-btn${match.pen_winner === 'team1' ? ' ko-pen-active' : ''}" data-id="${esc(match.match_id)}" data-pen="team1" title="${esc(label1)} pasa">${esc(label1)}</button>
+      <button type="button" class="btn-secondary btn-sm ko-pen-btn${match.pen_winner === 'team2' ? ' ko-pen-active' : ''}" data-id="${esc(match.match_id)}" data-pen="team2" title="${esc(label2)} pasa">${esc(label2)}</button>
+    </div>` : ''}`}
+  `;
+}
+
+function renderAdminKnockoutRound(roundKey, matches, teamOptions = '', { side = 'left', matchOffset = 0 } = {}) {
+  const cards = matches.map((match, index) => `
+    <article class="ko-slot ko-bracket-match ${side === 'right' ? 'ko-right-bracket-match' : ''}" data-match-id="${esc(match.match_id)}">
+      <span class="ko-bracket-match-number">Cruce ${matchOffset + index + 1}</span>
+      ${renderAdminKnockoutMatchCard(match, teamOptions)}
+    </article>
+  `).join('');
+
+  return `
+    <section class="ko-bracket-round ${side === 'right' ? 'ko-right-bracket-round' : ''}" style="--matches:${Math.max(matches.length, 1)}">
+      <div class="ko-bracket-round-head">
+        <h3>${esc(knockoutRoundLabel(roundKey))}</h3>
+        <span>${matches.length} cruce${matches.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="ko-bracket-round-matches">${cards}</div>
+    </section>
+  `;
+}
+
+function renderAdminKnockoutFinal(finalMatch, teamOptions = '') {
+  const championToken = knockoutWinnerToken(finalMatch);
+  const championLabel = championToken ? matchTeamLabel(championToken) : '—';
+  const decided = championLabel !== '—';
+
+  return `
+    <section class="ko-bracket-round ko-bracket-final-round">
+      <div class="ko-bracket-round-head">
+        <h3>Final</h3>
+        <span>1 cruce + campeón</span>
+      </div>
+      <div class="ko-bracket-round-matches">
+        <article class="ko-slot ko-bracket-match" data-match-id="${esc(finalMatch.match_id)}">
+          <span class="ko-bracket-match-number">Final</span>
+          ${renderAdminKnockoutMatchCard(finalMatch, teamOptions)}
+        </article>
+        <article class="ko-slot ko-bracket-match ko-champion-slot">
+          <span class="ko-bracket-match-number">🏆 Campeón</span>
+          <div class="ko-team-row${decided ? ' ko-won' : ''}">
+            <span class="ko-team-name">${esc(championLabel)}</span>
+          </div>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
 // ── Data loaders ───────────────────────────────────────────────────────────────
 
 async function loadPorras() {
@@ -1506,118 +1673,41 @@ function renderKnockoutSection(teamOptions = '', knockoutOpts = '', knockoutTemp
     </section>`;
   }
 
-  // Group by round in KNOCKOUT_ROUNDS order
-  const roundOrder = KNOCKOUT_ROUNDS.map(r => r.key);
-  const byRound = new Map();
-  for (const m of knockoutMatches) {
-    const rk = m.round_key ?? m.phase ?? '—';
-    if (!byRound.has(rk)) byRound.set(rk, []);
-    byRound.get(rk).push(m);
-  }
-  const sortedRounds = [...byRound.keys()].sort((a, b) => {
-    const ia = roundOrder.indexOf(a);
-    const ib = roundOrder.indexOf(b);
-    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  const { byRound, sortedRounds } = orderedKnockoutMatchesByRound(knockoutMatches);
+  const finalMatch = (byRound.get('final') || [])[0] || null;
+  const halfRounds = sortedRounds.filter(roundKey => roundKey !== 'final');
+  const leftRounds = halfRounds.map(roundKey => {
+    const matches = byRound.get(roundKey) || [];
+    return {
+      roundKey,
+      matches: matches.slice(0, Math.ceil(matches.length / 2)),
+      matchOffset: 0
+    };
   });
+  const rightRounds = halfRounds.map(roundKey => {
+    const matches = byRound.get(roundKey) || [];
+    return {
+      roundKey,
+      matches: matches.slice(Math.ceil(matches.length / 2)),
+      matchOffset: Math.ceil(matches.length / 2)
+    };
+  }).reverse();
 
-  // Build visual bracket: each round is a column, each match is a slot
-  // Slots are vertically distributed so they align naturally (2× spacing each round)
-  const firstRoundCount = byRound.get(sortedRounds[0])?.length ?? 1;
-
-  const bracketCols = sortedRounds.map((rk, colIdx) => {
-    const label = KNOCKOUT_ROUNDS.find(r => r.key === rk)?.label ?? rk;
-    const matches = byRound.get(rk);
-    // Each successive round has 2× the vertical spacing between matches
-    const gapMultiplier = Math.pow(2, colIdx);
-
-    const matchSlots = matches.map((m, matchIdx) => {
-      const team1Id = m.team1_id ?? m.team1;
-      const team2Id = m.team2_id ?? m.team2;
-      const label1 = matchTeamLabel(team1Id);
-      const label2 = matchTeamLabel(team2Id);
-      const editing = state.knockoutEditTeams === m.match_id;
-      const result = matchResult(m);
-      const isDraw = result && result.home === result.away;
-
-      const won1 = result && (result.home > result.away || (isDraw && m.pen_winner === 'team1'));
-      const won2 = result && (result.away > result.home || (isDraw && m.pen_winner === 'team2'));
-
-      const scoreDisplay = result
-        ? `<span class="ko-score">${esc(String(result.home))}–${esc(String(result.away))}</span>`
-        : `<span class="ko-score ko-score-pending">vs</span>`;
-
-      const teamRows = editing
-        ? `<form class="ko-team-edit-form" data-id="${esc(m.match_id)}">
-            <select name="team1" aria-label="Equipo local">
-              ${knockoutTeamSelectOptions(team1Id, teamOptions)}
-            </select>
-            <select name="team2" aria-label="Equipo visitante">
-              ${knockoutTeamSelectOptions(team2Id, teamOptions)}
-            </select>
-            <div class="ko-team-edit-actions">
-              <button type="submit" class="btn-secondary btn-sm" title="Guardar equipos">✓</button>
-              <button type="button" class="btn-secondary btn-sm ko-cancel-edit-teams" title="Cancelar">✕</button>
-            </div>
-          </form>`
-        : `<div class="ko-team-row${won1 ? ' ko-won' : won2 ? ' ko-lost' : ''}">
-            <span class="ko-team-name">${esc(label1)}</span>
-            ${result ? `<span class="ko-team-score">${esc(String(result.home))}</span>` : ''}
-          </div>
-          <div class="ko-team-row${won2 ? ' ko-won' : won1 ? ' ko-lost' : ''}">
-            <span class="ko-team-name">${esc(label2)}</span>
-            ${result ? `<span class="ko-team-score">${esc(String(result.away))}</span>` : ''}
-          </div>
-          <button type="button" class="ko-edit-teams-btn" data-id="${esc(m.match_id)}" title="Editar equipos">✎</button>`;
-
-      return `<div class="ko-slot" style="margin-top:${matchIdx === 0 ? (gapMultiplier - 1) * 28 : (gapMultiplier * 2 - 1) * 28}px" data-match-id="${esc(m.match_id)}">
-        ${teamRows}
-        ${editing ? '' : `<div class="ko-slot-actions">
-          <form class="inline-result-form" data-id="${esc(m.match_id)}">
-            <input name="home" type="number" min="0" step="1" inputmode="numeric"
-              value="${result ? esc(String(result.home)) : ''}" placeholder="–" aria-label="Goles local" />
-            <span class="result-sep">-</span>
-            <input name="away" type="number" min="0" step="1" inputmode="numeric"
-              value="${result ? esc(String(result.away)) : ''}" placeholder="–" aria-label="Goles visitante" />
-            <button type="submit" class="btn-secondary btn-sm" title="Guardar">✓</button>
-            ${result ? `<button type="button" class="btn-secondary btn-sm clear-result" data-id="${esc(m.match_id)}" title="Borrar">✕</button>` : ''}
-          </form>
-        </div>
-        ${isDraw ? `<div class="ko-pen-row">
-          <span class="ko-pen-label">Empate · pasa por penaltis:</span>
-          <button type="button" class="btn-secondary btn-sm ko-pen-btn${m.pen_winner === 'team1' ? ' ko-pen-active' : ''}" data-id="${esc(m.match_id)}" data-pen="team1" title="${esc(label1)} pasa">${esc(label1)}</button>
-          <button type="button" class="btn-secondary btn-sm ko-pen-btn${m.pen_winner === 'team2' ? ' ko-pen-active' : ''}" data-id="${esc(m.match_id)}" data-pen="team2" title="${esc(label2)} pasa">${esc(label2)}</button>
-        </div>` : ''}`}
+  const bracketVisual = finalMatch
+    ? `<div class="ko-bracket-grid" style="${adminKnockoutBracketGridStyle(leftRounds.length)}">
+        ${leftRounds.map(({ roundKey, matches, matchOffset }) =>
+          renderAdminKnockoutRound(roundKey, matches, teamOptions, { matchOffset })
+        ).join('')}
+        ${renderAdminKnockoutFinal(finalMatch, teamOptions)}
+        ${rightRounds.map(({ roundKey, matches, matchOffset }) =>
+          renderAdminKnockoutRound(roundKey, matches, teamOptions, { side: 'right', matchOffset })
+        ).join('')}
+      </div>`
+    : `<div class="ko-bracket-grid" style="${adminKnockoutBracketGridStyle(0)}">
+        ${sortedRounds.map(roundKey =>
+          renderAdminKnockoutRound(roundKey, byRound.get(roundKey) || [], teamOptions)
+        ).join('')}
       </div>`;
-    }).join('');
-
-    return `<div class="ko-col">
-      <div class="ko-col-label">${esc(label)}</div>
-      <div class="ko-col-matches">${matchSlots}</div>
-    </div>`;
-  }).join('');
-
-  // Champion column: winner of the final match, if decided.
-  const finalKey = sortedRounds.find(rk => rk === 'final');
-  let championCol = '';
-  if (finalKey) {
-    const finalMatch = byRound.get('final')?.[0];
-    let championLabel = '—';
-    const championToken = knockoutWinnerToken(finalMatch);
-    if (championToken) championLabel = matchTeamLabel(championToken);
-    const decided = championLabel !== '—';
-    // Vertically center against the single final slot.
-    const gapMultiplier = Math.pow(2, sortedRounds.length - 1);
-    championCol = `<div class="ko-col ko-col-champion">
-      <div class="ko-col-label">🏆 Campeón</div>
-      <div class="ko-col-matches">
-        <div class="ko-slot ko-champion-slot" style="margin-top:${(gapMultiplier - 1) * 28}px">
-          <div class="ko-team-row${decided ? ' ko-won' : ''}">
-            <span class="ko-team-name">${esc(championLabel)}</span>
-          </div>
-        </div>
-      </div>
-    </div>`;
-  }
 
   return `
     <section class="card mini-section-card">
@@ -1630,8 +1720,7 @@ function renderKnockoutSection(teamOptions = '', knockoutOpts = '', knockoutTemp
       <div class="section-collapsible-body${state.knockoutSectionCollapsed ? ' is-collapsed' : ''}">
         ${genControls}
         <div class="ko-bracket-visual">
-          ${bracketCols}
-          ${championCol}
+          ${bracketVisual}
         </div>
         <div style="margin-top:.75rem">
           <button type="button" id="saveAllKnockoutBtn" class="btn-secondary">Guardar todos los cruces</button>

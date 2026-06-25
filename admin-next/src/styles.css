@@ -326,39 +326,88 @@ button:disabled { opacity: 0.6; cursor: default; }
 
 /* Knockout bracket — visual columns */
 .ko-bracket-visual {
-  display: flex;
-  gap: 0;
   overflow-x: auto;
-  padding-bottom: 0.5rem;
-  align-items: flex-start;
+  padding: 0.25rem 0.1rem 1rem;
 }
-.ko-col {
-  display: flex;
-  flex-direction: column;
-  min-width: 180px;
-  flex: 1;
+.ko-bracket-grid {
+  display: grid;
+  gap: 28px;
 }
-.ko-col-label {
-  font-size: 0.78rem;
+.ko-bracket-round {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+}
+.ko-bracket-round-head {
+  display: grid;
+  gap: 4px;
+  text-align: center;
+}
+.ko-bracket-round-head h3 {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.82rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--accent);
-  text-align: center;
-  padding: 0.4rem 0.5rem 0.6rem;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 0.5rem;
+  letter-spacing: 0.08em;
 }
-.ko-col-matches {
+.ko-bracket-round-head span {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+.ko-bracket-round-matches {
+  display: grid;
+  grid-template-rows: repeat(var(--matches, 1), minmax(146px, auto));
+  gap: 12px;
+  align-content: stretch;
+}
+.ko-bracket-round:not(:first-child) .ko-bracket-round-matches {
+  padding-block: calc((100% / (var(--matches, 1) * 2)) - 6px);
+}
+.ko-right-bracket-round .ko-bracket-round-matches {
+  padding-block: calc((100% / (var(--matches, 1) * 2)) - 6px);
+}
+.ko-bracket-final-round .ko-bracket-round-matches {
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  padding: 0;
 }
 .ko-slot {
+  position: relative;
+  align-self: center;
   background: var(--panel2);
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
-  margin: 0 0.35rem;
+}
+.ko-bracket-match::after,
+.ko-right-bracket-match::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 28px;
+  border-top: 1px solid rgba(91, 140, 255, 0.35);
+}
+.ko-bracket-match::after {
+  left: 100%;
+}
+.ko-right-bracket-match::after {
+  right: 100%;
+}
+.ko-bracket-final-round .ko-bracket-match::after,
+.ko-bracket-final-round .ko-right-bracket-match::after {
+  display: none;
+}
+.ko-bracket-match-number {
+  display: block;
+  padding: 0.34rem 0.55rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 .ko-team-row {
   display: flex;
@@ -450,7 +499,6 @@ button:disabled { opacity: 0.6; cursor: default; }
 }
 
 /* Champion column */
-.ko-col-champion .ko-col-label { color: #f4c430; }
 .ko-champion-slot {
   border-color: #f4c430;
   box-shadow: 0 0 0 1px rgba(244, 196, 48, 0.35);
