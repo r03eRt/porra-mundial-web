@@ -1952,7 +1952,46 @@ function matchScheduleText(m) {
 
 // Goleadores: scorers jsonb. Soporta [{name,minute,team,penalty,owngoal}] o
 // {team1:[...],team2:[...]}. Devuelve {team1:[], team2:[]} con la forma legacy.
+// Goleadores de un partido desde el caché de Wikipedia (event_results_cache).
+// Casa el partido de la porra con el del caché por par de equipos normalizado
+// (en cualquier orden, usando los alias ES). Devuelve {team1,team2} orientado a
+// los equipos de la porra, o null si no hay match en el caché.
+function eventGoalsForMatch(m) {
+  const cached = state.eventCache?.matches;
+  if (!Array.isArray(cached)) return null;
+  // Clave de equipo: resuelve el nombre real de la porra y lo normaliza vía alias.
+  const aliasKey = name => {
+    const k = knockoutTeamKey(name);
+    // Si el nombre del caché tiene alias hacia un nombre corto de porra, normaliza a ese.
+    return EVENT_TEAM_ALIASES[k] ? knockoutTeamKey(EVENT_TEAM_ALIASES[k]) : k;
+  };
+  const t1 = aliasKey(teamName(m.team1));
+  const t2 = aliasKey(teamName(m.team2));
+  if (!t1 || !t2) return null;
+
+  for (const cm of cached) {
+    const c1 = aliasKey(cm.team1), c2 = aliasKey(cm.team2);
+    const norm = g => ({
+      name: g.name || g.player || '',
+      minute: Array.isArray(g.minutes) ? g.minutes.join(", ") : (g.minute || ''),
+      penalty: Boolean(g.penalty), ownGoal: Boolean(g.owngoal || g.ownGoal)
+    });
+    if (c1 === t1 && c2 === t2) {
+      return { team1: (cm.goals?.home || []).map(norm), team2: (cm.goals?.away || []).map(norm) };
+    }
+    if (c1 === t2 && c2 === t1) {
+      // Partido invertido: home del caché es team2 de la porra.
+      return { team1: (cm.goals?.away || []).map(norm), team2: (cm.goals?.home || []).map(norm) };
+    }
+  }
+  return null;
+}
+
 function goalBreakdown(m) {
+  // Fuente principal: el caché de Wikipedia. Fallback: porra_matches.scorers (manual).
+  const fromCache = eventGoalsForMatch(m);
+  if (fromCache && (fromCache.team1.length || fromCache.team2.length)) return fromCache;
+
   const raw = m.scorers;
   if (!raw) return null;
   const norm = g => ({
@@ -1976,7 +2015,11 @@ function goalBreakdown(m) {
 function formatGoalEvent(g) {
   if (!g.name) return '';
   const marker = g.ownGoal ? '↺ P.P.' : (g.penalty ? '🎯' : '⚽');
-  const minute = g.minute ? `${esc(String(g.minute))}'` : '';
+  // El minuto puede traer varios valores separados por coma (varios goles del mismo
+  // jugador en un evento del caché): "74, 90" -> "74' 90'".
+  const minute = g.minute
+    ? String(g.minute).split(/\s*,\s*/).filter(Boolean).map(min => `${esc(min)}'`).join(' ')
+    : '';
   return `<span class="goal-event"><span class="goal-marker">${marker}</span><span>${esc(g.name)}${minute ? ' ' + minute : ''}</span></span>`;
 }
 
