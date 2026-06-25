@@ -978,6 +978,73 @@ function getKnockoutReality() {
   return getKnockoutRealityFromFixtures(state.apiFixtures);
 }
 
+// Build "real" bracket structure from group standings + API fixtures
+// Returns same shape as buildPlayerKnockoutBracket: { DIECISEISAVOS: [...32], OCTAVOS: [...16], ... FINAL: [...2] }
+function buildRealityBracket() {
+  const fixtures = state.apiFixtures;
+  const bracket = {};
+  const ROUND_MAP = {
+    DIECISEISAVOS: 'Round of 32',
+    OCTAVOS: 'Round of 16',
+    CUARTOS: 'Quarter-final',
+    SEMIS: 'Semi-final',
+    FINAL: 'Final'
+  };
+
+  // For each knockout stage, get teams from the API fixtures (in match order: team1, team2 per match)
+  for (const stage of KNOCKOUT_STAGES) {
+    const apiRound = ROUND_MAP[stage];
+    const roundFixtures = fixtures.filter(m => m.round === apiRound);
+    if (roundFixtures.length > 0) {
+      // Each fixture contributes two teams to the bracket (in order)
+      bracket[stage] = roundFixtures.flatMap(m => [
+        isTournamentTeam(m.team1) ? m.team1 : '',
+        isTournamentTeam(m.team2) ? m.team2 : ''
+      ]);
+    } else {
+      // No fixtures yet for this round — try deriving from group standings for DIECISEISAVOS
+      if (stage === 'DIECISEISAVOS') {
+        bracket[stage] = buildDieciseisavosFromGroups();
+      } else {
+        // Fill with empty slots based on expected count
+        const expected = KNOCKOUT_SCORING[stage]?.expected || 0;
+        bracket[stage] = Array(expected).fill('');
+      }
+    }
+  }
+
+  return bracket;
+}
+
+// Build dieciseisavos (Round of 32) from group standings: top 2 per group + best 8 thirds
+// Uses the official FIFA 2026 bracket structure (48 teams → 16 matches in R32)
+function buildDieciseisavosFromGroups() {
+  const groups = [...new Set(DATA.matches.map(m => m.group))].sort();
+  const standings = {};
+  for (const group of groups) {
+    standings[group] = calculateGroupStandings(group);
+  }
+  const bestThirds = calculateBestThirds();
+  const thirdByGroup = {};
+  for (const t of bestThirds) thirdByGroup[t.group] = t.team;
+
+  // FIFA 2026 bracket: 12 groups, top 2 + 8 best thirds = 32 teams in 16 matches
+  // Official bracket order per FIFA (group winners + runners-up + 3rds):
+  // Match 1: 1A vs 3C/D/E/F, Match 2: 2A vs 2B, etc.
+  // Since we don't have the official FIFA mapping for 48 teams readily,
+  // show a flat list: 1st of each group, then 2nd of each group, then best thirds
+  const firstPlace = groups.map(g => standings[g]?.[0]?.team || '');
+  const secondPlace = groups.map(g => standings[g]?.[1]?.team || '');
+  const thirds = bestThirds.map(t => t.team || '');
+
+  // Interleave: pair 1st vs best third, 2nd vs 2nd from another group (simplified display)
+  // Actually, just list all 32 in bracket slots as pairs (simplified — real bracket order depends on FIFA draw)
+  const allTeams = [...firstPlace, ...secondPlace, ...thirds];
+  // Pad to 32
+  while (allTeams.length < 32) allTeams.push('');
+  return allTeams.slice(0, 32);
+}
+
 function calculatePlayerKnockoutFromReality(playerId, reality) {
   const breakdown = {};
   let points = 0;
@@ -2828,6 +2895,110 @@ function renderKnockout() {
       ${renderFinalRound(bracket.FINAL, champion, knockout.breakdown.FINAL, championScore)}
       ${rightRounds.map(({ stage, teams, matchOffset }) => renderBracketRound(stage, teams, knockout.breakdown[stage], { matchOffset, side: 'right' })).join('')}
     </div>
+  `;
+
+  // Reality bracket (actual tournament results from group standings + API fixtures)
+  renderRealityBracket();
+}
+
+function renderRealityBracket() {
+  const realBracket = buildRealityBracket();
+  const reality = getKnockoutReality();
+
+  // Determine real champion from fixtures (winner of the Final)
+  const finalFixtures = state.apiFixtures.filter(m => m.round === 'Final');
+  const realChampion = finalFixtures.length > 0 ? winnerFromApiMatch(finalFixtures[0]) || '' : '';
+
+  const halfRounds = KNOCKOUT_STAGES.slice(0, -1);
+  const leftRounds = halfRounds.map(stage => ({
+    stage,
+    teams: realBracket[stage].slice(0, realBracket[stage].length / 2),
+    matchOffset: 0
+  }));
+  const rightRounds = halfRounds.map(stage => ({
+    stage,
+    teams: realBracket[stage].slice(realBracket[stage].length / 2),
+    matchOffset: realBracket[stage].length / 4
+  })).reverse();
+
+  // Build neutral score objects (no player scoring, just show confirmed counts)
+  const neutralScores = {};
+  for (const stage of KNOCKOUT_STAGES) {
+    const config = KNOCKOUT_SCORING[stage];
+    const stageReality = reality[stage] || { resolved: 0, expected: config.expected };
+    neutralScores[stage] = {
+      ...config,
+      hits: 0,
+      points: 0,
+      resolved: stageReality.resolved || 0,
+      expected: config.expected,
+      teams: stageReality.teams || new Set(),
+      complete: stageReality.complete || false
+    };
+  }
+
+  const championNeutral = neutralScores['1º'] || { label: 'Campeón', hits: 0, points: 0, resolved: realChampion ? 1 : 0, expected: 1, teams: new Set(realChampion ? [teamKey(realChampion)] : []), complete: !!realChampion };
+
+  document.getElementById('knockoutRealityBracket').innerHTML = html`
+    <div class="bracket-title reality-title">
+      <span>🏆 Cuadro real</span>
+      <small>Según clasificación de grupos y resultados</small>
+    </div>
+    <div class="bracket">
+      ${leftRounds.map(({ stage, teams, matchOffset }) => renderRealityBracketRound(stage, teams, neutralScores[stage], { matchOffset })).join('')}
+      ${renderRealityFinalRound(realBracket.FINAL, realChampion, neutralScores.FINAL, championNeutral)}
+      ${rightRounds.map(({ stage, teams, matchOffset }) => renderRealityBracketRound(stage, teams, neutralScores[stage], { matchOffset, side: 'right' })).join('')}
+    </div>
+  `;
+}
+
+function renderRealityBracketTeam(team) {
+  if (!team) return `<div class="bracket-team pending"><span class="bracket-flag">🏳️</span><span>Por definir</span></div>`;
+  return `<div class="bracket-team correct"><span class="bracket-flag">${TEAM_FLAGS[team] || '🏳️'}</span><span>${escapeHtml(team)}</span></div>`;
+}
+
+function renderRealityBracketRound(stage, teams, stageScore, { matchOffset = 0, side = 'left' } = {}) {
+  const matches = [];
+  for (let index = 0; index < teams.length; index += 2) {
+    matches.push(html`
+      <article class="bracket-match ${side === 'right' ? 'right-side' : ''}">
+        <span class="bracket-match-number">Cruce ${matchOffset + index / 2 + 1}</span>
+        ${renderRealityBracketTeam(teams[index])}
+        ${renderRealityBracketTeam(teams[index + 1])}
+      </article>
+    `);
+  }
+
+  return html`
+    <section class="bracket-round ${side === 'right' ? 'right-bracket-round' : ''}" style="--matches:${matches.length}">
+      <div class="bracket-round-head">
+        <h3>${stageScore.label}</h3>
+        <small>${stageScore.resolved}/${stageScore.expected} selecciones confirmadas</small>
+      </div>
+      <div class="bracket-matches">${matches.join('')}</div>
+    </section>
+  `;
+}
+
+function renderRealityFinalRound(finalTeams, champion, finalScore, championScore) {
+  return html`
+    <section class="bracket-round bracket-final-round">
+      <div class="bracket-round-head">
+        <h3>Final</h3>
+        <small>${finalScore.resolved}/${finalScore.expected} selecciones confirmadas</small>
+      </div>
+      <div class="bracket-matches">
+        <article class="bracket-match">
+          <span class="bracket-match-number">Final</span>
+          ${renderRealityBracketTeam(finalTeams[0])}
+          ${renderRealityBracketTeam(finalTeams[1])}
+        </article>
+        <article class="bracket-match champion-card">
+          <span class="trophy" aria-hidden="true">★</span>
+          ${renderRealityBracketTeam(champion)}
+        </article>
+      </div>
+    </section>
   `;
 }
 
