@@ -5,7 +5,7 @@
   "meta": {
     "totalMatches": 104,
     "playedMatches": 54,
-    "totalGoals": 137,
+    "totalGoals": 178,
     "groups": 12
   },
   "teams": [
@@ -322,7 +322,8 @@
           {
             "name": "Mokoena",
             "minutes": [
-              "83|pen."
+              "83",
+              "pen."
             ],
             "penalty": false,
             "owngoal": false
@@ -501,7 +502,8 @@
           {
             "name": "Muheim",
             "minutes": [
-              "90+4|a.g."
+              "90+4",
+              "a.g."
             ],
             "penalty": false,
             "owngoal": false
@@ -511,7 +513,8 @@
           {
             "name": "Embolo",
             "minutes": [
-              "17|pen."
+              "17",
+              "pen."
             ],
             "penalty": false,
             "owngoal": false
@@ -541,7 +544,8 @@
           {
             "name": "Manzambi",
             "minutes": [
-              "74||90"
+              "74",
+              "90"
             ],
             "penalty": false,
             "owngoal": false
@@ -557,7 +561,8 @@
           {
             "name": "Xhaka",
             "minutes": [
-              "90+7|pen."
+              "90+7",
+              "pen."
             ],
             "penalty": false,
             "owngoal": false
@@ -605,7 +610,9 @@
           {
             "name": "J. David",
             "minutes": [
-              "29||45+3||90+2"
+              "29",
+              "45+3",
+              "90+2"
             ],
             "penalty": false,
             "owngoal": false
@@ -621,7 +628,8 @@
           {
             "name": "Manai",
             "minutes": [
-              "75|a.g."
+              "75",
+              "a.g."
             ],
             "penalty": false,
             "owngoal": false
@@ -708,7 +716,8 @@
           {
             "name": "Abunada",
             "minutes": [
-              "34|a.g."
+              "34",
+              "a.g."
             ],
             "penalty": false,
             "owngoal": false
@@ -858,7 +867,8 @@
           {
             "name": "Cunha",
             "minutes": [
-              "23||36"
+              "23",
+              "36"
             ],
             "penalty": false,
             "owngoal": false
@@ -898,7 +908,8 @@
           {
             "name": "Vinícius Júnior",
             "minutes": [
-              "7||45+3"
+              "7",
+              "45+3"
             ],
             "penalty": false,
             "owngoal": false
@@ -970,7 +981,8 @@
           {
             "name": "Bounou",
             "minutes": [
-              "10|a.g."
+              "10",
+              "a.g."
             ],
             "penalty": false,
             "owngoal": false
@@ -1008,7 +1020,8 @@
           {
             "name": "Bobadilla",
             "minutes": [
-              "7|a.g."
+              "7",
+              "a.g."
             ],
             "penalty": false,
             "owngoal": false
@@ -1016,7 +1029,8 @@
           {
             "name": "Balogun",
             "minutes": [
-              "31||45+5"
+              "31",
+              "45+5"
             ],
             "penalty": false,
             "owngoal": false
@@ -1103,7 +1117,8 @@
           {
             "name": "Burgess",
             "minutes": [
-              "11|a.g."
+              "11",
+              "a.g."
             ],
             "penalty": false,
             "owngoal": false
@@ -1233,7 +1248,9 @@
           {
             "name": "Havertz",
             "minutes": [
-              "45+5|pen.|88"
+              "45+5",
+              "pen.",
+              "88"
             ],
             "penalty": false,
             "owngoal": false
@@ -1328,7 +1345,8 @@
           {
             "name": "Undav",
             "minutes": [
-              "68||90+4"
+              "68",
+              "90+4"
             ],
             "penalty": false,
             "owngoal": false
@@ -1490,7 +1508,8 @@
           {
             "name": "Ayari",
             "minutes": [
-              "7||90+6"
+              "7",
+              "90+6"
             ],
             "penalty": false,
             "owngoal": false
@@ -1554,7 +1573,8 @@
           {
             "name": "Brobbey",
             "minutes": [
-              "5||17"
+              "5",
+              "17"
             ],
             "penalty": false,
             "owngoal": false
@@ -1562,7 +1582,8 @@
           {
             "name": "Gakpo",
             "minutes": [
-              "47||54"
+              "47",
+              "54"
             ],
             "penalty": false,
             "owngoal": false
@@ -1619,7 +1640,8 @@
           {
             "name": "Ueda",
             "minutes": [
-              "31||83"
+              "31",
+              "83"
             ],
             "penalty": false,
             "owngoal": false
@@ -1701,7 +1723,8 @@
           {
             "name": "Hany",
             "minutes": [
-              "66|a.g."
+              "66",
+              "a.g."
             ],
             "penalty": false,
             "owngoal": false
@@ -1759,7 +1782,8 @@
           {
             "name": "Just",
             "minutes": [
-              "7||54"
+              "7",
+              "54"
             ],
             "penalty": false,
             "owngoal": false
@@ -1981,7 +2005,8 @@
           {
             "name": "Oyarzabal",
             "minutes": [
-              "21||24"
+              "21",
+              "24"
             ],
             "penalty": false,
             "owngoal": false
@@ -1989,7 +2014,8 @@
           {
             "name": "Tambakti",
             "minutes": [
-              "49|a.g."
+              "49",
+              "a.g."
             ],
             "penalty": false,
             "owngoal": false
@@ -2120,7 +2146,8 @@
           {
             "name": "Mbappé",
             "minutes": [
-              "66||90+6"
+              "66",
+              "90+6"
             ],
             "penalty": false,
             "owngoal": false
@@ -2178,7 +2205,8 @@
           {
             "name": "Haaland",
             "minutes": [
-              "29||43"
+              "29",
+              "43"
             ],
             "penalty": false,
             "owngoal": false
@@ -2194,7 +2222,8 @@
           {
             "name": "Hussein",
             "minutes": [
-              "90+6|a.g."
+              "90+6",
+              "a.g."
             ],
             "penalty": false,
             "owngoal": false
@@ -2224,7 +2253,8 @@
           {
             "name": "Mbappé",
             "minutes": [
-              "14||54"
+              "14",
+              "54"
             ],
             "penalty": false,
             "owngoal": false
@@ -2271,7 +2301,8 @@
           {
             "name": "Haaland",
             "minutes": [
-              "48||58"
+              "48",
+              "58"
             ],
             "penalty": false,
             "owngoal": false
@@ -2281,7 +2312,8 @@
           {
             "name": "Sarr",
             "minutes": [
-              "53||90+3"
+              "53",
+              "90+3"
             ],
             "penalty": false,
             "owngoal": false
@@ -2355,7 +2387,9 @@
           {
             "name": "Messi",
             "minutes": [
-              "17||60||76"
+              "17",
+              "60",
+              "76"
             ],
             "penalty": false,
             "owngoal": false
@@ -2394,7 +2428,8 @@
           {
             "name": "Al-Arab",
             "minutes": [
-              "76|a.g."
+              "76",
+              "a.g."
             ],
             "penalty": false,
             "owngoal": false
@@ -2402,7 +2437,8 @@
           {
             "name": "Arnautović",
             "minutes": [
-              "90+12|pen."
+              "90+12",
+              "pen."
             ],
             "penalty": false,
             "owngoal": false
@@ -2442,7 +2478,8 @@
           {
             "name": "Messi",
             "minutes": [
-              "38||90+5"
+              "38",
+              "90+5"
             ],
             "penalty": false,
             "owngoal": false
@@ -2661,7 +2698,8 @@
           {
             "name": "Ronaldo",
             "minutes": [
-              "6||39"
+              "6",
+              "39"
             ],
             "penalty": false,
             "owngoal": false
@@ -2677,7 +2715,8 @@
           {
             "name": "Nematov",
             "minutes": [
-              "60|a.g."
+              "60",
+              "a.g."
             ],
             "penalty": false,
             "owngoal": false
@@ -2791,7 +2830,9 @@
           {
             "name": "Kane",
             "minutes": [
-              "12|pen.|42"
+              "12",
+              "pen.",
+              "42"
             ],
             "penalty": false,
             "owngoal": false
@@ -3668,6 +3709,69 @@
   ],
   "topScorers": [
     {
+      "name": "Messi",
+      "team_code": "ARG",
+      "team": "Argentina",
+      "goals": 5,
+      "penalties": 0
+    },
+    {
+      "name": "Haaland",
+      "team_code": "NOR",
+      "team": "Noruega",
+      "goals": 4,
+      "penalties": 0
+    },
+    {
+      "name": "Mbappé",
+      "team_code": "FRA",
+      "team": "Francia",
+      "goals": 4,
+      "penalties": 0
+    },
+    {
+      "name": "Vinícius Júnior",
+      "team_code": "BRA",
+      "team": "Brasil",
+      "goals": 4,
+      "penalties": 0
+    },
+    {
+      "name": "Cunha",
+      "team_code": "BRA",
+      "team": "Brasil",
+      "goals": 3,
+      "penalties": 0
+    },
+    {
+      "name": "Havertz",
+      "team_code": "GER",
+      "team": "Alemania",
+      "goals": 3,
+      "penalties": 0
+    },
+    {
+      "name": "J. David",
+      "team_code": "CAN",
+      "team": "Canadá",
+      "goals": 3,
+      "penalties": 0
+    },
+    {
+      "name": "Kane",
+      "team_code": "ENG",
+      "team": "Inglaterra",
+      "goals": 3,
+      "penalties": 0
+    },
+    {
+      "name": "Manzambi",
+      "team_code": "SUI",
+      "team": "Suiza",
+      "goals": 3,
+      "penalties": 0
+    },
+    {
       "name": "Saibari",
       "team_code": "MAR",
       "team": "Marruecos",
@@ -3675,23 +3779,107 @@
       "penalties": 0
     },
     {
-      "name": "Vinícius Júnior",
-      "team_code": "BRA",
-      "team": "Brasil",
+      "name": "Undav",
+      "team_code": "GER",
+      "team": "Alemania",
       "goals": 3,
       "penalties": 0
     },
     {
-      "name": "Cunha",
-      "team_code": "BRA",
-      "team": "Brasil",
+      "name": "Abunada",
+      "team_code": "BIH",
+      "team": "Bosnia y Herzegovina",
       "goals": 2,
       "penalties": 0
     },
     {
-      "name": "Haaland",
+      "name": "Al-Arab",
+      "team_code": "AUT",
+      "team": "Austria",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Arnautović",
+      "team_code": "AUT",
+      "team": "Austria",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Ayari",
+      "team_code": "SWE",
+      "team": "Suecia",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Balogun",
+      "team_code": "USA",
+      "team": "Estados Unidos",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Bobadilla",
+      "team_code": "USA",
+      "team": "Estados Unidos",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Bounou",
+      "team_code": "HAI",
+      "team": "Haití",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Brobbey",
+      "team_code": "NED",
+      "team": "Países Bajos",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Burgess",
+      "team_code": "USA",
+      "team": "Estados Unidos",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Embolo",
+      "team_code": "SUI",
+      "team": "Suiza",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Gakpo",
+      "team_code": "NED",
+      "team": "Países Bajos",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Hany",
+      "team_code": "BEL",
+      "team": "Bélgica",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Hussein",
       "team_code": "NOR",
       "team": "Noruega",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Just",
+      "team_code": "NZL",
+      "team": "Nueva Zelanda",
       "goals": 2,
       "penalties": 0
     },
@@ -3724,23 +3912,23 @@
       "penalties": 0
     },
     {
-      "name": "Manzambi",
-      "team_code": "SUI",
-      "team": "Suiza",
+      "name": "Manai",
+      "team_code": "CAN",
+      "team": "Canadá",
       "goals": 2,
       "penalties": 0
     },
     {
-      "name": "Mbappé",
-      "team_code": "FRA",
-      "team": "Francia",
+      "name": "Mokoena",
+      "team_code": "RSA",
+      "team": "Sudáfrica",
       "goals": 2,
       "penalties": 0
     },
     {
-      "name": "Messi",
-      "team_code": "ARG",
-      "team": "Argentina",
+      "name": "Muheim",
+      "team_code": "QAT",
+      "team": "Catar",
       "goals": 2,
       "penalties": 0
     },
@@ -3752,9 +3940,37 @@
       "penalties": 0
     },
     {
+      "name": "Nematov",
+      "team_code": "POR",
+      "team": "Portugal",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Oyarzabal",
+      "team_code": "ESP",
+      "team": "España",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
       "name": "Quiñones",
       "team_code": "MEX",
       "team": "México",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Ronaldo",
+      "team_code": "POR",
+      "team": "Portugal",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Sarr",
+      "team_code": "SEN",
+      "team": "Senegal",
       "goals": 2,
       "penalties": 0
     },
@@ -3766,9 +3982,16 @@
       "penalties": 0
     },
     {
-      "name": "Undav",
-      "team_code": "GER",
-      "team": "Alemania",
+      "name": "Tambakti",
+      "team_code": "ESP",
+      "team": "España",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Ueda",
+      "team_code": "JPN",
+      "team": "Japón",
       "goals": 2,
       "penalties": 0
     },
@@ -3780,23 +4003,16 @@
       "penalties": 0
     },
     {
-      "name": "Abunada",
-      "team_code": "BIH",
-      "team": "Bosnia y Herzegovina",
-      "goals": 1,
+      "name": "Xhaka",
+      "team_code": "SUI",
+      "team": "Suiza",
+      "goals": 2,
       "penalties": 0
     },
     {
       "name": "Al-Amri",
       "team_code": "KSA",
       "team": "Arabia Saudita",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Al-Arab",
-      "team_code": "AUT",
-      "team": "Austria",
       "goals": 1,
       "penalties": 0
     },
@@ -3822,30 +4038,9 @@
       "penalties": 0
     },
     {
-      "name": "Arnautović",
-      "team_code": "AUT",
-      "team": "Austria",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
       "name": "Ashour",
       "team_code": "EGY",
       "team": "Egipto",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Ayari",
-      "team_code": "SWE",
-      "team": "Suecia",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Balogun",
-      "team_code": "USA",
-      "team": "Estados Unidos",
       "goals": 1,
       "penalties": 0
     },
@@ -3878,27 +4073,6 @@
       "penalties": 0
     },
     {
-      "name": "Bobadilla",
-      "team_code": "USA",
-      "team": "Estados Unidos",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Bounou",
-      "team_code": "HAI",
-      "team": "Haití",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Brobbey",
-      "team_code": "NED",
-      "team": "Países Bajos",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
       "name": "Brown",
       "team_code": "GER",
       "team": "Alemania",
@@ -3909,13 +4083,6 @@
       "name": "Budimir",
       "team_code": "CRO",
       "team": "Croacia",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Burgess",
-      "team_code": "USA",
-      "team": "Estados Unidos",
       "goals": 1,
       "penalties": 0
     },
@@ -3969,13 +4136,6 @@
       "penalties": 0
     },
     {
-      "name": "Embolo",
-      "team_code": "SUI",
-      "team": "Suiza",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
       "name": "Fayzullaev",
       "team_code": "UZB",
       "team": "Uzbekistán",
@@ -3993,13 +4153,6 @@
       "name": "Freeman",
       "team_code": "USA",
       "team": "Estados Unidos",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Gakpo",
-      "team_code": "NED",
-      "team": "Países Bajos",
       "goals": 1,
       "penalties": 0
     },
@@ -4032,30 +4185,9 @@
       "penalties": 0
     },
     {
-      "name": "Hany",
-      "team_code": "BEL",
-      "team": "Bélgica",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Havertz",
-      "team_code": "GER",
-      "team": "Alemania",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
       "name": "Hussein",
       "team_code": "IRQ",
       "team": "Irak",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Hussein",
-      "team_code": "NOR",
-      "team": "Noruega",
       "goals": 1,
       "penalties": 0
     },
@@ -4088,13 +4220,6 @@
       "penalties": 0
     },
     {
-      "name": "J. David",
-      "team_code": "CAN",
-      "team": "Canadá",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
       "name": "J. Itō",
       "team_code": "JPN",
       "team": "Japón",
@@ -4112,20 +4237,6 @@
       "name": "Jiménez",
       "team_code": "MEX",
       "team": "México",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Just",
-      "team_code": "NZL",
-      "team": "Nueva Zelanda",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Kane",
-      "team_code": "ENG",
-      "team": "Inglaterra",
       "goals": 1,
       "penalties": 0
     },
@@ -4161,13 +4272,6 @@
       "name": "M. Chávez",
       "team_code": "MEX",
       "team": "México",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Manai",
-      "team_code": "CAN",
-      "team": "Canadá",
       "goals": 1,
       "penalties": 0
     },
@@ -4214,20 +4318,6 @@
       "penalties": 0
     },
     {
-      "name": "Mokoena",
-      "team_code": "RSA",
-      "team": "Sudáfrica",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Muheim",
-      "team_code": "QAT",
-      "team": "Catar",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
       "name": "Musa",
       "team_code": "CRO",
       "team": "Croacia",
@@ -4256,13 +4346,6 @@
       "penalties": 0
     },
     {
-      "name": "Nematov",
-      "team_code": "POR",
-      "team": "Portugal",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
       "name": "Nmecha",
       "team_code": "GER",
       "team": "Alemania",
@@ -4287,13 +4370,6 @@
       "name": "Østigård",
       "team_code": "NOR",
       "team": "Noruega",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Oyarzabal",
-      "team_code": "ESP",
-      "team": "España",
       "goals": 1,
       "penalties": 0
     },
@@ -4361,13 +4437,6 @@
       "penalties": 0
     },
     {
-      "name": "Ronaldo",
-      "team_code": "POR",
-      "team": "Portugal",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
       "name": "Sadílek",
       "team_code": "CZE",
       "team": "República Checa",
@@ -4385,13 +4454,6 @@
       "name": "Saliba",
       "team_code": "CAN",
       "team": "Canadá",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Sarr",
-      "team_code": "SEN",
-      "team": "Senegal",
       "goals": 1,
       "penalties": 0
     },
@@ -4424,23 +4486,9 @@
       "penalties": 0
     },
     {
-      "name": "Tambakti",
-      "team_code": "ESP",
-      "team": "España",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
       "name": "Trézéguet",
       "team_code": "EGY",
       "team": "Egipto",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Ueda",
-      "team_code": "JPN",
-      "team": "Japón",
       "goals": 1,
       "penalties": 0
     },
@@ -4462,13 +4510,6 @@
       "name": "Wissa",
       "team_code": "COD",
       "team": "República Democrática del Congo",
-      "goals": 1,
-      "penalties": 0
-    },
-    {
-      "name": "Xhaka",
-      "team_code": "SUI",
-      "team": "Suiza",
       "goals": 1,
       "penalties": 0
     },

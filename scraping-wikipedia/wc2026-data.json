@@ -110,7 +110,8 @@
       {
         "player": "Mokoena",
         "minutes": [
-          "83|pen."
+          "83",
+          "pen."
         ],
         "owngoal": false,
         "penalty": false
@@ -274,7 +275,8 @@
       {
         "player": "Muheim",
         "minutes": [
-          "90+4|a.g."
+          "90+4",
+          "a.g."
         ],
         "owngoal": false,
         "penalty": false
@@ -284,7 +286,8 @@
       {
         "player": "Embolo",
         "minutes": [
-          "17|pen."
+          "17",
+          "pen."
         ],
         "owngoal": false,
         "penalty": false
@@ -311,7 +314,8 @@
       {
         "player": "Manzambi",
         "minutes": [
-          "74||90"
+          "74",
+          "90"
         ],
         "owngoal": false,
         "penalty": false
@@ -327,7 +331,8 @@
       {
         "player": "Xhaka",
         "minutes": [
-          "90+7|pen."
+          "90+7",
+          "pen."
         ],
         "owngoal": false,
         "penalty": false
@@ -372,7 +377,9 @@
       {
         "player": "J. David",
         "minutes": [
-          "29||45+3||90+2"
+          "29",
+          "45+3",
+          "90+2"
         ],
         "owngoal": false,
         "penalty": false
@@ -388,7 +395,8 @@
       {
         "player": "Manai",
         "minutes": [
-          "75|a.g."
+          "75",
+          "a.g."
         ],
         "owngoal": false,
         "penalty": false
@@ -469,7 +477,8 @@
       {
         "player": "Abunada",
         "minutes": [
-          "34|a.g."
+          "34",
+          "a.g."
         ],
         "owngoal": false,
         "penalty": false
@@ -607,7 +616,8 @@
       {
         "player": "Cunha",
         "minutes": [
-          "23||36"
+          "23",
+          "36"
         ],
         "owngoal": false,
         "penalty": false
@@ -644,7 +654,8 @@
       {
         "player": "Vinícius Júnior",
         "minutes": [
-          "7||45+3"
+          "7",
+          "45+3"
         ],
         "owngoal": false,
         "penalty": false
@@ -713,7 +724,8 @@
       {
         "player": "Bounou",
         "minutes": [
-          "10|a.g."
+          "10",
+          "a.g."
         ],
         "owngoal": false,
         "penalty": false
@@ -748,7 +760,8 @@
       {
         "player": "Bobadilla",
         "minutes": [
-          "7|a.g."
+          "7",
+          "a.g."
         ],
         "owngoal": false,
         "penalty": false
@@ -756,7 +769,8 @@
       {
         "player": "Balogun",
         "minutes": [
-          "31||45+5"
+          "31",
+          "45+5"
         ],
         "owngoal": false,
         "penalty": false
@@ -837,7 +851,8 @@
       {
         "player": "Burgess",
         "minutes": [
-          "11|a.g."
+          "11",
+          "a.g."
         ],
         "owngoal": false,
         "penalty": false
@@ -955,7 +970,9 @@
       {
         "player": "Havertz",
         "minutes": [
-          "45+5|pen.|88"
+          "45+5",
+          "pen.",
+          "88"
         ],
         "owngoal": false,
         "penalty": false
@@ -1044,7 +1061,8 @@
       {
         "player": "Undav",
         "minutes": [
-          "68||90+4"
+          "68",
+          "90+4"
         ],
         "owngoal": false,
         "penalty": false
@@ -1191,7 +1209,8 @@
       {
         "player": "Ayari",
         "minutes": [
-          "7||90+6"
+          "7",
+          "90+6"
         ],
         "owngoal": false,
         "penalty": false
@@ -1252,7 +1271,8 @@
       {
         "player": "Brobbey",
         "minutes": [
-          "5||17"
+          "5",
+          "17"
         ],
         "owngoal": false,
         "penalty": false
@@ -1260,7 +1280,8 @@
       {
         "player": "Gakpo",
         "minutes": [
-          "47||54"
+          "47",
+          "54"
         ],
         "owngoal": false,
         "penalty": false
@@ -1314,7 +1335,8 @@
       {
         "player": "Ueda",
         "minutes": [
-          "31||83"
+          "31",
+          "83"
         ],
         "owngoal": false,
         "penalty": false
@@ -1387,7 +1409,8 @@
       {
         "player": "Hany",
         "minutes": [
-          "66|a.g."
+          "66",
+          "a.g."
         ],
         "owngoal": false,
         "penalty": false
@@ -1442,7 +1465,8 @@
       {
         "player": "Just",
         "minutes": [
-          "7||54"
+          "7",
+          "54"
         ],
         "owngoal": false,
         "penalty": false
@@ -1643,7 +1667,8 @@
       {
         "player": "Oyarzabal",
         "minutes": [
-          "21||24"
+          "21",
+          "24"
         ],
         "owngoal": false,
         "penalty": false
@@ -1651,7 +1676,8 @@
       {
         "player": "Tambakti",
         "minutes": [
-          "49|a.g."
+          "49",
+          "a.g."
         ],
         "owngoal": false,
         "penalty": false
@@ -1770,7 +1796,8 @@
       {
         "player": "Mbappé",
         "minutes": [
-          "66||90+6"
+          "66",
+          "90+6"
         ],
         "owngoal": false,
         "penalty": false
@@ -1825,7 +1852,8 @@
       {
         "player": "Haaland",
         "minutes": [
-          "29||43"
+          "29",
+          "43"
         ],
         "owngoal": false,
         "penalty": false
@@ -1841,7 +1869,8 @@
       {
         "player": "Hussein",
         "minutes": [
-          "90+6|a.g."
+          "90+6",
+          "a.g."
         ],
         "owngoal": false,
         "penalty": false
@@ -1868,7 +1897,8 @@
       {
         "player": "Mbappé",
         "minutes": [
-          "14||54"
+          "14",
+          "54"
         ],
         "owngoal": false,
         "penalty": false
@@ -1912,7 +1942,8 @@
       {
         "player": "Haaland",
         "minutes": [
-          "48||58"
+          "48",
+          "58"
         ],
         "owngoal": false,
         "penalty": false
@@ -1922,7 +1953,8 @@
       {
         "player": "Sarr",
         "minutes": [
-          "53||90+3"
+          "53",
+          "90+3"
         ],
         "owngoal": false,
         "penalty": false
@@ -1987,7 +2019,9 @@
       {
         "player": "Messi",
         "minutes": [
-          "17||60||76"
+          "17",
+          "60",
+          "76"
         ],
         "owngoal": false,
         "penalty": false
@@ -2023,7 +2057,8 @@
       {
         "player": "Al-Arab",
         "minutes": [
-          "76|a.g."
+          "76",
+          "a.g."
         ],
         "owngoal": false,
         "penalty": false
@@ -2031,7 +2066,8 @@
       {
         "player": "Arnautović",
         "minutes": [
-          "90+12|pen."
+          "90+12",
+          "pen."
         ],
         "owngoal": false,
         "penalty": false
@@ -2068,7 +2104,8 @@
       {
         "player": "Messi",
         "minutes": [
-          "38||90+5"
+          "38",
+          "90+5"
         ],
         "owngoal": false,
         "penalty": false
@@ -2269,7 +2306,8 @@
       {
         "player": "Ronaldo",
         "minutes": [
-          "6||39"
+          "6",
+          "39"
         ],
         "owngoal": false,
         "penalty": false
@@ -2285,7 +2323,8 @@
       {
         "player": "Nematov",
         "minutes": [
-          "60|a.g."
+          "60",
+          "a.g."
         ],
         "owngoal": false,
         "penalty": false
@@ -2387,7 +2426,9 @@
       {
         "player": "Kane",
         "minutes": [
-          "12|pen.|42"
+          "12",
+          "pen.",
+          "42"
         ],
         "owngoal": false,
         "penalty": false

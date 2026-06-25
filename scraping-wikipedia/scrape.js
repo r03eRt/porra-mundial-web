@@ -60,11 +60,12 @@ function parseGoals(wt) {
   const items = wt.split('\n').map(x => x.trim()).filter(Boolean);
   for (let it of items) {
     it = it.replace(/^\*\s*/, '');
+    // {{gol|17||60||76}} usa doble pipe como separador de minutos (a veces coma/espacio).
     const golRe = /\{\{gol\|([^}]*)\}\}/g;
     const mins = [];
     let g;
     while ((g = golRe.exec(it)) !== null) {
-      mins.push(...g[1].split(/[,\s]+/).filter(Boolean));
+      mins.push(...g[1].split(/[|,\s]+/).filter(Boolean));
     }
     const owngoal = /en propia|autogol|\(a\.?g\.?\)|o\.g\./i.test(it);
     const penalty = /penal|penalti|\(p\.?\)/i.test(it);

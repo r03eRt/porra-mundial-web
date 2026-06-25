@@ -197,8 +197,13 @@ const state = {
   playerRankings: null,
   teamRankings: null,
   compareMatchId: '',    // partido seleccionado en Comparador
-  comparePlayers: []     // player_ids añadidos al comparador, en orden
+  comparePlayers: [],    // player_ids añadidos al comparador, en orden
+  eventCache: null       // payload de event_results_cache (datos automáticos de Wikipedia)
 };
+
+// Evento del caché de resultados que alimenta los datos automáticos (goleadores, etc.).
+// Por ahora hardcode al Mundial 2026; más adelante se enlazará por porra (porras.event).
+const EVENT_CACHE_KEY = 'worldcup-2026';
 
 let toastTimer = null;
 
@@ -286,7 +291,25 @@ async function loadPorra() {
   state.miniAnswers = miniAnswers || [];
   state.miniResults = miniResults.data || [];
 
+  await loadEventCache();
   await refreshSession();
+}
+
+// Caché de resultados del evento (Wikipedia) que alimenta los datos automáticos.
+// Lectura pública por RLS. Si falla (sin red, sin caché), se queda en null y las
+// secciones que lo usan caen a su fuente manual (porra_matches).
+async function loadEventCache() {
+  const { data, error } = await supabase
+    .from('event_results_cache')
+    .select('payload')
+    .eq('event', EVENT_CACHE_KEY)
+    .maybeSingle();
+  if (error) {
+    console.error('No se pudo cargar event_results_cache:', error.message);
+    state.eventCache = null;
+    return;
+  }
+  state.eventCache = data?.payload || null;
 }
 
 async function refreshSession() {
@@ -314,6 +337,35 @@ function teamFlag(teamId) {
   const resolved = resolveKnockoutSeed(teamId);
   const key = knockoutTeamKey(resolved);
   const t = state.teams.find(x => x.team_id === resolved || knockoutTeamKey(x.name) === key);
+  return t && t.flag ? t.flag : '';
+}
+
+// Alias de nombres ES (Wikipedia usa nombres largos; las porras a veces cortos).
+// Clave y valor se comparan ya normalizados con knockoutTeamKey.
+const EVENT_TEAM_ALIASES = {
+  'COREA DEL SUR': 'COREA',
+  'REPUBLICA CHECA': 'CHEQUIA',
+  'ESTADOS UNIDOS': 'EEUU',
+  'PAISES BAJOS': 'HOLANDA',
+  'REPUBLICA DEMOCRATICA DEL CONGO': 'RD CONGO',
+  'BOSNIA Y HERZEGOVINA': 'BOSNIA'
+};
+
+// Equipo de la porra que corresponde a un nombre del caché (nombre español de Wikipedia).
+// Casa por nombre normalizado, probando también los alias en ambos sentidos. Devuelve
+// el team de la porra o null si no hay match.
+function eventTeamMatch(name) {
+  const key = knockoutTeamKey(name);
+  const candidates = new Set([key]);
+  if (EVENT_TEAM_ALIASES[key]) candidates.add(knockoutTeamKey(EVENT_TEAM_ALIASES[key]));
+  for (const [long, short] of Object.entries(EVENT_TEAM_ALIASES)) {
+    if (knockoutTeamKey(short) === key) candidates.add(knockoutTeamKey(long));
+  }
+  return state.teams.find(x => candidates.has(knockoutTeamKey(x.name))) || null;
+}
+// Bandera del equipo de la porra mapeado desde un nombre del caché ('' si no hay match).
+function eventTeamFlag(name) {
+  const t = eventTeamMatch(name);
   return t && t.flag ? t.flag : '';
 }
 function scoringConfig() {
@@ -2114,10 +2166,27 @@ function renderBestThirds() {
 }
 
 // --- Máximos goleadores ------------------------------------------------------
-// Agrega los goleadores de `porra_matches.scorers` (el mismo jsonb que alimenta
-// el desplegable "Ver goleadores" de cada partido) en una clasificación global.
+// Fuente principal: el caché de Wikipedia (event_results_cache.payload.topScorers),
+// ya agregado en BD (jugador + selección + goles, sin autogoles). Si el caché no
+// está disponible, cae al cálculo manual sobre `porra_matches.scorers` (legacy).
 // Cuenta solo goles válidos: ignora los goles en propia puerta, como la legacy.
 function calculateTopScorers() {
+  const cached = state.eventCache?.topScorers;
+  if (Array.isArray(cached) && cached.length) {
+    return cached
+      .map(s => {
+        const t = eventTeamMatch(s.team);
+        // Selección mapeada al nombre de la porra (si existe); si no, el del caché.
+        return { name: s.name, team: t ? t.name : s.team, goals: s.goals, flag: t?.flag || '' };
+      })
+      .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name, 'es'))
+      .slice(0, 15);
+  }
+  return calculateTopScorersFromMatches();
+}
+
+// Fallback manual: agrega los goleadores de `porra_matches.scorers`.
+function calculateTopScorersFromMatches() {
   const scorers = new Map();
   for (const m of state.matches) {
     const goals = goalBreakdown(m);
@@ -2127,7 +2196,7 @@ function calculateTopScorers() {
       for (const g of events) {
         if (!g.name || g.ownGoal) continue;
         const key = `${knockoutTeamKey(g.name)}__${knockoutTeamKey(team)}`;
-        const scorer = scorers.get(key) || { name: g.name, team, goals: 0 };
+        const scorer = scorers.get(key) || { name: g.name, team, goals: 0, flag: teamFlag(teamToken) };
         scorer.goals += 1;
         scorers.set(key, scorer);
       }
@@ -2144,7 +2213,7 @@ function renderTopScorers() {
     ? scorers.map((s, i) => `<tr>
         <td class="${i === 0 ? 'rank-1' : ''}">${i + 1}</td>
         <td class="scorer-name">${esc(s.name)}</td>
-        <td class="standing-team">${teamFlag(s.team)} ${esc(s.team)}</td>
+        <td class="standing-team">${s.flag ? s.flag + ' ' : ''}${esc(s.team)}</td>
         <td class="points">${s.goals}</td>
       </tr>`).join('')
     : `<tr><td colspan="4" class="empty-state">Todavía no hay goleadores registrados.</td></tr>`;
@@ -2154,7 +2223,9 @@ function renderTopScorers() {
       <div class="panel-head">
         <div>
           <h2>Máximos goleadores</h2>
-          <p class="hint">Goleadores registrados por el organizador en los partidos. Los goles en propia puerta no cuentan.</p>
+          <p class="hint">${state.eventCache?.topScorers?.length
+            ? 'Datos actualizados automáticamente. Los goles en propia puerta no cuentan.'
+            : 'Goleadores registrados por el organizador en los partidos. Los goles en propia puerta no cuentan.'}</p>
         </div>
       </div>
       <div class="table-wrap top-scorers-table">

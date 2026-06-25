@@ -55,6 +55,10 @@ los partidos jugados), `knockout` (cruces por ronda).
 El formato de cada gol (`{name, minutes, penalty, owngoal}`) encaja con `goalBreakdown()` de
 `public-next` y con el jsonb `porra_matches.scorers`.
 
+> **Ojo con los minutos**: la plantilla usa doble pipe como separador —
+> `{{gol|17||60||76}}` son 3 goles, no 1. El split de `parseGoals` incluye `|` además de
+> coma/espacio (`/[|,\s]+/`); sin eso, los hat-tricks/dobletes contaban como un solo gol.
+
 ## Automatización (Edge Function + cron)
 
 El parser de estos scripts está portado a Deno/TS en

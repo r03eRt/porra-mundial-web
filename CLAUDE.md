@@ -78,7 +78,10 @@ Fuente de datos automática **genérica por evento** para la plataforma nueva (e
 
 **Edge Function + cron**: `sync-wikipedia-results` (port del scraper a Deno/TS) escribe el caché automáticamente; cron cada 4 h en `supabase/cron-sync-wikipedia-results.sql`. Ver «Edge Functions activas».
 
-**Pendiente** (no implementado aún): el sync `event_results_cache` → `porra_matches`. **Regla de fallback**: el resultado **manual** del admin gana siempre; el sync solo rellenará partidos con `result_home`/`result_away` vacíos. El formato de gol (`{name, minutes, penalty, owngoal}`) encaja con `goalBreakdown()` de `public-next` y con `porra_matches.scorers`.
+**Conexión a la app nueva — parte por parte.** Se va enganchando sección a sección. `public-next` carga el payload en `state.eventCache` vía `loadEventCache()` (lectura pública, evento hardcode `EVENT_CACHE_KEY = 'worldcup-2026'` por ahora) dentro de `loadPorra()`. Conectado hasta ahora:
+- ✅ **Máximos goleadores**: `calculateTopScorers()` lee `state.eventCache.topScorers` (ya agregado en BD); si el caché no está, cae a `calculateTopScorersFromMatches()` (fallback manual sobre `porra_matches.scorers`). Como Wikipedia usa nombres ES (largos) y las porras a veces cortos, `eventTeamMatch(name)` casa el nombre del caché con el equipo de la porra por nombre normalizado + `EVENT_TEAM_ALIASES` (p.ej. «Corea del Sur»→COREA, «Países Bajos»→HOLANDA, «Bosnia y Herzegovina»→BOSNIA); la columna **Selección muestra el nombre mapeado de la porra** (no el de Wikipedia) y su bandera. Cada scorer lleva `team`/`flag` ya resueltos; el render no decide la fuente.
+
+**Pendiente**: enganchar el resto de secciones (partidos/resultados, clasificaciones, cruces) y el sync `event_results_cache` → `porra_matches` con **regla de fallback** (el resultado **manual** del admin gana siempre; el sync solo rellena partidos con `result_home`/`result_away` vacíos). El formato de gol (`{name, minutes, penalty, owngoal}`) encaja con `goalBreakdown()` de `public-next` y con `porra_matches.scorers`.
 
 ## Plataforma multi-porra — estado actual
 
