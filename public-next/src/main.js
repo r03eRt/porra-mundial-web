@@ -195,7 +195,9 @@ const state = {
   statsExpanded: { players: false, teams: false },
   statsErrors: { players: false, teams: false },
   playerRankings: null,
-  teamRankings: null
+  teamRankings: null,
+  compareMatchId: '',    // partido seleccionado en Comparador
+  comparePlayers: []     // player_ids añadidos al comparador, en orden
 };
 
 let toastTimer = null;
@@ -1461,6 +1463,7 @@ function render() {
     case 'topScorers': renderTopScorers(); break;
     case 'probabilities': renderProbabilities(); break;
     case 'statistics': renderStatistics(); break;
+    case 'compare': renderCompare(); break;
     default: renderRanking();
   }
 }
@@ -1519,7 +1522,7 @@ const TABS = [
   { key: 'topScorers', label: 'Máximos goleadores', ready: true },
   { key: 'probabilities', label: 'Probabilidades', ready: true },
   { key: 'statistics', label: 'Estadísticas', ready: true },
-  { key: 'compare', label: 'Comparador', ready: false }
+  { key: 'compare', label: 'Comparador', ready: true }
 ];
 
 function visibleTabs() {
@@ -1694,6 +1697,135 @@ function openMatchPredictions(matchId) {
     </div>`;
 
   dialog.showModal();
+}
+
+// --- Comparador (puerto de la app legacy) -------------------------------------
+// Elegir un partido y añadir jugadores uno a uno para comparar su pronóstico,
+// quiniela, estado (Exacto/Quiniela/Fallado/Pendiente) y puntos en ese partido.
+
+function compareMatchLabel(m) {
+  const title = `${teamName(m.team1)} - ${teamName(m.team2)}`;
+  if (m.stage === 'group') return `Grupo ${m.group_id || m.group_label || '?'} · ${title}`;
+  const round = KNOCKOUT_STAGE_META[normalizeKnockoutStageKey(m.round_key)]?.label || 'Cruce';
+  return `${round} · ${title}`;
+}
+
+function compareStatus(score) {
+  if (!score || !score.points) return { label: 'Fallado', className: 'bad' };
+  if (score.exact) return { label: 'Exacto', className: 'ok' };
+  return { label: 'Quiniela', className: 'points' };
+}
+
+function comparePlayerCard(player, match, result, scoring, index) {
+  const pred = predictionFor(player.player_id, match.match_id);
+  const scoreStr = pred?.score || '';
+  const score = result && scoreStr ? scorePrediction({ score: scoreStr }, result, scoring) : null;
+  const status = result ? compareStatus(score) : { label: 'Pendiente', className: 'muted' };
+  const points = score ? score.points : 0;
+  return `
+    <article class="compare-card">
+      <div class="compare-card-head">
+        <span class="pill">Participante</span>
+        <div class="compare-card-actions">
+          <button type="button" class="link-btn" data-compare-remove="${esc(player.player_id)}">Quitar</button>
+        </div>
+      </div>
+      <h3>${esc(player.name)}</h3>
+      <div class="compare-main-score">${scoreStr ? esc(scoreStr) : '—'}</div>
+      <div class="compare-subline">Quiniela: <strong>${signFromScore(scoreStr) || '—'}</strong></div>
+      <div class="compare-subline">Estado: <span class="${status.className}">${status.label}</span></div>
+      <div class="compare-points">+${points} pts</div>
+    </article>`;
+}
+
+function compareAddCard() {
+  const selected = new Set(state.comparePlayers);
+  const options = state.players
+    .filter(p => !selected.has(p.player_id))
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+    .map(p => `<option value="${esc(p.player_id)}">${esc(p.name)}</option>`)
+    .join('');
+  return `
+    <article class="compare-card compare-card-empty">
+      <span class="pill">Comparación</span>
+      <h3>Jugadores</h3>
+      <p class="compare-subline">Selecciona qué jugador quieres añadir a este partido.</p>
+      <div class="compare-picker">
+        <select data-action="compare-add-player" ${options ? '' : 'disabled'}>
+          <option value="">Jugador a comparar…</option>
+          ${options}
+        </select>
+      </div>
+      ${options ? '' : '<p class="hint">Ya están añadidos todos los jugadores disponibles.</p>'}
+    </article>`;
+}
+
+function compareResultCard(match, result) {
+  return `
+    <article class="compare-card compare-card-result">
+      <span class="pill">Resultado</span>
+      <h3>${teamFlag(match.team1)} ${esc(teamName(match.team1))} - ${esc(teamName(match.team2))} ${teamFlag(match.team2)}</h3>
+      <div class="compare-main-score ${result ? '' : 'pending'}">${result ? `${result.home} - ${result.away}` : 'Pendiente'}</div>
+      <div class="compare-subline">${esc(matchScheduleText(match))}</div>
+      ${result ? renderGoalBreakdown(match) : '<div class="compare-subline muted">Aún sin resultado disponible.</div>'}
+    </article>`;
+}
+
+function renderCompare() {
+  // Saneamiento de estado: partido y jugadores deben existir aún en la porra.
+  if (state.compareMatchId && !state.matches.some(m => String(m.match_id) === String(state.compareMatchId))) {
+    state.compareMatchId = '';
+  }
+  state.comparePlayers = state.comparePlayers.filter(pid => state.players.some(p => p.player_id === pid));
+
+  const matchOptions = [...state.matches]
+    .sort((a, b) => {
+      const sa = a.stage === 'group' ? 0 : 1, sb = b.stage === 'group' ? 0 : 1;
+      return sa - sb || (a.slot || 0) - (b.slot || 0) ||
+        String(a.match_id).localeCompare(String(b.match_id), undefined, { numeric: true });
+    })
+    .map(m => `<option value="${esc(m.match_id)}" ${String(m.match_id) === String(state.compareMatchId) ? 'selected' : ''}>${esc(compareMatchLabel(m))}</option>`)
+    .join('');
+
+  const match = state.matches.find(m => String(m.match_id) === String(state.compareMatchId));
+  const result = match ? matchResult(match) : null;
+  const scoring = scoringConfig();
+
+  const summary = match
+    ? `
+      <article class="card"><b>${esc(match.match_id)}</b><span>${esc(teamName(match.team1))} - ${esc(teamName(match.team2))}</span></article>
+      <article class="card"><b>${result ? `${result.home}-${result.away}` : 'Pendiente'}</b><span>resultado real</span></article>
+      <article class="card"><b>${state.comparePlayers.length}</b><span>jugadores añadidos</span></article>`
+    : `
+      <article class="card"><b>0</b><span>partido seleccionado</span></article>
+      <article class="card"><b>0</b><span>jugadores añadidos</span></article>`;
+
+  const cards = !match
+    ? '<p class="empty-state">Selecciona un partido para añadirlo al comparador y luego ve incorporando jugadores uno a uno.</p>'
+    : [
+        compareResultCard(match, result),
+        compareAddCard(),
+        ...state.comparePlayers
+          .map(pid => state.players.find(p => p.player_id === pid))
+          .filter(Boolean)
+          .map((player, index) => comparePlayerCard(player, match, result, scoring, index))
+      ].join('');
+
+  $app.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Comparador de pronósticos</h2>
+          <span class="hint">Compara el pronóstico de varios jugadores en un mismo partido.</span>
+        </div>
+        <select data-action="compare-match">
+          <option value="">Selecciona un partido…</option>
+          ${matchOptions}
+        </select>
+      </div>
+      <div class="compare-summary">${summary}</div>
+      <div class="compare-grid">${cards}</div>
+    </div>`;
 }
 
 function renderRanking() {
@@ -3764,6 +3896,13 @@ document.addEventListener('click', async (e) => {
   const teamBtn = e.target.closest('[data-team-select]');
   if (teamBtn) { state.selectedTeamId = teamBtn.dataset.teamSelect; render(); return; }
 
+  const compareRemove = e.target.closest('[data-compare-remove]');
+  if (compareRemove) {
+    state.comparePlayers = state.comparePlayers.filter(pid => pid !== compareRemove.dataset.compareRemove);
+    renderCompare();
+    return;
+  }
+
   const sortBtn = e.target.closest('[data-sort-key]');
   if (sortBtn) {
     const key = sortBtn.dataset.sortKey;
@@ -3908,6 +4047,15 @@ document.addEventListener('change', (e) => {
     state.statsSelections[state.statsMode] = statsRanking.value;
     state.statsExpanded[state.statsMode] = false;
     renderStatistics();
+  }
+
+  const compareMatch = e.target.closest('[data-action="compare-match"]');
+  if (compareMatch) { state.compareMatchId = compareMatch.value; renderCompare(); }
+
+  const compareAdd = e.target.closest('[data-action="compare-add-player"]');
+  if (compareAdd && compareAdd.value) {
+    if (!state.comparePlayers.includes(compareAdd.value)) state.comparePlayers.push(compareAdd.value);
+    renderCompare();
   }
 });
 

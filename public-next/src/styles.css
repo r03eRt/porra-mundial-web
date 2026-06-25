@@ -260,3 +260,22 @@ code{background:#0e1629;padding:2px 6px;border-radius:6px}
 
 /* Estadísticas */
 .stats-table-wrap{max-width:980px;margin:0 auto}.stats-table-wrap th:first-child,.stats-table-wrap td:first-child,.stats-table-wrap th:last-child,.stats-table-wrap td:last-child{text-align:center}.stats-country{display:inline-flex;align-items:center;gap:8px}.stats-flag{font-size:18px;line-height:1}.stats-mode-tabs{display:inline-flex;gap:4px;padding:4px;border:1px solid var(--border);border-radius:14px;background:#0c1426}.stats-mode-tab{padding:8px 12px;border-radius:10px;background:transparent;white-space:nowrap;border:1px solid transparent;cursor:pointer;color:var(--fg)}.stats-mode-tab.active{background:var(--panel2);border-color:var(--accent);color:var(--accent)}.stats-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}.stats-footer-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.stats-footer button{padding:9px 12px}.stats-footer .hint{min-height:1.2em}
+
+/* Comparador (puerto de la app legacy) */
+.compare-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px}
+.compare-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;align-items:start}
+.compare-grid>.empty-state{grid-column:1/-1}
+.compare-card{display:grid;gap:10px;padding:16px;border:1px solid var(--border);border-radius:18px;background:#0c1426}
+.compare-card h3{margin:0;font-size:18px}
+.compare-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.compare-card-actions{display:flex;gap:10px;flex-wrap:wrap}
+.compare-card-empty{align-content:center;min-height:220px}
+.compare-picker select{width:100%}
+.compare-picker select:disabled{opacity:.55;cursor:not-allowed}
+.compare-main-score{font-size:34px;font-weight:800;color:var(--accent);line-height:1.1}
+.compare-main-score.pending{font-size:22px;color:var(--muted)}
+.compare-subline{color:var(--muted)}
+.compare-points{font-weight:800;color:var(--accent2)}
+.compare-card-result{border-color:var(--accent2)}
+@media (max-width:1000px){.compare-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.compare-grid{grid-template-columns:1fr}}
