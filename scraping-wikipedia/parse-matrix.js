@@ -72,7 +72,13 @@ const header = `// Matriz oficial FIFA del Anexo C — asignación de los 8 mejo
 //   (seccion "Combinations of matches in the round of 32").
 // Generado por scraping-wikipedia/parse-matrix.js — NO editar a mano.
 window.THIRD_PLACE_MATRIX = {\n`;
-const moduleOut = header + lines.join(',\n') + '\n};\n';
-const dest = path.join(__dirname, '..', 'data', 'third-place-matrix.js');
-fs.writeFileSync(dest, moduleOut);
+// Legacy: global window.THIRD_PLACE_MATRIX (cargado como <script> en index.html).
+const legacyOut = header + lines.join(',\n') + '\n};\n';
+fs.writeFileSync(path.join(__dirname, '..', 'data', 'third-place-matrix.js'), legacyOut);
 console.log('\n>> Escrito data/third-place-matrix.js (' + Object.keys(matrix).length + ' entradas)');
+
+// admin-next: ES module (export const). Mismo contenido, distinto preámbulo.
+const esHeader = header.replace('window.THIRD_PLACE_MATRIX =', 'export const THIRD_PLACE_MATRIX =');
+const esOut = esHeader + lines.join(',\n') + '\n};\n';
+fs.writeFileSync(path.join(__dirname, '..', 'admin-next', 'src', 'third-place-matrix.js'), esOut);
+console.log('>> Escrito admin-next/src/third-place-matrix.js (' + Object.keys(matrix).length + ' entradas)');

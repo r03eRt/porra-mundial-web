@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { THIRD_PLACE_MATRIX } from './third-place-matrix.js';
 
 const SUPABASE_URL = 'https://tsbjhbpdvewqysgmrhci.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_54vtwk64bp3Tm6yJm5zv5w_o_qEkvTw';
@@ -591,13 +592,24 @@ function teamByToken(token) {
   ) || null;
 }
 
+// Un grupo se puede identificar por su letra (name, p.ej. "A") o por su UUID
+// (group_id). Los teams guardan el UUID y los matches la letra (group_label), así
+// que normalizamos ambos a un conjunto de claves equivalentes para casar los dos.
+function groupKeySet(groupId) {
+  const keys = new Set([String(groupId)]);
+  const g = state.groups.find(x => String(x.group_id) === String(groupId) || String(x.name) === String(groupId));
+  if (g) { keys.add(String(g.group_id)); keys.add(String(g.name)); }
+  return keys;
+}
+
 function computeAdminGroupStandings(groupId) {
+  const keys = groupKeySet(groupId);
   const groupMatches = state.matches.filter(match => {
     const phase = match.phase ?? match.stage;
-    return phase === 'group' && (match.group_id ?? match.group_label) === groupId;
+    return phase === 'group' && keys.has(String(match.group_id ?? match.group_label));
   });
   const groupTeams = state.teams
-    .filter(team => team.group_id === groupId)
+    .filter(team => keys.has(String(team.group_id)))
     .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0));
   const rows = groupTeams.map((team, index) => ({
     team: team.team_id,
@@ -648,6 +660,64 @@ function knockoutWinnerToken(match) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Terceros del Mundial 2026 — matriz oficial FIFA del Anexo C
+// ---------------------------------------------------------------------------
+// Asignación de los 8 mejores terceros a los slots de dieciseisavos. NO se
+// calcula: es la tabla de 495 combinaciones (THIRD_PLACE_MATRIX) cuya clave es
+// el conjunto de grupos cuyos terceros clasifican. Sin esto, los tokens de
+// tercero (3A/B/C/D/F…) no se resolvían a un equipo real en el admin.
+
+// Token de tercero (lista de grupos candidatos) → slot oficial 1A,1B,1D,1E,1G,1I,1K,1L.
+const THIRD_SLOT_BY_GROUPSET = {
+  ABCDF: '1E', CDFGH: '1I', CEFHI: '1A', EHIJK: '1L',
+  BEFIJ: '1D', AEHIJ: '1G', EFGIJ: '1B', DEIJL: '1K'
+};
+
+// Los 8 mejores terceros, ordenados pts↓/DG↓/GF↓ (sin fairPlay/ranking FIFA en el
+// admin → desempate por orden de grupo). Cada item: { group, team }.
+// Cacheado por render para no recalcular las 12 clasificaciones por cada token.
+let _bestThirdsCache = null;
+function adminBestThirds() {
+  if (_bestThirdsCache) return _bestThirdsCache;
+  // Grupos por su LETRA (name), que es lo que usa la matriz (THIRD_PLACE_MATRIX).
+  const letters = [...new Set(state.groups.map(g => String(g.name)).filter(Boolean))].sort();
+  const thirds = letters.map((letter, groupIndex) => {
+    const st = computeAdminGroupStandings(letter);
+    const third = st[2];
+    if (!third) return null;
+    return { group: letter, team: third.team, points: third.pts, goalDifference: third.gf - third.gc, goalsFor: third.gf, groupIndex };
+  }).filter(Boolean);
+  thirds.sort((a, b) =>
+    b.points - a.points ||
+    b.goalDifference - a.goalDifference ||
+    b.goalsFor - a.goalsFor ||
+    a.groupIndex - b.groupIndex
+  );
+  _bestThirdsCache = thirds.slice(0, 8);
+  return _bestThirdsCache;
+}
+function invalidateBestThirdsCache() { _bestThirdsCache = null; }
+
+// Resuelve un token de tercero (3A/B/C/D/F) al team_id que la matriz le asigna.
+// Solo cuando los 8 grupos del tercero están decididos (la combinación existe en
+// la matriz); si no, devuelve null y se cae a la etiqueta de semilla.
+function resolveThirdSeed(raw) {
+  const m = raw.match(/^3([A-L](?:\/[A-L])+)$/i);
+  if (!m) return null;
+  const groupSet = m[1].toUpperCase().split('/').sort().join('');
+  const slot = THIRD_SLOT_BY_GROUPSET[groupSet];
+  if (!slot) return null;
+  const best = adminBestThirds();
+  if (best.length !== 8) return null;
+  const combination = best.map(t => t.group).sort().join('');
+  const entry = THIRD_PLACE_MATRIX[combination];
+  if (!entry) return null;
+  const thirdGroup = entry[slot];
+  const hit = best.find(t => t.group === thirdGroup);
+  return hit ? hit.team : null;
+}
+
 function resolveKnockoutSeed(token, seen = new Set()) {
   const raw = String(token || '').trim();
   if (!raw) return '';
@@ -661,6 +731,12 @@ function resolveKnockoutSeed(token, seen = new Set()) {
   if (groupSeed) {
     const standings = computeAdminGroupStandings(groupSeed[1]);
     return standings[Number(groupSeed[2]) - 1]?.team || raw;
+  }
+
+  // Tercero clasificado: asignación oficial por la matriz FIFA (Anexo C).
+  if (/^3[A-L](\/[A-L])+$/i.test(raw)) {
+    const teamId = resolveThirdSeed(raw);
+    return teamId || raw;
   }
 
   const winnerSeed = raw.match(/^W:(.+)$/i);
@@ -2047,6 +2123,7 @@ function renderDetail() {
 
 function render() {
   renderSession();
+  invalidateBestThirdsCache(); // recalcular terceros con el estado actual
 
   if (state.loading) {
     $app.innerHTML = `<p class="muted">Cargando…</p>`;
