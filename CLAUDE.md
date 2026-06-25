@@ -68,7 +68,17 @@ La pestaña **Mejores terceros** muestra por defecto solo los **8 clasificados**
 
 `porras`, `porra_teams`, `porra_groups`, `porra_matches`, `porra_players`,
 `porra_predictions`, `porra_mini_questions`, `porra_mini_answers`,
-`porra_mini_results`, `porra_knockout_picks`, `platform_admins`
+`porra_mini_results`, `porra_knockout_picks`, `platform_admins`, `event_results_cache`
+
+## Caché de resultados de eventos (app nueva) — `event_results_cache`
+
+Fuente de datos automática **genérica por evento** para la plataforma nueva (equivalente al `worldcup_results_cache` de la legacy, pero multi-evento). Tabla `event_results_cache (event PK, payload jsonb, source, source_url, updated_at)`, RLS de lectura pública y escritura `authenticated` (migración `20260625160000_event_results_cache.sql`). El **payload** trae todo lo que consume la app nueva: `meta`, `teams` (catálogo con código FIFA), `matches` (con `goals.home/away`), `topScorers` (ranking agregado sin autogoles), `standings` (clasificación por grupo derivada de partidos jugados) y `knockout` (cruces por ronda, con semillas tipo `3A/B/C/D/F` cuando no están resueltas).
+
+**Fuente: Wikipedia ES** vía su REST API (`/api/rest_v1/page/html/...`): cada partido es la plantilla `{{Partido}}` con un `data-mw` JSON estructurado (equipos, código FIFA, resultado, fecha/hora, estadio, ciudad, goleadores con minuto + penalti/autogol, reporte FIFA). Scraper en `scraping-wikipedia/` (`scrape.js` → `build-payload.js` → `gen-seed.js`); seed inicial en `supabase/seed-event-results-cache-worldcup-2026.sql` (snapshot del Mundial 2026: 104 partidos, 48 equipos, 119 goleadores, 12 grupos). Ver `scraping-wikipedia/README.md`.
+
+**Edge Function + cron**: `sync-wikipedia-results` (port del scraper a Deno/TS) escribe el caché automáticamente; cron cada 4 h en `supabase/cron-sync-wikipedia-results.sql`. Ver «Edge Functions activas».
+
+**Pendiente** (no implementado aún): el sync `event_results_cache` → `porra_matches`. **Regla de fallback**: el resultado **manual** del admin gana siempre; el sync solo rellenará partidos con `result_home`/`result_away` vacíos. El formato de gol (`{name, minutes, penalty, owngoal}`) encaja con `goalBreakdown()` de `public-next` y con `porra_matches.scorers`.
 
 ## Plataforma multi-porra — estado actual
 
@@ -118,8 +128,10 @@ Toda la UI se regenera con `render()`. No hay framework; es JS vanilla con event
 
 ## Edge Functions activas
 
-`sync-worldcup-results`, `sync-as-rankings`, `sync-as-live-match`, `sync-football-live`
+`sync-worldcup-results`, `sync-as-rankings`, `sync-as-live-match`, `sync-football-live`, `sync-wikipedia-results`
 (todas con `verify_jwt = false` para que las llame `pg_cron`)
+
+**`sync-wikipedia-results`** (app nueva): scrapea Wikipedia ES (REST API → `{{Partido}}`/`data-mw`), construye el payload completo (partidos, goleadores, clasificaciones, cruces) y hace `upsert` en `event_results_cache`. Genérica por evento (`?event=worldcup-2026`, default), con caché propio (15 min normal / 2 min en ventana de partido; `?force=1` para forzar). NO toca `porra_matches`. Deploy: `npx supabase functions deploy sync-wikipedia-results`. Cron cada 4 h (mientras la app no lo consuma) en `supabase/cron-sync-wikipedia-results.sql` (requiere `pg_cron` + `pg_net` habilitados). Es un port directo del scraper `scraping-wikipedia/` a Deno/TS.
 
 Funciones de admin-next (con `verify_jwt` por defecto = true; el frontend pasa el header de Authorization y verifican `pp_owns`): `admin-next-add-player` (crea/enlaza la cuenta Auth del jugador), `admin-next-set-player-password` (cambia la contraseña de un jugador vía `auth.admin.updateUserById`), `admin-next-set-player-email` (cambia el email de Auth + `porra_players.email`). Usan `SUPABASE_SERVICE_ROLE_KEY`, por eso van en Edge Function y no en el frontend. Deploy: `npx supabase functions deploy <nombre>`.
 

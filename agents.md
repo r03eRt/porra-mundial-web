@@ -111,7 +111,7 @@ El dashboard en `admin-next/` tiene:
 - ✅ Entrada de resultados reales por el admin (manual, inline en `admin-next/`); las vistas públicas ya los leen vía `matchResult` (`score_* ?? result_*`)
 - ⬜ Clasificación de grupos calculada
 - ⬜ Mini-porra configurable, cruces configurables
-- ⬜ Fuente automática de resultados por API por evento (hoy solo Mundial 2026 legacy vía Edge Functions; ver «Fuente de resultados» en README)
+- 🚧 Fuente automática de resultados por evento. **Caché `event_results_cache`** (tabla genérica por evento, migración `20260625160000_event_results_cache.sql`, RLS lectura pública + escritura `authenticated`): payload jsonb con `meta`, `teams` (catálogo + código FIFA), `matches` (con `goals.home/away`), `topScorers`, `standings` (por grupo) y `knockout` (por ronda). **Fuente: Wikipedia ES** (REST API `/api/rest_v1/page/html/...`, plantilla `{{Partido}}` → `data-mw` JSON). Scraper en `scraping-wikipedia/` (`scrape.js`→`build-payload.js`→`gen-seed.js`); seed inicial `supabase/seed-event-results-cache-worldcup-2026.sql` (Mundial 2026: 104 partidos, 48 equipos, 119 goleadores). **Edge Function `sync-wikipedia-results`** (port del scraper a Deno/TS, `verify_jwt = false`) escribe el caché; cron cada 4 h en `supabase/cron-sync-wikipedia-results.sql` (requiere `pg_cron`+`pg_net`). Deploy: `npx supabase functions deploy sync-wikipedia-results`. **Pendiente**: sync `event_results_cache`→`porra_matches` con **fallback manual** (el resultado manual del admin gana siempre; el sync solo rellena partidos vacíos). Gol `{name, minutes, penalty, owngoal}` encaja con `goalBreakdown()` y `porra_matches.scorers`. Ver `scraping-wikipedia/README.md`
 
 ### public-next — cómo arrancarlo
 

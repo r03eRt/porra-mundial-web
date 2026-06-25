@@ -1,0 +1,5586 @@
+{
+  "source": "wikipedia-es",
+  "sourceUrl": "https://es.wikipedia.org/wiki/Copa_Mundial_de_Fútbol_de_2026",
+  "event": "worldcup-2026",
+  "meta": {
+    "totalMatches": 104,
+    "playedMatches": 54,
+    "totalGoals": 137,
+    "groups": 12
+  },
+  "teams": [
+    {
+      "code": "GER",
+      "name": "Alemania"
+    },
+    {
+      "code": "KSA",
+      "name": "Arabia Saudita"
+    },
+    {
+      "code": "ALG",
+      "name": "Argelia"
+    },
+    {
+      "code": "ARG",
+      "name": "Argentina"
+    },
+    {
+      "code": "AUS",
+      "name": "Australia"
+    },
+    {
+      "code": "AUT",
+      "name": "Austria"
+    },
+    {
+      "code": "BEL",
+      "name": "Bélgica"
+    },
+    {
+      "code": "BIH",
+      "name": "Bosnia y Herzegovina"
+    },
+    {
+      "code": "BRA",
+      "name": "Brasil"
+    },
+    {
+      "code": "CPV",
+      "name": "Cabo Verde"
+    },
+    {
+      "code": "CAN",
+      "name": "Canadá"
+    },
+    {
+      "code": "QAT",
+      "name": "Catar"
+    },
+    {
+      "code": "COL",
+      "name": "Colombia"
+    },
+    {
+      "code": "KOR",
+      "name": "Corea del Sur"
+    },
+    {
+      "code": "CIV",
+      "name": "Costa de Marfil"
+    },
+    {
+      "code": "CRO",
+      "name": "Croacia"
+    },
+    {
+      "code": "CUW",
+      "name": "Curazao"
+    },
+    {
+      "code": "ECU",
+      "name": "Ecuador"
+    },
+    {
+      "code": "EGY",
+      "name": "Egipto"
+    },
+    {
+      "code": "SCO",
+      "name": "Escocia"
+    },
+    {
+      "code": "ESP",
+      "name": "España"
+    },
+    {
+      "code": "USA",
+      "name": "Estados Unidos"
+    },
+    {
+      "code": "FRA",
+      "name": "Francia"
+    },
+    {
+      "code": "GHA",
+      "name": "Ghana"
+    },
+    {
+      "code": "HAI",
+      "name": "Haití"
+    },
+    {
+      "code": "ENG",
+      "name": "Inglaterra"
+    },
+    {
+      "code": "IRQ",
+      "name": "Irak"
+    },
+    {
+      "code": "IRN",
+      "name": "Irán"
+    },
+    {
+      "code": "JPN",
+      "name": "Japón"
+    },
+    {
+      "code": "JOR",
+      "name": "Jordania"
+    },
+    {
+      "code": "MAR",
+      "name": "Marruecos"
+    },
+    {
+      "code": "MEX",
+      "name": "México"
+    },
+    {
+      "code": "NOR",
+      "name": "Noruega"
+    },
+    {
+      "code": "NZL",
+      "name": "Nueva Zelanda"
+    },
+    {
+      "code": "NED",
+      "name": "Países Bajos"
+    },
+    {
+      "code": "PAN",
+      "name": "Panamá"
+    },
+    {
+      "code": "PAR",
+      "name": "Paraguay"
+    },
+    {
+      "code": "POR",
+      "name": "Portugal"
+    },
+    {
+      "code": "CZE",
+      "name": "República Checa"
+    },
+    {
+      "code": "COD",
+      "name": "República Democrática del Congo"
+    },
+    {
+      "code": "SEN",
+      "name": "Senegal"
+    },
+    {
+      "code": "RSA",
+      "name": "Sudáfrica"
+    },
+    {
+      "code": "SWE",
+      "name": "Suecia"
+    },
+    {
+      "code": "SUI",
+      "name": "Suiza"
+    },
+    {
+      "code": "TUN",
+      "name": "Túnez"
+    },
+    {
+      "code": "TUR",
+      "name": "Turquía"
+    },
+    {
+      "code": "URU",
+      "name": "Uruguay"
+    },
+    {
+      "code": "UZB",
+      "name": "Uzbekistán"
+    }
+  ],
+  "matches": [
+    {
+      "num": 1,
+      "stage": "group",
+      "group": "A",
+      "round": null,
+      "team1": "México",
+      "team2": "Sudáfrica",
+      "code1": "MEX",
+      "code2": "RSA",
+      "played": true,
+      "score_home": 2,
+      "score_away": 0,
+      "date": "11/6",
+      "time": "13:00 (UTC-6)",
+      "stadium": "Estadio Azteca",
+      "city": "Ciudad de México",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021443",
+      "goals": {
+        "home": [
+          {
+            "name": "Quiñones",
+            "minutes": [
+              "9"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Jiménez",
+            "minutes": [
+              "67"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 2,
+      "stage": "group",
+      "group": "A",
+      "round": null,
+      "team1": "Corea del Sur",
+      "team2": "República Checa",
+      "code1": "KOR",
+      "code2": "CZE",
+      "played": true,
+      "score_home": 2,
+      "score_away": 1,
+      "date": "11/6",
+      "time": "20:00 (UTC-6)",
+      "stadium": "Estadio Akron",
+      "city": "Guadalajara",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021441",
+      "goals": {
+        "home": [
+          {
+            "name": "Hwang In-beom",
+            "minutes": [
+              "67"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Oh Hyeon-gyu",
+            "minutes": [
+              "80"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Krejčí",
+            "minutes": [
+              "59"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 3,
+      "stage": "group",
+      "group": "A",
+      "round": null,
+      "team1": "República Checa",
+      "team2": "Sudáfrica",
+      "code1": "CZE",
+      "code2": "RSA",
+      "played": true,
+      "score_home": 1,
+      "score_away": 1,
+      "date": "18/6",
+      "time": "12:00 (UTC-4)",
+      "stadium": "Mercedes-Benz Stadium",
+      "city": "Atlanta",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021440",
+      "goals": {
+        "home": [
+          {
+            "name": "Sadílek",
+            "minutes": [
+              "6"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Mokoena",
+            "minutes": [
+              "83|pen."
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 4,
+      "stage": "group",
+      "group": "A",
+      "round": null,
+      "team1": "México",
+      "team2": "Corea del Sur",
+      "code1": "MEX",
+      "code2": "KOR",
+      "played": true,
+      "score_home": 1,
+      "score_away": 0,
+      "date": "18/6",
+      "time": "19:00 (UTC-6)",
+      "stadium": "Estadio Akron",
+      "city": "Guadalajara",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021442",
+      "goals": {
+        "home": [
+          {
+            "name": "Romo",
+            "minutes": [
+              "50"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 5,
+      "stage": "group",
+      "group": "A",
+      "round": null,
+      "team1": "República Checa",
+      "team2": "México",
+      "code1": "CZE",
+      "code2": "MEX",
+      "played": true,
+      "score_home": 0,
+      "score_away": 3,
+      "date": "24/6",
+      "time": "19:00 (UTC-6)",
+      "stadium": "Estadio Azteca",
+      "city": "Ciudad de México",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021444",
+      "goals": {
+        "home": [],
+        "away": [
+          {
+            "name": "M. Chávez",
+            "minutes": [
+              "55"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Quiñones",
+            "minutes": [
+              "61"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Fidalgo",
+            "minutes": [
+              "90+4"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 6,
+      "stage": "group",
+      "group": "A",
+      "round": null,
+      "team1": "Sudáfrica",
+      "team2": "Corea del Sur",
+      "code1": "RSA",
+      "code2": "KOR",
+      "played": true,
+      "score_home": 1,
+      "score_away": 0,
+      "date": "24/6",
+      "time": "19:00 (UTC-6)",
+      "stadium": "Estadio BBVA",
+      "city": "Monterrey",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021445",
+      "goals": {
+        "home": [
+          {
+            "name": "Maseko",
+            "minutes": [
+              "63"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 7,
+      "stage": "group",
+      "group": "B",
+      "round": null,
+      "team1": "Canadá",
+      "team2": "Bosnia y Herzegovina",
+      "code1": "CAN",
+      "code2": "BIH",
+      "played": true,
+      "score_home": 1,
+      "score_away": 1,
+      "date": "12/6",
+      "time": "15:00 (UTC-4)",
+      "stadium": "BMO Field",
+      "city": "Toronto",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021449",
+      "goals": {
+        "home": [
+          {
+            "name": "Larin",
+            "minutes": [
+              "78"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Lukić",
+            "minutes": [
+              "21"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 8,
+      "stage": "group",
+      "group": "B",
+      "round": null,
+      "team1": "Catar",
+      "team2": "Suiza",
+      "code1": "QAT",
+      "code2": "SUI",
+      "played": true,
+      "score_home": 1,
+      "score_away": 1,
+      "date": "13/6",
+      "time": "12:00 (UTC-7)",
+      "stadium": "Levi's Stadium",
+      "city": "San Francisco",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021447",
+      "goals": {
+        "home": [
+          {
+            "name": "Muheim",
+            "minutes": [
+              "90+4|a.g."
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Embolo",
+            "minutes": [
+              "17|pen."
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 9,
+      "stage": "group",
+      "group": "B",
+      "round": null,
+      "team1": "Suiza",
+      "team2": "Bosnia y Herzegovina",
+      "code1": "SUI",
+      "code2": "BIH",
+      "played": true,
+      "score_home": 4,
+      "score_away": 1,
+      "date": "18/6",
+      "time": "12:00 (UTC-7)",
+      "stadium": "SoFi Stadium",
+      "city": "Los Ángeles",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021446",
+      "goals": {
+        "home": [
+          {
+            "name": "Manzambi",
+            "minutes": [
+              "74||90"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Vargas",
+            "minutes": [
+              "84"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Xhaka",
+            "minutes": [
+              "90+7|pen."
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Mahmić",
+            "minutes": [
+              "90+3"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 10,
+      "stage": "group",
+      "group": "B",
+      "round": null,
+      "team1": "Canadá",
+      "team2": "Catar",
+      "code1": "CAN",
+      "code2": "QAT",
+      "played": true,
+      "score_home": 6,
+      "score_away": 0,
+      "date": "18/6",
+      "time": "15:00 (UTC-7)",
+      "stadium": "Estadio BC Place",
+      "city": "Vancouver",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021450",
+      "goals": {
+        "home": [
+          {
+            "name": "Larin",
+            "minutes": [
+              "16"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "J. David",
+            "minutes": [
+              "29||45+3||90+2"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Saliba",
+            "minutes": [
+              "64"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Manai",
+            "minutes": [
+              "75|a.g."
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 11,
+      "stage": "group",
+      "group": "B",
+      "round": null,
+      "team1": "Suiza",
+      "team2": "Canadá",
+      "code1": "SUI",
+      "code2": "CAN",
+      "played": true,
+      "score_home": 2,
+      "score_away": 1,
+      "date": "24/6",
+      "time": "12:00 (UTC-7)",
+      "stadium": "Estadio BC Place",
+      "city": "Vancouver",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021451",
+      "goals": {
+        "home": [
+          {
+            "name": "Vargas",
+            "minutes": [
+              "46"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Manzambi",
+            "minutes": [
+              "57"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "P. David",
+            "minutes": [
+              "76"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 12,
+      "stage": "group",
+      "group": "B",
+      "round": null,
+      "team1": "Bosnia y Herzegovina",
+      "team2": "Catar",
+      "code1": "BIH",
+      "code2": "QAT",
+      "played": true,
+      "score_home": 3,
+      "score_away": 1,
+      "date": "24/6",
+      "time": "12:00 (UTC-7)",
+      "stadium": "Lumen Field",
+      "city": "Seattle",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021448",
+      "goals": {
+        "home": [
+          {
+            "name": "Alajbegović",
+            "minutes": [
+              "29"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Abunada",
+            "minutes": [
+              "34|a.g."
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Mahmić",
+            "minutes": [
+              "80"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Al-Haydos",
+            "minutes": [
+              "42"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 13,
+      "stage": "group",
+      "group": "C",
+      "round": null,
+      "team1": "Brasil",
+      "team2": "Marruecos",
+      "code1": "BRA",
+      "code2": "MAR",
+      "played": true,
+      "score_home": 1,
+      "score_away": 1,
+      "date": "13/6",
+      "time": "18:00 (UTC-4)",
+      "stadium": "MetLife Stadium",
+      "city": "Nueva York/Nueva Jersey",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021456",
+      "goals": {
+        "home": [
+          {
+            "name": "Vinícius Júnior",
+            "minutes": [
+              "32"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Saibari",
+            "minutes": [
+              "21"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 14,
+      "stage": "group",
+      "group": "C",
+      "round": null,
+      "team1": "Haití",
+      "team2": "Escocia",
+      "code1": "HAI",
+      "code2": "SCO",
+      "played": true,
+      "score_home": 0,
+      "score_away": 1,
+      "date": "13/6",
+      "time": "21:00 (UTC-4)",
+      "stadium": "Gillette Stadium",
+      "city": "Boston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021453",
+      "goals": {
+        "home": [],
+        "away": [
+          {
+            "name": "McGinn",
+            "minutes": [
+              "28"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 15,
+      "stage": "group",
+      "group": "C",
+      "round": null,
+      "team1": "Escocia",
+      "team2": "Marruecos",
+      "code1": "SCO",
+      "code2": "MAR",
+      "played": true,
+      "score_home": 0,
+      "score_away": 1,
+      "date": "19/6",
+      "time": "18:00 (UTC-4)",
+      "stadium": "Gillette Stadium",
+      "city": "Boston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021454",
+      "goals": {
+        "home": [],
+        "away": [
+          {
+            "name": "Saibari",
+            "minutes": [
+              "2"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 16,
+      "stage": "group",
+      "group": "C",
+      "round": null,
+      "team1": "Brasil",
+      "team2": "Haití",
+      "code1": "BRA",
+      "code2": "HAI",
+      "played": true,
+      "score_home": 3,
+      "score_away": 0,
+      "date": "19/6",
+      "time": "20:30 (UTC-4)",
+      "stadium": "Lincoln Financial Field",
+      "city": "Filadelfia",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021457",
+      "goals": {
+        "home": [
+          {
+            "name": "Cunha",
+            "minutes": [
+              "23||36"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Vinícius Júnior",
+            "minutes": [
+              "45+3"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 17,
+      "stage": "group",
+      "group": "C",
+      "round": null,
+      "team1": "Escocia",
+      "team2": "Brasil",
+      "code1": "SCO",
+      "code2": "BRA",
+      "played": true,
+      "score_home": 0,
+      "score_away": 3,
+      "date": "24/6",
+      "time": "18:00 (UTC-4)",
+      "stadium": "Hard Rock Stadium",
+      "city": "Miami",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021455",
+      "goals": {
+        "home": [],
+        "away": [
+          {
+            "name": "Vinícius Júnior",
+            "minutes": [
+              "7||45+3"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Cunha",
+            "minutes": [
+              "60"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 18,
+      "stage": "group",
+      "group": "C",
+      "round": null,
+      "team1": "Marruecos",
+      "team2": "Haití",
+      "code1": "MAR",
+      "code2": "HAI",
+      "played": true,
+      "score_home": 4,
+      "score_away": 2,
+      "date": "24/6",
+      "time": "18:00 (UTC-4)",
+      "stadium": "Mercedes-Benz Stadium",
+      "city": "Atlanta",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021452",
+      "goals": {
+        "home": [
+          {
+            "name": "Hakimi",
+            "minutes": [
+              "39"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Saibari",
+            "minutes": [
+              "45+1"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Rahimi",
+            "minutes": [
+              "78"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Yassine",
+            "minutes": [
+              "89"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Bounou",
+            "minutes": [
+              "10|a.g."
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Isidor",
+            "minutes": [
+              "43"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 19,
+      "stage": "group",
+      "group": "D",
+      "round": null,
+      "team1": "Estados Unidos",
+      "team2": "Paraguay",
+      "code1": "USA",
+      "code2": "PAR",
+      "played": true,
+      "score_home": 4,
+      "score_away": 1,
+      "date": "12/6",
+      "time": "18:00 (UTC-7)",
+      "stadium": "SoFi Stadium",
+      "city": "Los Ángeles",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021458",
+      "goals": {
+        "home": [
+          {
+            "name": "Bobadilla",
+            "minutes": [
+              "7|a.g."
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Balogun",
+            "minutes": [
+              "31||45+5"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Reyna",
+            "minutes": [
+              "90+8"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Maurício",
+            "minutes": [
+              "73"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 20,
+      "stage": "group",
+      "group": "D",
+      "round": null,
+      "team1": "Australia",
+      "team2": "Turquía",
+      "code1": "AUS",
+      "code2": "TUR",
+      "played": true,
+      "score_home": 2,
+      "score_away": 0,
+      "date": "13/6",
+      "time": "21:00 (UTC-7)",
+      "stadium": "Estadio BC Place",
+      "city": "Vancouver",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021463",
+      "goals": {
+        "home": [
+          {
+            "name": "Irankunda",
+            "minutes": [
+              "27"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Metcalfe",
+            "minutes": [
+              "75"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 21,
+      "stage": "group",
+      "group": "D",
+      "round": null,
+      "team1": "Estados Unidos",
+      "team2": "Australia",
+      "code1": "USA",
+      "code2": "AUS",
+      "played": true,
+      "score_home": 2,
+      "score_away": 0,
+      "date": "19/6",
+      "time": "12:00 (UTC-7)",
+      "stadium": "Lumen Field",
+      "city": "Seattle",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021462",
+      "goals": {
+        "home": [
+          {
+            "name": "Burgess",
+            "minutes": [
+              "11|a.g."
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Freeman",
+            "minutes": [
+              "43"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 22,
+      "stage": "group",
+      "group": "D",
+      "round": null,
+      "team1": "Turquía",
+      "team2": "Paraguay",
+      "code1": "TUR",
+      "code2": "PAR",
+      "played": true,
+      "score_home": 0,
+      "score_away": 1,
+      "date": "19/6",
+      "time": "20:00 (UTC-7)",
+      "stadium": "Levi's Stadium",
+      "city": "San Francisco",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021460",
+      "goals": {
+        "home": [],
+        "away": [
+          {
+            "name": "Galarza",
+            "minutes": [
+              "2"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 23,
+      "stage": "group",
+      "group": "D",
+      "round": null,
+      "team1": "Turquía",
+      "team2": "Estados Unidos",
+      "code1": "TUR",
+      "code2": "USA",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "25/6",
+      "time": "19:00 (UTC-7)",
+      "stadium": "SoFi Stadium",
+      "city": "Los Ángeles",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021459",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 24,
+      "stage": "group",
+      "group": "D",
+      "round": null,
+      "team1": "Paraguay",
+      "team2": "Australia",
+      "code1": "PAR",
+      "code2": "AUS",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "25/6",
+      "time": "19:00 (UTC-7)",
+      "stadium": "Levi's Stadium",
+      "city": "San Francisco",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021461",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 25,
+      "stage": "group",
+      "group": "E",
+      "round": null,
+      "team1": "Alemania",
+      "team2": "Curazao",
+      "code1": "GER",
+      "code2": "CUW",
+      "played": true,
+      "score_home": 7,
+      "score_away": 1,
+      "date": "14/6",
+      "time": "12:00 (UTC-5)",
+      "stadium": "NRG Stadium",
+      "city": "Houston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021464",
+      "goals": {
+        "home": [
+          {
+            "name": "Nmecha",
+            "minutes": [
+              "6"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Schlotterbeck",
+            "minutes": [
+              "38"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Havertz",
+            "minutes": [
+              "45+5|pen.|88"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Musiala",
+            "minutes": [
+              "47"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Brown",
+            "minutes": [
+              "68"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Undav",
+            "minutes": [
+              "78"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Comenencia",
+            "minutes": [
+              "21"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 26,
+      "stage": "group",
+      "group": "E",
+      "round": null,
+      "team1": "Costa de Marfil",
+      "team2": "Ecuador",
+      "code1": "CIV",
+      "code2": "ECU",
+      "played": true,
+      "score_home": 1,
+      "score_away": 0,
+      "date": "14/6",
+      "time": "19:00 (UTC-4)",
+      "stadium": "Lincoln Financial Field",
+      "city": "Filadelfia",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021467",
+      "goals": {
+        "home": [
+          {
+            "name": "Diallo",
+            "minutes": [
+              "90"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 27,
+      "stage": "group",
+      "group": "E",
+      "round": null,
+      "team1": "Alemania",
+      "team2": "Costa de Marfil",
+      "code1": "GER",
+      "code2": "CIV",
+      "played": true,
+      "score_home": 2,
+      "score_away": 1,
+      "date": "20/6",
+      "time": "16:00 (UTC-4)",
+      "stadium": "BMO Field",
+      "city": "Toronto",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021469",
+      "goals": {
+        "home": [
+          {
+            "name": "Undav",
+            "minutes": [
+              "68||90+4"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Kessié",
+            "minutes": [
+              "30"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 28,
+      "stage": "group",
+      "group": "E",
+      "round": null,
+      "team1": "Ecuador",
+      "team2": "Curazao",
+      "code1": "ECU",
+      "code2": "CUW",
+      "played": true,
+      "score_home": 0,
+      "score_away": 0,
+      "date": "20/06",
+      "time": "19:00 (UTC-5)",
+      "stadium": "Arrowhead Stadium",
+      "city": "Kansas City",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021465",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 29,
+      "stage": "group",
+      "group": "E",
+      "round": null,
+      "team1": "Ecuador",
+      "team2": "Alemania",
+      "code1": "ECU",
+      "code2": "GER",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "25/6",
+      "time": "16:00 (UTC-4)",
+      "stadium": "MetLife Stadium",
+      "city": "Nueva York/Nueva Jersey",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021466",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 30,
+      "stage": "group",
+      "group": "E",
+      "round": null,
+      "team1": "Curazao",
+      "team2": "Costa de Marfil",
+      "code1": "CUW",
+      "code2": "CIV",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "25/6",
+      "time": "16:00 (UTC-4)",
+      "stadium": "Lincoln Financial Field",
+      "city": "Filadelfia",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021468",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 31,
+      "stage": "group",
+      "group": "F",
+      "round": null,
+      "team1": "Países Bajos",
+      "team2": "Japón",
+      "code1": "NED",
+      "code2": "JPN",
+      "played": true,
+      "score_home": 2,
+      "score_away": 2,
+      "date": "14/6",
+      "time": "15:00 (UTC-5)",
+      "stadium": "AT&T Stadium",
+      "city": "Dallas",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021470",
+      "goals": {
+        "home": [
+          {
+            "name": "Van Dijk",
+            "minutes": [
+              "50"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Summerville",
+            "minutes": [
+              "64"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Nakamura",
+            "minutes": [
+              "57"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Kamada",
+            "minutes": [
+              "89"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 32,
+      "stage": "group",
+      "group": "F",
+      "round": null,
+      "team1": "Suecia",
+      "team2": "Túnez",
+      "code1": "SWE",
+      "code2": "TUN",
+      "played": true,
+      "score_home": 5,
+      "score_away": 1,
+      "date": "14/6",
+      "time": "20:00 (UTC-6)",
+      "stadium": "Estadio BBVA",
+      "city": "Monterrey",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021474",
+      "goals": {
+        "home": [
+          {
+            "name": "Ayari",
+            "minutes": [
+              "7||90+6"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Isak",
+            "minutes": [
+              "30"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Gyökeres",
+            "minutes": [
+              "59"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Svanberg",
+            "minutes": [
+              "84"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Rekik",
+            "minutes": [
+              "43"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 33,
+      "stage": "group",
+      "group": "F",
+      "round": null,
+      "team1": "Países Bajos",
+      "team2": "Suecia",
+      "code1": "NED",
+      "code2": "SWE",
+      "played": true,
+      "score_home": 5,
+      "score_away": 1,
+      "date": "20/6",
+      "time": "12:00 (UTC-5)",
+      "stadium": "NRG Stadium",
+      "city": "Houston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021472",
+      "goals": {
+        "home": [
+          {
+            "name": "Brobbey",
+            "minutes": [
+              "5||17"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Gakpo",
+            "minutes": [
+              "47||54"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Summerville",
+            "minutes": [
+              "89"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Elanga",
+            "minutes": [
+              "59"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 34,
+      "stage": "group",
+      "group": "F",
+      "round": null,
+      "team1": "Túnez",
+      "team2": "Japón",
+      "code1": "TUN",
+      "code2": "JPN",
+      "played": true,
+      "score_home": 0,
+      "score_away": 4,
+      "date": "20/6",
+      "time": "22:00 (UTC-6)",
+      "stadium": "Estadio BBVA",
+      "city": "Monterrey",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021475",
+      "goals": {
+        "home": [],
+        "away": [
+          {
+            "name": "Kamada",
+            "minutes": [
+              "4"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Ueda",
+            "minutes": [
+              "31||83"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "J. Itō",
+            "minutes": [
+              "69"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 35,
+      "stage": "group",
+      "group": "F",
+      "round": null,
+      "team1": "Japón",
+      "team2": "Suecia",
+      "code1": "JPN",
+      "code2": "SWE",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "25/6",
+      "time": "18:00 (UTC-5)",
+      "stadium": "AT&T Stadium",
+      "city": "Dallas",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021471",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 36,
+      "stage": "group",
+      "group": "F",
+      "round": null,
+      "team1": "Túnez",
+      "team2": "Países Bajos",
+      "code1": "TUN",
+      "code2": "NED",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "25/6",
+      "time": "18:00 (UTC-5)",
+      "stadium": "Arrowhead Stadium",
+      "city": "Kansas City",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021473",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 37,
+      "stage": "group",
+      "group": "G",
+      "round": null,
+      "team1": "Bélgica",
+      "team2": "Egipto",
+      "code1": "BEL",
+      "code2": "EGY",
+      "played": true,
+      "score_home": 1,
+      "score_away": 1,
+      "date": "15/6",
+      "time": "12:00 (UTC-7)",
+      "stadium": "Lumen Field",
+      "city": "Seattle",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021478",
+      "goals": {
+        "home": [
+          {
+            "name": "Hany",
+            "minutes": [
+              "66|a.g."
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Ashour",
+            "minutes": [
+              "19"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 38,
+      "stage": "group",
+      "group": "G",
+      "round": null,
+      "team1": "Irán",
+      "team2": "Nueva Zelanda",
+      "code1": "IRN",
+      "code2": "NZL",
+      "played": true,
+      "score_home": 2,
+      "score_away": 2,
+      "date": "15/6",
+      "time": "18:00 (UTC-7)",
+      "stadium": "SoFi Stadium",
+      "city": "Los Ángeles",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021476",
+      "goals": {
+        "home": [
+          {
+            "name": "Rezaeian",
+            "minutes": [
+              "32"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Mohebi",
+            "minutes": [
+              "64"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Just",
+            "minutes": [
+              "7||54"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 39,
+      "stage": "group",
+      "group": "G",
+      "round": null,
+      "team1": "Bélgica",
+      "team2": "Irán",
+      "code1": "BEL",
+      "code2": "IRN",
+      "played": true,
+      "score_home": 0,
+      "score_away": 0,
+      "date": "21/6",
+      "time": "12:00 (UTC-7)",
+      "stadium": "SoFi Stadium",
+      "city": "Los Ángeles",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021477",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 40,
+      "stage": "group",
+      "group": "G",
+      "round": null,
+      "team1": "Nueva Zelanda",
+      "team2": "Egipto",
+      "code1": "NZL",
+      "code2": "EGY",
+      "played": true,
+      "score_home": 1,
+      "score_away": 3,
+      "date": "21/6",
+      "time": "18:00 (UTC-7)",
+      "stadium": "Estadio BC Place",
+      "city": "Vancouver",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021480",
+      "goals": {
+        "home": [
+          {
+            "name": "Surman",
+            "minutes": [
+              "15"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Zico",
+            "minutes": [
+              "58"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Salah",
+            "minutes": [
+              "67"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Trézéguet",
+            "minutes": [
+              "82"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 41,
+      "stage": "group",
+      "group": "G",
+      "round": null,
+      "team1": "Nueva Zelanda",
+      "team2": "Bélgica",
+      "code1": "NZL",
+      "code2": "BEL",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "26/6",
+      "time": "20:00 (UTC-7)",
+      "stadium": "Estadio BC Place",
+      "city": "Vancouver",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021481",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 42,
+      "stage": "group",
+      "group": "G",
+      "round": null,
+      "team1": "Egipto",
+      "team2": "Irán",
+      "code1": "EGY",
+      "code2": "IRN",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "26/6",
+      "time": "20:00 (UTC-7)",
+      "stadium": "Lumen Field",
+      "city": "Seattle",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021479",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 43,
+      "stage": "group",
+      "group": "H",
+      "round": null,
+      "team1": "España",
+      "team2": "Cabo Verde",
+      "code1": "ESP",
+      "code2": "CPV",
+      "played": true,
+      "score_home": 0,
+      "score_away": 0,
+      "date": "15/6",
+      "time": "12:00 (UTC-4)",
+      "stadium": "Mercedes-Benz Stadium",
+      "city": "Atlanta",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021482",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 44,
+      "stage": "group",
+      "group": "H",
+      "round": null,
+      "team1": "Arabia Saudita",
+      "team2": "Uruguay",
+      "code1": "KSA",
+      "code2": "URU",
+      "played": true,
+      "score_home": 1,
+      "score_away": 1,
+      "date": "15/6",
+      "time": "18:00 (UTC-4)",
+      "stadium": "Hard Rock Stadium",
+      "city": "Miami",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021486",
+      "goals": {
+        "home": [
+          {
+            "name": "Al-Amri",
+            "minutes": [
+              "41"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "M. Araújo",
+            "minutes": [
+              "80"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 45,
+      "stage": "group",
+      "group": "H",
+      "round": null,
+      "team1": "España",
+      "team2": "Arabia Saudita",
+      "code1": "ESP",
+      "code2": "KSA",
+      "played": true,
+      "score_home": 4,
+      "score_away": 0,
+      "date": "21/6",
+      "time": "12:00 (UTC-4)",
+      "stadium": "Mercedes-Benz Stadium",
+      "city": "Atlanta",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021483",
+      "goals": {
+        "home": [
+          {
+            "name": "Yamal",
+            "minutes": [
+              "10"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Oyarzabal",
+            "minutes": [
+              "21||24"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Tambakti",
+            "minutes": [
+              "49|a.g."
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 46,
+      "stage": "group",
+      "group": "H",
+      "round": null,
+      "team1": "Uruguay",
+      "team2": "Cabo Verde",
+      "code1": "URU",
+      "code2": "CPV",
+      "played": true,
+      "score_home": 2,
+      "score_away": 2,
+      "date": "21/6",
+      "time": "18:00 (UTC-4)",
+      "stadium": "Hard Rock Stadium",
+      "city": "Miami",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021487",
+      "goals": {
+        "home": [
+          {
+            "name": "M. Araújo",
+            "minutes": [
+              "44"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Canobbio",
+            "minutes": [
+              "45+6"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Pina",
+            "minutes": [
+              "21"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Varela",
+            "minutes": [
+              "61"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 47,
+      "stage": "group",
+      "group": "H",
+      "round": null,
+      "team1": "Uruguay",
+      "team2": "España",
+      "code1": "URU",
+      "code2": "ESP",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "26/6",
+      "time": "18:00 (UTC-6)",
+      "stadium": "Estadio Akron",
+      "city": "Guadalajara",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021484",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 48,
+      "stage": "group",
+      "group": "H",
+      "round": null,
+      "team1": "Cabo Verde",
+      "team2": "Arabia Saudita",
+      "code1": "CPV",
+      "code2": "KSA",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "26/6",
+      "time": "19:00 (UTC-5)",
+      "stadium": "NRG Stadium",
+      "city": "Houston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021485",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 49,
+      "stage": "group",
+      "group": "I",
+      "round": null,
+      "team1": "Francia",
+      "team2": "Senegal",
+      "code1": "FRA",
+      "code2": "SEN",
+      "played": true,
+      "score_home": 3,
+      "score_away": 1,
+      "date": "16/6",
+      "time": "15:00 (UTC-4)",
+      "stadium": "MetLife Stadium",
+      "city": "Nueva York/Nueva Jersey",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021490",
+      "goals": {
+        "home": [
+          {
+            "name": "Mbappé",
+            "minutes": [
+              "66||90+6"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Barcola",
+            "minutes": [
+              "82"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Mbaye",
+            "minutes": [
+              "90+5"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 50,
+      "stage": "group",
+      "group": "I",
+      "round": null,
+      "team1": "Irak",
+      "team2": "Noruega",
+      "code1": "IRQ",
+      "code2": "NOR",
+      "played": true,
+      "score_home": 1,
+      "score_away": 4,
+      "date": "16/6",
+      "time": "18:00 (UTC-4)",
+      "stadium": "Gillette Stadium",
+      "city": "Boston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021488",
+      "goals": {
+        "home": [
+          {
+            "name": "Hussein",
+            "minutes": [
+              "39"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Haaland",
+            "minutes": [
+              "29||43"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Østigård",
+            "minutes": [
+              "76"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Hussein",
+            "minutes": [
+              "90+6|a.g."
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 51,
+      "stage": "group",
+      "group": "I",
+      "round": null,
+      "team1": "Francia",
+      "team2": "Irak",
+      "code1": "FRA",
+      "code2": "IRQ",
+      "played": true,
+      "score_home": 3,
+      "score_away": 0,
+      "date": "22/6",
+      "time": "17:00 (UTC-4)",
+      "stadium": "Lincoln Financial Field",
+      "city": "Filadelfia",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021492",
+      "goals": {
+        "home": [
+          {
+            "name": "Mbappé",
+            "minutes": [
+              "14||54"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Dembélé",
+            "minutes": [
+              "66"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 52,
+      "stage": "group",
+      "group": "I",
+      "round": null,
+      "team1": "Noruega",
+      "team2": "Senegal",
+      "code1": "NOR",
+      "code2": "SEN",
+      "played": true,
+      "score_home": 3,
+      "score_away": 2,
+      "date": "22/6",
+      "time": "20:00 (UTC-4)",
+      "stadium": "MetLife Stadium",
+      "city": "Nueva York/Nueva Jersey",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021491",
+      "goals": {
+        "home": [
+          {
+            "name": "Pedersen",
+            "minutes": [
+              "43"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Haaland",
+            "minutes": [
+              "48||58"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Sarr",
+            "minutes": [
+              "53||90+3"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 53,
+      "stage": "group",
+      "group": "I",
+      "round": null,
+      "team1": "Noruega",
+      "team2": "Francia",
+      "code1": "NOR",
+      "code2": "FRA",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "26/6",
+      "time": "15:00 (UTC-4)",
+      "stadium": "Gillette Stadium",
+      "city": "Boston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021489",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 54,
+      "stage": "group",
+      "group": "I",
+      "round": null,
+      "team1": "Senegal",
+      "team2": "Irak",
+      "code1": "SEN",
+      "code2": "IRQ",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "26/6",
+      "time": "15:00 (UTC-4)",
+      "stadium": "BMO Field",
+      "city": "Toronto",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021493",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 55,
+      "stage": "group",
+      "group": "J",
+      "round": null,
+      "team1": "Argentina",
+      "team2": "Argelia",
+      "code1": "ARG",
+      "code2": "ALG",
+      "played": true,
+      "score_home": 3,
+      "score_away": 0,
+      "date": "16/6",
+      "time": "20:00 (UTC-5)",
+      "stadium": "Arrowhead Stadium",
+      "city": "Kansas City",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021496",
+      "goals": {
+        "home": [
+          {
+            "name": "Messi",
+            "minutes": [
+              "17||60||76"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 56,
+      "stage": "group",
+      "group": "J",
+      "round": null,
+      "team1": "Austria",
+      "team2": "Jordania",
+      "code1": "AUT",
+      "code2": "JOR",
+      "played": true,
+      "score_home": 3,
+      "score_away": 1,
+      "date": "16/6",
+      "time": "21:00 (UTC-7)",
+      "stadium": "Levi's Stadium",
+      "city": "San Francisco",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021498",
+      "goals": {
+        "home": [
+          {
+            "name": "Schmid",
+            "minutes": [
+              "20"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Al-Arab",
+            "minutes": [
+              "76|a.g."
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Arnautović",
+            "minutes": [
+              "90+12|pen."
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Olwan",
+            "minutes": [
+              "50"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 57,
+      "stage": "group",
+      "group": "J",
+      "round": null,
+      "team1": "Argentina",
+      "team2": "Austria",
+      "code1": "ARG",
+      "code2": "AUT",
+      "played": true,
+      "score_home": 2,
+      "score_away": 0,
+      "date": "22/6",
+      "time": "12:00 (UTC-5)",
+      "stadium": "AT&T Stadium",
+      "city": "Dallas",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021494",
+      "goals": {
+        "home": [
+          {
+            "name": "Messi",
+            "minutes": [
+              "38||90+5"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 58,
+      "stage": "group",
+      "group": "J",
+      "round": null,
+      "team1": "Jordania",
+      "team2": "Argelia",
+      "code1": "JOR",
+      "code2": "ALG",
+      "played": true,
+      "score_home": 1,
+      "score_away": 2,
+      "date": "22/6",
+      "time": "20:00 (UTC-7)",
+      "stadium": "Levi's Stadium",
+      "city": "San Francisco",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021499",
+      "goals": {
+        "home": [
+          {
+            "name": "Al-Rashdan",
+            "minutes": [
+              "36"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Benbouali",
+            "minutes": [
+              "69"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Gouiri",
+            "minutes": [
+              "82"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 59,
+      "stage": "group",
+      "group": "J",
+      "round": null,
+      "team1": "Argelia",
+      "team2": "Austria",
+      "code1": "ALG",
+      "code2": "AUT",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "27/6",
+      "time": "21:00 (UTC-5)",
+      "stadium": "Arrowhead Stadium",
+      "city": "Kansas City",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021497",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 60,
+      "stage": "group",
+      "group": "J",
+      "round": null,
+      "team1": "Jordania",
+      "team2": "Argentina",
+      "code1": "JOR",
+      "code2": "ARG",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "27/6",
+      "time": "21:00 (UTC-5)",
+      "stadium": "AT&T Stadium",
+      "city": "Dallas",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021495",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 61,
+      "stage": "group",
+      "group": "K",
+      "round": null,
+      "team1": "Portugal",
+      "team2": "República Democrática del Congo",
+      "code1": "POR",
+      "code2": "COD",
+      "played": true,
+      "score_home": 1,
+      "score_away": 1,
+      "date": "17/6",
+      "time": "12:00 (UTC-5)",
+      "stadium": "NRG Stadium",
+      "city": "Houston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021502",
+      "goals": {
+        "home": [
+          {
+            "name": "J. Neves",
+            "minutes": [
+              "6"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Wissa",
+            "minutes": [
+              "45+5"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 62,
+      "stage": "group",
+      "group": "K",
+      "round": null,
+      "team1": "Uzbekistán",
+      "team2": "Colombia",
+      "code1": "UZB",
+      "code2": "COL",
+      "played": true,
+      "score_home": 1,
+      "score_away": 3,
+      "date": "17/6",
+      "time": "20:00 (UTC-6)",
+      "stadium": "Estadio Azteca",
+      "city": "Ciudad de México",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021504",
+      "goals": {
+        "home": [
+          {
+            "name": "Fayzullaev",
+            "minutes": [
+              "60"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Muñoz",
+            "minutes": [
+              "40"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Díaz",
+            "minutes": [
+              "65"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Campaz",
+            "minutes": [
+              "90+9"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 63,
+      "stage": "group",
+      "group": "K",
+      "round": null,
+      "team1": "Portugal",
+      "team2": "Uzbekistán",
+      "code1": "POR",
+      "code2": "UZB",
+      "played": true,
+      "score_home": 5,
+      "score_away": 0,
+      "date": "23/6",
+      "time": "12:00 (UTC-5)",
+      "stadium": "NRG Stadium",
+      "city": "Houston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021503",
+      "goals": {
+        "home": [
+          {
+            "name": "Ronaldo",
+            "minutes": [
+              "6||39"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "N. Mendes",
+            "minutes": [
+              "17"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Nematov",
+            "minutes": [
+              "60|a.g."
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Leão",
+            "minutes": [
+              "87"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 64,
+      "stage": "group",
+      "group": "K",
+      "round": null,
+      "team1": "Colombia",
+      "team2": "República Democrática del Congo",
+      "code1": "COL",
+      "code2": "COD",
+      "played": true,
+      "score_home": 1,
+      "score_away": 0,
+      "date": "23/6",
+      "time": "20:00 (UTC-6)",
+      "stadium": "Estadio Akron",
+      "city": "Guadalajara",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021501",
+      "goals": {
+        "home": [
+          {
+            "name": "Muñoz",
+            "minutes": [
+              "76"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 65,
+      "stage": "group",
+      "group": "K",
+      "round": null,
+      "team1": "Colombia",
+      "team2": "Portugal",
+      "code1": "COL",
+      "code2": "POR",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "27/6",
+      "time": "19:30 (UTC-4)",
+      "stadium": "Hard Rock Stadium",
+      "city": "Miami",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021505",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 66,
+      "stage": "group",
+      "group": "K",
+      "round": null,
+      "team1": "República Democrática del Congo",
+      "team2": "Uzbekistán",
+      "code1": "COD",
+      "code2": "UZB",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "27/6",
+      "time": "19:30 (UTC-4)",
+      "stadium": "Mercedes-Benz Stadium",
+      "city": "Atlanta",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021500",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 67,
+      "stage": "group",
+      "group": "L",
+      "round": null,
+      "team1": "Inglaterra",
+      "team2": "Croacia",
+      "code1": "ENG",
+      "code2": "CRO",
+      "played": true,
+      "score_home": 4,
+      "score_away": 2,
+      "date": "17/6",
+      "time": "15:00 (UTC-5)",
+      "stadium": "AT&T Stadium",
+      "city": "Dallas",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021507",
+      "goals": {
+        "home": [
+          {
+            "name": "Kane",
+            "minutes": [
+              "12|pen.|42"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Bellingham",
+            "minutes": [
+              "47"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Rashford",
+            "minutes": [
+              "85"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": [
+          {
+            "name": "Baturina",
+            "minutes": [
+              "36"
+            ],
+            "penalty": false,
+            "owngoal": false
+          },
+          {
+            "name": "Musa",
+            "minutes": [
+              "45+5"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 68,
+      "stage": "group",
+      "group": "L",
+      "round": null,
+      "team1": "Ghana",
+      "team2": "Panamá",
+      "code1": "GHA",
+      "code2": "PAN",
+      "played": true,
+      "score_home": 1,
+      "score_away": 0,
+      "date": "17/6",
+      "time": "19:00 (UTC-4)",
+      "stadium": "BMO Field",
+      "city": "Toronto",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021510",
+      "goals": {
+        "home": [
+          {
+            "name": "Yirenkyi",
+            "minutes": [
+              "90+5"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ],
+        "away": []
+      }
+    },
+    {
+      "num": 69,
+      "stage": "group",
+      "group": "L",
+      "round": null,
+      "team1": "Inglaterra",
+      "team2": "Ghana",
+      "code1": "ENG",
+      "code2": "GHA",
+      "played": true,
+      "score_home": 0,
+      "score_away": 0,
+      "date": "23/6",
+      "time": "16:00 (UTC-4)",
+      "stadium": "Gillette Stadium",
+      "city": "Boston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021506",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 70,
+      "stage": "group",
+      "group": "L",
+      "round": null,
+      "team1": "Panamá",
+      "team2": "Croacia",
+      "code1": "PAN",
+      "code2": "CRO",
+      "played": true,
+      "score_home": 0,
+      "score_away": 1,
+      "date": "23/6",
+      "time": "19:00 (UTC-4)",
+      "stadium": "BMO Field",
+      "city": "Toronto",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021511",
+      "goals": {
+        "home": [],
+        "away": [
+          {
+            "name": "Budimir",
+            "minutes": [
+              "54"
+            ],
+            "penalty": false,
+            "owngoal": false
+          }
+        ]
+      }
+    },
+    {
+      "num": 71,
+      "stage": "group",
+      "group": "L",
+      "round": null,
+      "team1": "Panamá",
+      "team2": "Inglaterra",
+      "code1": "PAN",
+      "code2": "ENG",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "27/6",
+      "time": "17:00 (UTC-4)",
+      "stadium": "MetLife Stadium",
+      "city": "Nueva York/Nueva Jersey",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021508",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 72,
+      "stage": "group",
+      "group": "L",
+      "round": null,
+      "team1": "Croacia",
+      "team2": "Ghana",
+      "code1": "CRO",
+      "code2": "GHA",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "27/6",
+      "time": "17:00 (UTC-4)",
+      "stadium": "Lincoln Financial Field",
+      "city": "Filadelfia",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289273/400021509",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 73,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "Sudáfrica",
+      "team2": "Canadá",
+      "code1": "RSA",
+      "code2": "CAN",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "28/6",
+      "time": "12:00 (UTC-7)",
+      "stadium": "SoFi Stadium",
+      "city": "Los Ángeles",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021518",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 74,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "Alemania",
+      "team2": "3A/B/C/D/F",
+      "code1": "GER",
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "29/6",
+      "time": "16:30 (UTC-4)",
+      "stadium": "Gillette Stadium",
+      "city": "Boston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021513",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 75,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "1F",
+      "team2": "Marruecos",
+      "code1": null,
+      "code2": "MAR",
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "29/6",
+      "time": "19:00 (UTC-6)",
+      "stadium": "Estadio Monterrey",
+      "city": "Monterrey",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021522",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 76,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "Brasil",
+      "team2": "2F",
+      "code1": "BRA",
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "29/6",
+      "time": "12:00 (UTC-5)",
+      "stadium": "NRG Stadium",
+      "city": "Houston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021516",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 77,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "1I",
+      "team2": "3C/D/F/G/H",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "30/6",
+      "time": "17:00 (UTC-4)",
+      "stadium": "MetLife Stadium",
+      "city": "Nueva York/Nueva Jersey",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021523",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 78,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "2E",
+      "team2": "2I",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "30/6",
+      "time": "12:00 (UTC-5)",
+      "stadium": "AT&T Stadium",
+      "city": "Dallas",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021514",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 79,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "México",
+      "team2": "3C/E/F/H/I",
+      "code1": "MEX",
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "30/6",
+      "time": "19:00 (UTC-6)",
+      "stadium": "Estadio Azteca",
+      "city": "Ciudad de México",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021520",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 80,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "1L",
+      "team2": "3E/H/I/J/K",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "1/7",
+      "time": "12:00 (UTC-4)",
+      "stadium": "Mercedes-Benz Stadium",
+      "city": "Atlanta",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021512",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 81,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "Estados Unidos",
+      "team2": "3B/E/F/I/J",
+      "code1": "USA",
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "1/7",
+      "time": "17:00 (UTC-7)",
+      "stadium": "Levi's Stadium",
+      "city": "San Francisco",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021524",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 82,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "1G",
+      "team2": "3A/E/H/I/J",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "1/7",
+      "time": "13:00 (UTC-7)",
+      "stadium": "Lumen Field",
+      "city": "Seattle",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021525",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 83,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "2K",
+      "team2": "2L",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "2/7",
+      "time": "19:00 (UTC-4)",
+      "stadium": "Estadio Nacional de Canadá",
+      "city": "Toronto",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021526",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 84,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "1H",
+      "team2": "2J",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "2/7",
+      "time": "12:00 (UTC-7)",
+      "stadium": "SoFi Stadium",
+      "city": "Los Ángeles",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021519",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 85,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "Suiza",
+      "team2": "3E/F/G/I/J",
+      "code1": "SUI",
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "2/7",
+      "time": "20:00 (UTC-7)",
+      "stadium": "Estadio BC Place",
+      "city": "Vancouver",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021527",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 86,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "Argentina",
+      "team2": "2H",
+      "code1": "ARG",
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "3/7",
+      "time": "18:00 (UTC-4)",
+      "stadium": "Hard Rock Stadium",
+      "city": "Miami",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021521",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 87,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "1K",
+      "team2": "3D/E/I/J/L",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "3/7",
+      "time": "20:30 (UTC-5)",
+      "stadium": "Arrowhead Stadium",
+      "city": "Kansas City",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021517",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 88,
+      "stage": "Round of 32",
+      "group": null,
+      "round": "Round of 32",
+      "team1": "2D",
+      "team2": "2G",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "3/7",
+      "time": "13:00 (UTC-5)",
+      "stadium": "AT&T Stadium",
+      "city": "Dallas",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289287/400021515",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 89,
+      "stage": "Round of 16",
+      "group": null,
+      "round": "Round of 16",
+      "team1": "Ganador Partido 74",
+      "team2": "Ganador Partido 77",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "4/7",
+      "time": "17:00 (UTC-4)",
+      "stadium": "Lincoln Financial Field",
+      "city": "Filadelfia",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289288/400021533",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 90,
+      "stage": "Round of 16",
+      "group": null,
+      "round": "Round of 16",
+      "team1": "Ganador Partido 73",
+      "team2": "Ganador Partido 75",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "4/7",
+      "time": "12:00 (UTC-5)",
+      "stadium": "Estadio NRG",
+      "city": "Houston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289288/400021530",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 91,
+      "stage": "Round of 16",
+      "group": null,
+      "round": "Round of 16",
+      "team1": "Ganador Partido 76",
+      "team2": "Ganador Partido 78",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "5/7",
+      "time": "16:00 (UTC-4)",
+      "stadium": "MetLife Stadium",
+      "city": "Nueva York/Nueva Jersey",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289288/400021532",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 92,
+      "stage": "Round of 16",
+      "group": null,
+      "round": "Round of 16",
+      "team1": "Ganador Partido 79",
+      "team2": "Ganador Partido 80",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "5/7",
+      "time": "18:00 (UTC-6)",
+      "stadium": "Estadio Azteca",
+      "city": "Ciudad de México",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289288/400021531",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 93,
+      "stage": "Round of 16",
+      "group": null,
+      "round": "Round of 16",
+      "team1": "Ganador Partido 83",
+      "team2": "Ganador Partido 84",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "6/7",
+      "time": "14:00 (UTC-5)",
+      "stadium": "AT&T Stadium",
+      "city": "Dallas",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289288/400021529",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 94,
+      "stage": "Round of 16",
+      "group": null,
+      "round": "Round of 16",
+      "team1": "Ganador Partido 81",
+      "team2": "Ganador Partido 82",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "6/7",
+      "time": "17:00 (UTC-7)",
+      "stadium": "Lumen Field",
+      "city": "Seattle",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289288/400021534",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 95,
+      "stage": "Round of 16",
+      "group": null,
+      "round": "Round of 16",
+      "team1": "Ganador Partido 86",
+      "team2": "Ganador Partido 88",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "7/7",
+      "time": "12:00 (UTC-4)",
+      "stadium": "Mercedes-Benz Stadium",
+      "city": "Atlanta",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289288/400021528",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 96,
+      "stage": "Round of 16",
+      "group": null,
+      "round": "Round of 16",
+      "team1": "Ganador Partido 85",
+      "team2": "Ganador Partido 87",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "7/7",
+      "time": "13:00 (UTC-7)",
+      "stadium": "Estadio BC Place",
+      "city": "Vancouver",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289288/400021535",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 97,
+      "stage": "Quarter-final",
+      "group": null,
+      "round": "Quarter-final",
+      "team1": "Ganador Partido 89",
+      "team2": "Ganador Partido 90",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "9/7",
+      "time": "16:00 (UTC-4)",
+      "stadium": "Gillette Stadium",
+      "city": "Boston",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289289/400021536",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 98,
+      "stage": "Quarter-final",
+      "group": null,
+      "round": "Quarter-final",
+      "team1": "Ganador Partido 93",
+      "team2": "Ganador Partido 94",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "10/7",
+      "time": "12:00 (UTC-7)",
+      "stadium": "SoFi Stadium",
+      "city": "Los Ángeles",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289289/400021538",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 99,
+      "stage": "Quarter-final",
+      "group": null,
+      "round": "Quarter-final",
+      "team1": "Ganador Partido 91",
+      "team2": "Ganador Partido 92",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "11/7",
+      "time": "17:00 (UTC-4)",
+      "stadium": "Hard Rock Stadium",
+      "city": "Miami",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289289/400021539",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 100,
+      "stage": "Quarter-final",
+      "group": null,
+      "round": "Quarter-final",
+      "team1": "Ganador Partido 95",
+      "team2": "Ganador Partido 96",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "11/7",
+      "time": "20:00 (UTC-5)",
+      "stadium": "Arrowhead Stadium",
+      "city": "Kansas City",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289289/400021537",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 101,
+      "stage": "Semi-final",
+      "group": null,
+      "round": "Semi-final",
+      "team1": "Ganador Partido 97",
+      "team2": "Ganador Partido 98",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "14/7",
+      "time": "14:00 (UTC-5)",
+      "stadium": "AT&T Stadium",
+      "city": "Dallas",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289290/400021541",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 102,
+      "stage": "Semi-final",
+      "group": null,
+      "round": "Semi-final",
+      "team1": "Ganador Partido 99",
+      "team2": "Ganador Partido 100",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "15/7",
+      "time": "15:00 (UTC-4)",
+      "stadium": "Mercedes-Benz Stadium",
+      "city": "Atlanta",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289290/400021540",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 103,
+      "stage": "Third place",
+      "group": null,
+      "round": "Third place",
+      "team1": "Perdedor Partido 101",
+      "team2": "Perdedor Partido 102",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "18/7",
+      "time": "17:00 (UTC-4)",
+      "stadium": "Hard Rock Stadium",
+      "city": "Miami",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289291/400021542",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    },
+    {
+      "num": 104,
+      "stage": "Final",
+      "group": null,
+      "round": "Final",
+      "team1": "Ganador Partido 101",
+      "team2": "Ganador Partido 102",
+      "code1": null,
+      "code2": null,
+      "played": false,
+      "score_home": null,
+      "score_away": null,
+      "date": "19/7",
+      "time": "15:00 (UTC-4)",
+      "stadium": "MetLife Stadium",
+      "city": "Nueva York/Nueva Jersey",
+      "report": "https://www.fifa.com/es/match-centre/match/17/285023/289292/400021543",
+      "goals": {
+        "home": [],
+        "away": []
+      }
+    }
+  ],
+  "topScorers": [
+    {
+      "name": "Saibari",
+      "team_code": "MAR",
+      "team": "Marruecos",
+      "goals": 3,
+      "penalties": 0
+    },
+    {
+      "name": "Vinícius Júnior",
+      "team_code": "BRA",
+      "team": "Brasil",
+      "goals": 3,
+      "penalties": 0
+    },
+    {
+      "name": "Cunha",
+      "team_code": "BRA",
+      "team": "Brasil",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Haaland",
+      "team_code": "NOR",
+      "team": "Noruega",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Kamada",
+      "team_code": "JPN",
+      "team": "Japón",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Larin",
+      "team_code": "CAN",
+      "team": "Canadá",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "M. Araújo",
+      "team_code": "URU",
+      "team": "Uruguay",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Mahmić",
+      "team_code": "BIH",
+      "team": "Bosnia y Herzegovina",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Manzambi",
+      "team_code": "SUI",
+      "team": "Suiza",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Mbappé",
+      "team_code": "FRA",
+      "team": "Francia",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Messi",
+      "team_code": "ARG",
+      "team": "Argentina",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Muñoz",
+      "team_code": "COL",
+      "team": "Colombia",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Quiñones",
+      "team_code": "MEX",
+      "team": "México",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Summerville",
+      "team_code": "NED",
+      "team": "Países Bajos",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Undav",
+      "team_code": "GER",
+      "team": "Alemania",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Vargas",
+      "team_code": "SUI",
+      "team": "Suiza",
+      "goals": 2,
+      "penalties": 0
+    },
+    {
+      "name": "Abunada",
+      "team_code": "BIH",
+      "team": "Bosnia y Herzegovina",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Al-Amri",
+      "team_code": "KSA",
+      "team": "Arabia Saudita",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Al-Arab",
+      "team_code": "AUT",
+      "team": "Austria",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Al-Haydos",
+      "team_code": "QAT",
+      "team": "Catar",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Al-Rashdan",
+      "team_code": "JOR",
+      "team": "Jordania",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Alajbegović",
+      "team_code": "BIH",
+      "team": "Bosnia y Herzegovina",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Arnautović",
+      "team_code": "AUT",
+      "team": "Austria",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Ashour",
+      "team_code": "EGY",
+      "team": "Egipto",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Ayari",
+      "team_code": "SWE",
+      "team": "Suecia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Balogun",
+      "team_code": "USA",
+      "team": "Estados Unidos",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Barcola",
+      "team_code": "FRA",
+      "team": "Francia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Baturina",
+      "team_code": "CRO",
+      "team": "Croacia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Bellingham",
+      "team_code": "ENG",
+      "team": "Inglaterra",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Benbouali",
+      "team_code": "ALG",
+      "team": "Argelia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Bobadilla",
+      "team_code": "USA",
+      "team": "Estados Unidos",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Bounou",
+      "team_code": "HAI",
+      "team": "Haití",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Brobbey",
+      "team_code": "NED",
+      "team": "Países Bajos",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Brown",
+      "team_code": "GER",
+      "team": "Alemania",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Budimir",
+      "team_code": "CRO",
+      "team": "Croacia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Burgess",
+      "team_code": "USA",
+      "team": "Estados Unidos",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Campaz",
+      "team_code": "COL",
+      "team": "Colombia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Canobbio",
+      "team_code": "URU",
+      "team": "Uruguay",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Comenencia",
+      "team_code": "CUW",
+      "team": "Curazao",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Dembélé",
+      "team_code": "FRA",
+      "team": "Francia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Diallo",
+      "team_code": "CIV",
+      "team": "Costa de Marfil",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Díaz",
+      "team_code": "COL",
+      "team": "Colombia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Elanga",
+      "team_code": "SWE",
+      "team": "Suecia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Embolo",
+      "team_code": "SUI",
+      "team": "Suiza",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Fayzullaev",
+      "team_code": "UZB",
+      "team": "Uzbekistán",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Fidalgo",
+      "team_code": "MEX",
+      "team": "México",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Freeman",
+      "team_code": "USA",
+      "team": "Estados Unidos",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Gakpo",
+      "team_code": "NED",
+      "team": "Países Bajos",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Galarza",
+      "team_code": "PAR",
+      "team": "Paraguay",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Gouiri",
+      "team_code": "ALG",
+      "team": "Argelia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Gyökeres",
+      "team_code": "SWE",
+      "team": "Suecia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Hakimi",
+      "team_code": "MAR",
+      "team": "Marruecos",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Hany",
+      "team_code": "BEL",
+      "team": "Bélgica",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Havertz",
+      "team_code": "GER",
+      "team": "Alemania",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Hussein",
+      "team_code": "IRQ",
+      "team": "Irak",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Hussein",
+      "team_code": "NOR",
+      "team": "Noruega",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Hwang In-beom",
+      "team_code": "KOR",
+      "team": "Corea del Sur",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Irankunda",
+      "team_code": "AUS",
+      "team": "Australia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Isak",
+      "team_code": "SWE",
+      "team": "Suecia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Isidor",
+      "team_code": "HAI",
+      "team": "Haití",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "J. David",
+      "team_code": "CAN",
+      "team": "Canadá",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "J. Itō",
+      "team_code": "JPN",
+      "team": "Japón",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "J. Neves",
+      "team_code": "POR",
+      "team": "Portugal",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Jiménez",
+      "team_code": "MEX",
+      "team": "México",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Just",
+      "team_code": "NZL",
+      "team": "Nueva Zelanda",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Kane",
+      "team_code": "ENG",
+      "team": "Inglaterra",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Kessié",
+      "team_code": "CIV",
+      "team": "Costa de Marfil",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Krejčí",
+      "team_code": "CZE",
+      "team": "República Checa",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Leão",
+      "team_code": "POR",
+      "team": "Portugal",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Lukić",
+      "team_code": "BIH",
+      "team": "Bosnia y Herzegovina",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "M. Chávez",
+      "team_code": "MEX",
+      "team": "México",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Manai",
+      "team_code": "CAN",
+      "team": "Canadá",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Maseko",
+      "team_code": "RSA",
+      "team": "Sudáfrica",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Maurício",
+      "team_code": "PAR",
+      "team": "Paraguay",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Mbaye",
+      "team_code": "SEN",
+      "team": "Senegal",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "McGinn",
+      "team_code": "SCO",
+      "team": "Escocia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Metcalfe",
+      "team_code": "AUS",
+      "team": "Australia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Mohebi",
+      "team_code": "IRN",
+      "team": "Irán",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Mokoena",
+      "team_code": "RSA",
+      "team": "Sudáfrica",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Muheim",
+      "team_code": "QAT",
+      "team": "Catar",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Musa",
+      "team_code": "CRO",
+      "team": "Croacia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Musiala",
+      "team_code": "GER",
+      "team": "Alemania",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "N. Mendes",
+      "team_code": "POR",
+      "team": "Portugal",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Nakamura",
+      "team_code": "JPN",
+      "team": "Japón",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Nematov",
+      "team_code": "POR",
+      "team": "Portugal",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Nmecha",
+      "team_code": "GER",
+      "team": "Alemania",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Oh Hyeon-gyu",
+      "team_code": "KOR",
+      "team": "Corea del Sur",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Olwan",
+      "team_code": "JOR",
+      "team": "Jordania",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Østigård",
+      "team_code": "NOR",
+      "team": "Noruega",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Oyarzabal",
+      "team_code": "ESP",
+      "team": "España",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "P. David",
+      "team_code": "CAN",
+      "team": "Canadá",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Pedersen",
+      "team_code": "NOR",
+      "team": "Noruega",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Pina",
+      "team_code": "CPV",
+      "team": "Cabo Verde",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Rahimi",
+      "team_code": "MAR",
+      "team": "Marruecos",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Rashford",
+      "team_code": "ENG",
+      "team": "Inglaterra",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Rekik",
+      "team_code": "TUN",
+      "team": "Túnez",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Reyna",
+      "team_code": "USA",
+      "team": "Estados Unidos",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Rezaeian",
+      "team_code": "IRN",
+      "team": "Irán",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Romo",
+      "team_code": "MEX",
+      "team": "México",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Ronaldo",
+      "team_code": "POR",
+      "team": "Portugal",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Sadílek",
+      "team_code": "CZE",
+      "team": "República Checa",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Salah",
+      "team_code": "EGY",
+      "team": "Egipto",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Saliba",
+      "team_code": "CAN",
+      "team": "Canadá",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Sarr",
+      "team_code": "SEN",
+      "team": "Senegal",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Schlotterbeck",
+      "team_code": "GER",
+      "team": "Alemania",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Schmid",
+      "team_code": "AUT",
+      "team": "Austria",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Surman",
+      "team_code": "NZL",
+      "team": "Nueva Zelanda",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Svanberg",
+      "team_code": "SWE",
+      "team": "Suecia",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Tambakti",
+      "team_code": "ESP",
+      "team": "España",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Trézéguet",
+      "team_code": "EGY",
+      "team": "Egipto",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Ueda",
+      "team_code": "JPN",
+      "team": "Japón",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Van Dijk",
+      "team_code": "NED",
+      "team": "Países Bajos",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Varela",
+      "team_code": "CPV",
+      "team": "Cabo Verde",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Wissa",
+      "team_code": "COD",
+      "team": "República Democrática del Congo",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Xhaka",
+      "team_code": "SUI",
+      "team": "Suiza",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Yamal",
+      "team_code": "ESP",
+      "team": "España",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Yassine",
+      "team_code": "MAR",
+      "team": "Marruecos",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Yirenkyi",
+      "team_code": "GHA",
+      "team": "Ghana",
+      "goals": 1,
+      "penalties": 0
+    },
+    {
+      "name": "Zico",
+      "team_code": "EGY",
+      "team": "Egipto",
+      "goals": 1,
+      "penalties": 0
+    }
+  ],
+  "standings": {
+    "A": [
+      {
+        "code": "MEX",
+        "name": "México",
+        "pj": 3,
+        "pg": 3,
+        "pe": 0,
+        "pp": 0,
+        "gf": 6,
+        "gc": 0,
+        "dg": 6,
+        "pts": 9
+      },
+      {
+        "code": "RSA",
+        "name": "Sudáfrica",
+        "pj": 3,
+        "pg": 1,
+        "pe": 1,
+        "pp": 1,
+        "gf": 2,
+        "gc": 3,
+        "dg": -1,
+        "pts": 4
+      },
+      {
+        "code": "KOR",
+        "name": "Corea del Sur",
+        "pj": 3,
+        "pg": 1,
+        "pe": 0,
+        "pp": 2,
+        "gf": 2,
+        "gc": 3,
+        "dg": -1,
+        "pts": 3
+      },
+      {
+        "code": "CZE",
+        "name": "República Checa",
+        "pj": 3,
+        "pg": 0,
+        "pe": 1,
+        "pp": 2,
+        "gf": 2,
+        "gc": 6,
+        "dg": -4,
+        "pts": 1
+      }
+    ],
+    "B": [
+      {
+        "code": "SUI",
+        "name": "Suiza",
+        "pj": 3,
+        "pg": 2,
+        "pe": 1,
+        "pp": 0,
+        "gf": 7,
+        "gc": 3,
+        "dg": 4,
+        "pts": 7
+      },
+      {
+        "code": "CAN",
+        "name": "Canadá",
+        "pj": 3,
+        "pg": 1,
+        "pe": 1,
+        "pp": 1,
+        "gf": 8,
+        "gc": 3,
+        "dg": 5,
+        "pts": 4
+      },
+      {
+        "code": "BIH",
+        "name": "Bosnia y Herzegovina",
+        "pj": 3,
+        "pg": 1,
+        "pe": 1,
+        "pp": 1,
+        "gf": 5,
+        "gc": 6,
+        "dg": -1,
+        "pts": 4
+      },
+      {
+        "code": "QAT",
+        "name": "Catar",
+        "pj": 3,
+        "pg": 0,
+        "pe": 1,
+        "pp": 2,
+        "gf": 2,
+        "gc": 10,
+        "dg": -8,
+        "pts": 1
+      }
+    ],
+    "C": [
+      {
+        "code": "BRA",
+        "name": "Brasil",
+        "pj": 3,
+        "pg": 2,
+        "pe": 1,
+        "pp": 0,
+        "gf": 7,
+        "gc": 1,
+        "dg": 6,
+        "pts": 7
+      },
+      {
+        "code": "MAR",
+        "name": "Marruecos",
+        "pj": 3,
+        "pg": 2,
+        "pe": 1,
+        "pp": 0,
+        "gf": 6,
+        "gc": 3,
+        "dg": 3,
+        "pts": 7
+      },
+      {
+        "code": "SCO",
+        "name": "Escocia",
+        "pj": 3,
+        "pg": 1,
+        "pe": 0,
+        "pp": 2,
+        "gf": 1,
+        "gc": 4,
+        "dg": -3,
+        "pts": 3
+      },
+      {
+        "code": "HAI",
+        "name": "Haití",
+        "pj": 3,
+        "pg": 0,
+        "pe": 0,
+        "pp": 3,
+        "gf": 2,
+        "gc": 8,
+        "dg": -6,
+        "pts": 0
+      }
+    ],
+    "D": [
+      {
+        "code": "USA",
+        "name": "Estados Unidos",
+        "pj": 2,
+        "pg": 2,
+        "pe": 0,
+        "pp": 0,
+        "gf": 6,
+        "gc": 1,
+        "dg": 5,
+        "pts": 6
+      },
+      {
+        "code": "AUS",
+        "name": "Australia",
+        "pj": 2,
+        "pg": 1,
+        "pe": 0,
+        "pp": 1,
+        "gf": 2,
+        "gc": 2,
+        "dg": 0,
+        "pts": 3
+      },
+      {
+        "code": "PAR",
+        "name": "Paraguay",
+        "pj": 2,
+        "pg": 1,
+        "pe": 0,
+        "pp": 1,
+        "gf": 2,
+        "gc": 4,
+        "dg": -2,
+        "pts": 3
+      },
+      {
+        "code": "TUR",
+        "name": "Turquía",
+        "pj": 2,
+        "pg": 0,
+        "pe": 0,
+        "pp": 2,
+        "gf": 0,
+        "gc": 3,
+        "dg": -3,
+        "pts": 0
+      }
+    ],
+    "E": [
+      {
+        "code": "GER",
+        "name": "Alemania",
+        "pj": 2,
+        "pg": 2,
+        "pe": 0,
+        "pp": 0,
+        "gf": 9,
+        "gc": 2,
+        "dg": 7,
+        "pts": 6
+      },
+      {
+        "code": "CIV",
+        "name": "Costa de Marfil",
+        "pj": 2,
+        "pg": 1,
+        "pe": 0,
+        "pp": 1,
+        "gf": 2,
+        "gc": 2,
+        "dg": 0,
+        "pts": 3
+      },
+      {
+        "code": "ECU",
+        "name": "Ecuador",
+        "pj": 2,
+        "pg": 0,
+        "pe": 1,
+        "pp": 1,
+        "gf": 0,
+        "gc": 1,
+        "dg": -1,
+        "pts": 1
+      },
+      {
+        "code": "CUW",
+        "name": "Curazao",
+        "pj": 2,
+        "pg": 0,
+        "pe": 1,
+        "pp": 1,
+        "gf": 1,
+        "gc": 7,
+        "dg": -6,
+        "pts": 1
+      }
+    ],
+    "F": [
+      {
+        "code": "NED",
+        "name": "Países Bajos",
+        "pj": 2,
+        "pg": 1,
+        "pe": 1,
+        "pp": 0,
+        "gf": 7,
+        "gc": 3,
+        "dg": 4,
+        "pts": 4
+      },
+      {
+        "code": "JPN",
+        "name": "Japón",
+        "pj": 2,
+        "pg": 1,
+        "pe": 1,
+        "pp": 0,
+        "gf": 6,
+        "gc": 2,
+        "dg": 4,
+        "pts": 4
+      },
+      {
+        "code": "SWE",
+        "name": "Suecia",
+        "pj": 2,
+        "pg": 1,
+        "pe": 0,
+        "pp": 1,
+        "gf": 6,
+        "gc": 6,
+        "dg": 0,
+        "pts": 3
+      },
+      {
+        "code": "TUN",
+        "name": "Túnez",
+        "pj": 2,
+        "pg": 0,
+        "pe": 0,
+        "pp": 2,
+        "gf": 1,
+        "gc": 9,
+        "dg": -8,
+        "pts": 0
+      }
+    ],
+    "G": [
+      {
+        "code": "EGY",
+        "name": "Egipto",
+        "pj": 2,
+        "pg": 1,
+        "pe": 1,
+        "pp": 0,
+        "gf": 4,
+        "gc": 2,
+        "dg": 2,
+        "pts": 4
+      },
+      {
+        "code": "IRN",
+        "name": "Irán",
+        "pj": 2,
+        "pg": 0,
+        "pe": 2,
+        "pp": 0,
+        "gf": 2,
+        "gc": 2,
+        "dg": 0,
+        "pts": 2
+      },
+      {
+        "code": "BEL",
+        "name": "Bélgica",
+        "pj": 2,
+        "pg": 0,
+        "pe": 2,
+        "pp": 0,
+        "gf": 1,
+        "gc": 1,
+        "dg": 0,
+        "pts": 2
+      },
+      {
+        "code": "NZL",
+        "name": "Nueva Zelanda",
+        "pj": 2,
+        "pg": 0,
+        "pe": 1,
+        "pp": 1,
+        "gf": 3,
+        "gc": 5,
+        "dg": -2,
+        "pts": 1
+      }
+    ],
+    "H": [
+      {
+        "code": "ESP",
+        "name": "España",
+        "pj": 2,
+        "pg": 1,
+        "pe": 1,
+        "pp": 0,
+        "gf": 4,
+        "gc": 0,
+        "dg": 4,
+        "pts": 4
+      },
+      {
+        "code": "URU",
+        "name": "Uruguay",
+        "pj": 2,
+        "pg": 0,
+        "pe": 2,
+        "pp": 0,
+        "gf": 3,
+        "gc": 3,
+        "dg": 0,
+        "pts": 2
+      },
+      {
+        "code": "CPV",
+        "name": "Cabo Verde",
+        "pj": 2,
+        "pg": 0,
+        "pe": 2,
+        "pp": 0,
+        "gf": 2,
+        "gc": 2,
+        "dg": 0,
+        "pts": 2
+      },
+      {
+        "code": "KSA",
+        "name": "Arabia Saudita",
+        "pj": 2,
+        "pg": 0,
+        "pe": 1,
+        "pp": 1,
+        "gf": 1,
+        "gc": 5,
+        "dg": -4,
+        "pts": 1
+      }
+    ],
+    "I": [
+      {
+        "code": "FRA",
+        "name": "Francia",
+        "pj": 2,
+        "pg": 2,
+        "pe": 0,
+        "pp": 0,
+        "gf": 6,
+        "gc": 1,
+        "dg": 5,
+        "pts": 6
+      },
+      {
+        "code": "NOR",
+        "name": "Noruega",
+        "pj": 2,
+        "pg": 2,
+        "pe": 0,
+        "pp": 0,
+        "gf": 7,
+        "gc": 3,
+        "dg": 4,
+        "pts": 6
+      },
+      {
+        "code": "SEN",
+        "name": "Senegal",
+        "pj": 2,
+        "pg": 0,
+        "pe": 0,
+        "pp": 2,
+        "gf": 3,
+        "gc": 6,
+        "dg": -3,
+        "pts": 0
+      },
+      {
+        "code": "IRQ",
+        "name": "Irak",
+        "pj": 2,
+        "pg": 0,
+        "pe": 0,
+        "pp": 2,
+        "gf": 1,
+        "gc": 7,
+        "dg": -6,
+        "pts": 0
+      }
+    ],
+    "J": [
+      {
+        "code": "ARG",
+        "name": "Argentina",
+        "pj": 2,
+        "pg": 2,
+        "pe": 0,
+        "pp": 0,
+        "gf": 5,
+        "gc": 0,
+        "dg": 5,
+        "pts": 6
+      },
+      {
+        "code": "AUT",
+        "name": "Austria",
+        "pj": 2,
+        "pg": 1,
+        "pe": 0,
+        "pp": 1,
+        "gf": 3,
+        "gc": 3,
+        "dg": 0,
+        "pts": 3
+      },
+      {
+        "code": "ALG",
+        "name": "Argelia",
+        "pj": 2,
+        "pg": 1,
+        "pe": 0,
+        "pp": 1,
+        "gf": 2,
+        "gc": 4,
+        "dg": -2,
+        "pts": 3
+      },
+      {
+        "code": "JOR",
+        "name": "Jordania",
+        "pj": 2,
+        "pg": 0,
+        "pe": 0,
+        "pp": 2,
+        "gf": 2,
+        "gc": 5,
+        "dg": -3,
+        "pts": 0
+      }
+    ],
+    "K": [
+      {
+        "code": "COL",
+        "name": "Colombia",
+        "pj": 2,
+        "pg": 2,
+        "pe": 0,
+        "pp": 0,
+        "gf": 4,
+        "gc": 1,
+        "dg": 3,
+        "pts": 6
+      },
+      {
+        "code": "POR",
+        "name": "Portugal",
+        "pj": 2,
+        "pg": 1,
+        "pe": 1,
+        "pp": 0,
+        "gf": 6,
+        "gc": 1,
+        "dg": 5,
+        "pts": 4
+      },
+      {
+        "code": "COD",
+        "name": "República Democrática del Congo",
+        "pj": 2,
+        "pg": 0,
+        "pe": 1,
+        "pp": 1,
+        "gf": 1,
+        "gc": 2,
+        "dg": -1,
+        "pts": 1
+      },
+      {
+        "code": "UZB",
+        "name": "Uzbekistán",
+        "pj": 2,
+        "pg": 0,
+        "pe": 0,
+        "pp": 2,
+        "gf": 1,
+        "gc": 8,
+        "dg": -7,
+        "pts": 0
+      }
+    ],
+    "L": [
+      {
+        "code": "ENG",
+        "name": "Inglaterra",
+        "pj": 2,
+        "pg": 1,
+        "pe": 1,
+        "pp": 0,
+        "gf": 4,
+        "gc": 2,
+        "dg": 2,
+        "pts": 4
+      },
+      {
+        "code": "GHA",
+        "name": "Ghana",
+        "pj": 2,
+        "pg": 1,
+        "pe": 1,
+        "pp": 0,
+        "gf": 1,
+        "gc": 0,
+        "dg": 1,
+        "pts": 4
+      },
+      {
+        "code": "CRO",
+        "name": "Croacia",
+        "pj": 2,
+        "pg": 1,
+        "pe": 0,
+        "pp": 1,
+        "gf": 3,
+        "gc": 4,
+        "dg": -1,
+        "pts": 3
+      },
+      {
+        "code": "PAN",
+        "name": "Panamá",
+        "pj": 2,
+        "pg": 0,
+        "pe": 0,
+        "pp": 2,
+        "gf": 0,
+        "gc": 2,
+        "dg": -2,
+        "pts": 0
+      }
+    ]
+  },
+  "knockout": [
+    {
+      "round": "Round of 32",
+      "matches": [
+        {
+          "num": 73,
+          "team1": "Sudáfrica",
+          "team2": "Canadá",
+          "code1": "RSA",
+          "code2": "CAN",
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "28/6",
+          "time": "12:00 (UTC-7)",
+          "stadium": "SoFi Stadium",
+          "city": "Los Ángeles"
+        },
+        {
+          "num": 74,
+          "team1": "Alemania",
+          "team2": "3A/B/C/D/F",
+          "code1": "GER",
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "29/6",
+          "time": "16:30 (UTC-4)",
+          "stadium": "Gillette Stadium",
+          "city": "Boston"
+        },
+        {
+          "num": 75,
+          "team1": "1F",
+          "team2": "Marruecos",
+          "code1": null,
+          "code2": "MAR",
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "29/6",
+          "time": "19:00 (UTC-6)",
+          "stadium": "Estadio Monterrey",
+          "city": "Monterrey"
+        },
+        {
+          "num": 76,
+          "team1": "Brasil",
+          "team2": "2F",
+          "code1": "BRA",
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "29/6",
+          "time": "12:00 (UTC-5)",
+          "stadium": "NRG Stadium",
+          "city": "Houston"
+        },
+        {
+          "num": 77,
+          "team1": "1I",
+          "team2": "3C/D/F/G/H",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "30/6",
+          "time": "17:00 (UTC-4)",
+          "stadium": "MetLife Stadium",
+          "city": "Nueva York/Nueva Jersey"
+        },
+        {
+          "num": 78,
+          "team1": "2E",
+          "team2": "2I",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "30/6",
+          "time": "12:00 (UTC-5)",
+          "stadium": "AT&T Stadium",
+          "city": "Dallas"
+        },
+        {
+          "num": 79,
+          "team1": "México",
+          "team2": "3C/E/F/H/I",
+          "code1": "MEX",
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "30/6",
+          "time": "19:00 (UTC-6)",
+          "stadium": "Estadio Azteca",
+          "city": "Ciudad de México"
+        },
+        {
+          "num": 80,
+          "team1": "1L",
+          "team2": "3E/H/I/J/K",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "1/7",
+          "time": "12:00 (UTC-4)",
+          "stadium": "Mercedes-Benz Stadium",
+          "city": "Atlanta"
+        },
+        {
+          "num": 81,
+          "team1": "Estados Unidos",
+          "team2": "3B/E/F/I/J",
+          "code1": "USA",
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "1/7",
+          "time": "17:00 (UTC-7)",
+          "stadium": "Levi's Stadium",
+          "city": "San Francisco"
+        },
+        {
+          "num": 82,
+          "team1": "1G",
+          "team2": "3A/E/H/I/J",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "1/7",
+          "time": "13:00 (UTC-7)",
+          "stadium": "Lumen Field",
+          "city": "Seattle"
+        },
+        {
+          "num": 83,
+          "team1": "2K",
+          "team2": "2L",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "2/7",
+          "time": "19:00 (UTC-4)",
+          "stadium": "Estadio Nacional de Canadá",
+          "city": "Toronto"
+        },
+        {
+          "num": 84,
+          "team1": "1H",
+          "team2": "2J",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "2/7",
+          "time": "12:00 (UTC-7)",
+          "stadium": "SoFi Stadium",
+          "city": "Los Ángeles"
+        },
+        {
+          "num": 85,
+          "team1": "Suiza",
+          "team2": "3E/F/G/I/J",
+          "code1": "SUI",
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "2/7",
+          "time": "20:00 (UTC-7)",
+          "stadium": "Estadio BC Place",
+          "city": "Vancouver"
+        },
+        {
+          "num": 86,
+          "team1": "Argentina",
+          "team2": "2H",
+          "code1": "ARG",
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "3/7",
+          "time": "18:00 (UTC-4)",
+          "stadium": "Hard Rock Stadium",
+          "city": "Miami"
+        },
+        {
+          "num": 87,
+          "team1": "1K",
+          "team2": "3D/E/I/J/L",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "3/7",
+          "time": "20:30 (UTC-5)",
+          "stadium": "Arrowhead Stadium",
+          "city": "Kansas City"
+        },
+        {
+          "num": 88,
+          "team1": "2D",
+          "team2": "2G",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "3/7",
+          "time": "13:00 (UTC-5)",
+          "stadium": "AT&T Stadium",
+          "city": "Dallas"
+        }
+      ]
+    },
+    {
+      "round": "Round of 16",
+      "matches": [
+        {
+          "num": 89,
+          "team1": "Ganador Partido 74",
+          "team2": "Ganador Partido 77",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "4/7",
+          "time": "17:00 (UTC-4)",
+          "stadium": "Lincoln Financial Field",
+          "city": "Filadelfia"
+        },
+        {
+          "num": 90,
+          "team1": "Ganador Partido 73",
+          "team2": "Ganador Partido 75",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "4/7",
+          "time": "12:00 (UTC-5)",
+          "stadium": "Estadio NRG",
+          "city": "Houston"
+        },
+        {
+          "num": 91,
+          "team1": "Ganador Partido 76",
+          "team2": "Ganador Partido 78",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "5/7",
+          "time": "16:00 (UTC-4)",
+          "stadium": "MetLife Stadium",
+          "city": "Nueva York/Nueva Jersey"
+        },
+        {
+          "num": 92,
+          "team1": "Ganador Partido 79",
+          "team2": "Ganador Partido 80",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "5/7",
+          "time": "18:00 (UTC-6)",
+          "stadium": "Estadio Azteca",
+          "city": "Ciudad de México"
+        },
+        {
+          "num": 93,
+          "team1": "Ganador Partido 83",
+          "team2": "Ganador Partido 84",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "6/7",
+          "time": "14:00 (UTC-5)",
+          "stadium": "AT&T Stadium",
+          "city": "Dallas"
+        },
+        {
+          "num": 94,
+          "team1": "Ganador Partido 81",
+          "team2": "Ganador Partido 82",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "6/7",
+          "time": "17:00 (UTC-7)",
+          "stadium": "Lumen Field",
+          "city": "Seattle"
+        },
+        {
+          "num": 95,
+          "team1": "Ganador Partido 86",
+          "team2": "Ganador Partido 88",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "7/7",
+          "time": "12:00 (UTC-4)",
+          "stadium": "Mercedes-Benz Stadium",
+          "city": "Atlanta"
+        },
+        {
+          "num": 96,
+          "team1": "Ganador Partido 85",
+          "team2": "Ganador Partido 87",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "7/7",
+          "time": "13:00 (UTC-7)",
+          "stadium": "Estadio BC Place",
+          "city": "Vancouver"
+        }
+      ]
+    },
+    {
+      "round": "Quarter-final",
+      "matches": [
+        {
+          "num": 97,
+          "team1": "Ganador Partido 89",
+          "team2": "Ganador Partido 90",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "9/7",
+          "time": "16:00 (UTC-4)",
+          "stadium": "Gillette Stadium",
+          "city": "Boston"
+        },
+        {
+          "num": 98,
+          "team1": "Ganador Partido 93",
+          "team2": "Ganador Partido 94",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "10/7",
+          "time": "12:00 (UTC-7)",
+          "stadium": "SoFi Stadium",
+          "city": "Los Ángeles"
+        },
+        {
+          "num": 99,
+          "team1": "Ganador Partido 91",
+          "team2": "Ganador Partido 92",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "11/7",
+          "time": "17:00 (UTC-4)",
+          "stadium": "Hard Rock Stadium",
+          "city": "Miami"
+        },
+        {
+          "num": 100,
+          "team1": "Ganador Partido 95",
+          "team2": "Ganador Partido 96",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "11/7",
+          "time": "20:00 (UTC-5)",
+          "stadium": "Arrowhead Stadium",
+          "city": "Kansas City"
+        }
+      ]
+    },
+    {
+      "round": "Semi-final",
+      "matches": [
+        {
+          "num": 101,
+          "team1": "Ganador Partido 97",
+          "team2": "Ganador Partido 98",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "14/7",
+          "time": "14:00 (UTC-5)",
+          "stadium": "AT&T Stadium",
+          "city": "Dallas"
+        },
+        {
+          "num": 102,
+          "team1": "Ganador Partido 99",
+          "team2": "Ganador Partido 100",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "15/7",
+          "time": "15:00 (UTC-4)",
+          "stadium": "Mercedes-Benz Stadium",
+          "city": "Atlanta"
+        }
+      ]
+    },
+    {
+      "round": "Third place",
+      "matches": [
+        {
+          "num": 103,
+          "team1": "Perdedor Partido 101",
+          "team2": "Perdedor Partido 102",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "18/7",
+          "time": "17:00 (UTC-4)",
+          "stadium": "Hard Rock Stadium",
+          "city": "Miami"
+        }
+      ]
+    },
+    {
+      "round": "Final",
+      "matches": [
+        {
+          "num": 104,
+          "team1": "Ganador Partido 101",
+          "team2": "Ganador Partido 102",
+          "code1": null,
+          "code2": null,
+          "played": false,
+          "score_home": null,
+          "score_away": null,
+          "date": "19/7",
+          "time": "15:00 (UTC-4)",
+          "stadium": "MetLife Stadium",
+          "city": "Nueva York/Nueva Jersey"
+        }
+      ]
+    }
+  ]
+}

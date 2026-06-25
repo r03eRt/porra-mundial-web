@@ -6,3 +6,6 @@ verify_jwt = false
 
 [functions.sync-as-live-match]
 verify_jwt = false
+
+[functions.sync-wikipedia-results]
+verify_jwt = false
