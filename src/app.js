@@ -39,7 +39,8 @@ const LS_KEYS = {
   goalAlertSnapshot: 'porra.goalAlertSnapshot.v1',
   liveNotificationsEnabled: 'porra.liveNotifications.enabled.v1',
   theme: 'porra.theme.v1',
-  installDismissedUntil: 'porra.installBanner.dismissedUntil.v1'
+  installDismissedUntil: 'porra.installBanner.dismissedUntil.v1',
+  knockoutManualWinners: 'porra.knockoutManualWinners.v1'
 };
 
 const TEAM_FLAGS = {
@@ -98,6 +99,7 @@ const state = {
   miniResults: loadMiniResults(),
   apiResults: loadStoredJson(LS_KEYS.apiResults, {}),
   apiFixtures: loadStoredJson(LS_KEYS.apiFixtures, []),
+  knockoutManualWinners: loadStoredJson(LS_KEYS.knockoutManualWinners, {}),
   playerRankings: null,
   teamRankings: null,
   statsMode: 'players',
@@ -933,7 +935,11 @@ function isTournamentTeam(team) {
 }
 
 function winnerFromApiMatch(match) {
-  if (!match || !isTournamentTeam(match.team1) || !isTournamentTeam(match.team2)) return null;
+  if (!match) return null;
+  // Check manual override first (keyed by match num)
+  const manualWinner = match.num && state.knockoutManualWinners[match.num];
+  if (manualWinner) return manualWinner;
+  if (!isTournamentTeam(match.team1) || !isTournamentTeam(match.team2)) return null;
   const score = match.score || {};
   const decidingScore = [score.p, score.et, score.ft]
     .find(value => Array.isArray(value) && value.length >= 2 && Number(value[0]) !== Number(value[1]));
@@ -984,6 +990,7 @@ function buildRealityBracket() {
   const fixtures = state.apiFixtures;
   const bracket = {};
   const confirmed = {}; // parallel structure: confirmed[stage][index] = true/false
+  const matchNums = {}; // matchNums[stage] = [num1, num2, ...] one per match (pair of teams)
   const ROUND_MAP = {
     DIECISEISAVOS: 'Round of 32',
     OCTAVOS: 'Round of 16',
@@ -1008,6 +1015,13 @@ function buildRealityBracket() {
   function isSeedConfirmed(seed) {
     if (!seed) return false;
     if (isTournamentTeam(seed)) return true; // API already resolved it
+    // Winner token: confirmed if that match has a result
+    const winnerMatch = seed.match(/^W(\d+)$/);
+    if (winnerMatch) {
+      const num = parseInt(winnerMatch[1], 10);
+      const fixture = fixtures.find(m => m.num === num);
+      return !!winnerFromApiMatch(fixture);
+    }
     const simpleMatch = seed.match(/^(\d+)([A-L])$/i);
     if (simpleMatch) {
       const group = simpleMatch[2].toUpperCase();
@@ -1015,17 +1029,24 @@ function buildRealityBracket() {
     }
     const thirdMatch = seed.match(/^3([A-L](?:\/[A-L])+)$/i);
     if (thirdMatch) {
-      // Best thirds are only confirmed when ALL groups are complete
-      // (because which thirds qualify depends on all groups finishing)
       return groups.every(isGroupComplete);
     }
     return false;
   }
 
-  // Resolve a seed like "1A", "2B", "3A/B/C/D/F" to a real local team name
+  // Resolve a seed like "1A", "2B", "3A/B/C/D/F", or "W73" (winner of match 73)
   function resolveSeed(seed) {
     if (!seed) return '';
     if (isTournamentTeam(seed)) return LOCAL_TEAM_BY_KEY.get(teamKey(seed)) || seed;
+    // Winner token: "W73" = winner of match 73
+    const winnerMatch = seed.match(/^W(\d+)$/);
+    if (winnerMatch) {
+      const num = parseInt(winnerMatch[1], 10);
+      const fixture = fixtures.find(m => m.num === num);
+      const winner = fixture ? winnerFromApiMatch(fixture) : null;
+      if (winner) return LOCAL_TEAM_BY_KEY.get(teamKey(winner)) || winner;
+      return '';
+    }
     const simpleMatch = seed.match(/^(\d+)([A-L])$/i);
     if (simpleMatch) {
       const position = parseInt(simpleMatch[1], 10) - 1;
@@ -1106,51 +1127,62 @@ function buildRealityBracket() {
     }
     bracket.DIECISEISAVOS = orderedR32.flatMap(resolveFixture);
     confirmed.DIECISEISAVOS = orderedR32.flatMap(resolveFixtureConfirmed);
+    matchNums.DIECISEISAVOS = orderedR32.map(m => m.num);
   } else if (r32Fixtures.length > 0) {
     bracket.DIECISEISAVOS = r32Fixtures.flatMap(resolveFixture);
     confirmed.DIECISEISAVOS = r32Fixtures.flatMap(resolveFixtureConfirmed);
+    matchNums.DIECISEISAVOS = r32Fixtures.map(m => m.num);
   } else {
     bracket.DIECISEISAVOS = Array(32).fill('');
     confirmed.DIECISEISAVOS = Array(32).fill(false);
+    matchNums.DIECISEISAVOS = [];
   }
 
   // R16
   if (r16Order.length > 0) {
     bracket.OCTAVOS = r16Order.flatMap(resolveFixture);
     confirmed.OCTAVOS = r16Order.flatMap(resolveFixtureConfirmed);
+    matchNums.OCTAVOS = r16Order.map(m => m.num);
   } else {
     bracket.OCTAVOS = Array(KNOCKOUT_SCORING.OCTAVOS?.expected || 16).fill('');
     confirmed.OCTAVOS = Array(KNOCKOUT_SCORING.OCTAVOS?.expected || 16).fill(false);
+    matchNums.OCTAVOS = [];
   }
 
   // QF
   if (qfOrder.length > 0) {
     bracket.CUARTOS = qfOrder.flatMap(resolveFixture);
     confirmed.CUARTOS = qfOrder.flatMap(resolveFixtureConfirmed);
+    matchNums.CUARTOS = qfOrder.map(m => m.num);
   } else {
     bracket.CUARTOS = Array(KNOCKOUT_SCORING.CUARTOS?.expected || 8).fill('');
     confirmed.CUARTOS = Array(KNOCKOUT_SCORING.CUARTOS?.expected || 8).fill(false);
+    matchNums.CUARTOS = [];
   }
 
   // SF
   if (sfFixtures.length > 0) {
     bracket.SEMIS = sfFixtures.flatMap(resolveFixture);
     confirmed.SEMIS = sfFixtures.flatMap(resolveFixtureConfirmed);
+    matchNums.SEMIS = sfFixtures.map(m => m.num);
   } else {
     bracket.SEMIS = Array(KNOCKOUT_SCORING.SEMIS?.expected || 4).fill('');
     confirmed.SEMIS = Array(KNOCKOUT_SCORING.SEMIS?.expected || 4).fill(false);
+    matchNums.SEMIS = [];
   }
 
   // Final
   if (finalFixtures.length > 0) {
     bracket.FINAL = finalFixtures.flatMap(resolveFixture);
     confirmed.FINAL = finalFixtures.flatMap(resolveFixtureConfirmed);
+    matchNums.FINAL = finalFixtures.map(m => m.num);
   } else {
     bracket.FINAL = Array(KNOCKOUT_SCORING.FINAL?.expected || 2).fill('');
     confirmed.FINAL = Array(KNOCKOUT_SCORING.FINAL?.expected || 2).fill(false);
+    matchNums.FINAL = [];
   }
 
-  return { bracket, confirmed };
+  return { bracket, confirmed, matchNums };
 }
 
 // Extract match numbers that feed into a knockout fixture (e.g. "W73" → 73)
@@ -3020,7 +3052,7 @@ function renderKnockout() {
 }
 
 function renderRealityBracket() {
-  const { bracket: realBracket, confirmed: realConfirmed } = buildRealityBracket();
+  const { bracket: realBracket, confirmed: realConfirmed, matchNums } = buildRealityBracket();
   const reality = getKnockoutReality();
 
   // Determine real champion from fixtures (winner of the Final)
@@ -3029,16 +3061,19 @@ function renderRealityBracket() {
   const realChampion = apiChampion ? (LOCAL_TEAM_BY_KEY.get(teamKey(apiChampion)) || apiChampion) : '';
 
   const halfRounds = KNOCKOUT_STAGES.slice(0, -1);
+  const halfLen = stage => (matchNums[stage]?.length || 0) / 2;
   const leftRounds = halfRounds.map(stage => ({
     stage,
     teams: realBracket[stage].slice(0, realBracket[stage].length / 2),
     confirmed: realConfirmed[stage].slice(0, realConfirmed[stage].length / 2),
+    nums: (matchNums[stage] || []).slice(0, halfLen(stage)),
     matchOffset: 0
   }));
   const rightRounds = halfRounds.map(stage => ({
     stage,
     teams: realBracket[stage].slice(realBracket[stage].length / 2),
     confirmed: realConfirmed[stage].slice(realConfirmed[stage].length / 2),
+    nums: (matchNums[stage] || []).slice(halfLen(stage)),
     matchOffset: realBracket[stage].length / 4
   })).reverse();
 
@@ -3060,16 +3095,19 @@ function renderRealityBracket() {
 
   const championNeutral = neutralScores['1º'] || { label: 'Campeón', hits: 0, points: 0, resolved: realChampion ? 1 : 0, expected: 1, teams: new Set(realChampion ? [teamKey(realChampion)] : []), complete: !!realChampion };
 
+  const hasManualWinners = isAdmin() && Object.keys(state.knockoutManualWinners).length > 0;
+
   document.getElementById('knockoutRealityBracket').innerHTML = html`
     <details class="reality-bracket-details" open>
       <summary class="bracket-title reality-title">
         <span>🏆 Cuadro real</span>
         <small>Según clasificación de grupos y resultados</small>
       </summary>
+      ${hasManualWinners ? '<button class="btn-reset-knockout" id="resetKnockoutManual">🗑 Resetear ganadores manuales</button>' : ''}
       <div class="bracket">
-        ${leftRounds.map(({ stage, teams, confirmed, matchOffset }) => renderRealityBracketRound(stage, teams, confirmed, neutralScores[stage], { matchOffset })).join('')}
-        ${renderRealityFinalRound(realBracket.FINAL, realChampion, realConfirmed.FINAL, neutralScores.FINAL, championNeutral)}
-        ${rightRounds.map(({ stage, teams, confirmed, matchOffset }) => renderRealityBracketRound(stage, teams, confirmed, neutralScores[stage], { matchOffset, side: 'right' })).join('')}
+        ${leftRounds.map(({ stage, teams, confirmed, nums, matchOffset }) => renderRealityBracketRound(stage, teams, confirmed, nums, neutralScores[stage], { matchOffset })).join('')}
+        ${renderRealityFinalRound(realBracket.FINAL, realChampion, realConfirmed.FINAL, matchNums.FINAL || [], neutralScores.FINAL, championNeutral)}
+        ${rightRounds.map(({ stage, teams, confirmed, nums, matchOffset }) => renderRealityBracketRound(stage, teams, confirmed, nums, neutralScores[stage], { matchOffset, side: 'right' })).join('')}
       </div>
     </details>
   `;
@@ -3087,14 +3125,27 @@ function renderRealityBracketTeam(team, confirmed) {
   return `<div class="bracket-team${confirmed ? ' correct' : ''}"><span class="bracket-flag">${TEAM_FLAGS[team] || '🏳️'}</span><span>${escapeHtml(team)}</span>${groupBadge}${mark}</div>`;
 }
 
-function renderRealityBracketRound(stage, teams, confirmedArr, stageScore, { matchOffset = 0, side = 'left' } = {}) {
+function renderRealityBracketRound(stage, teams, confirmedArr, nums, stageScore, { matchOffset = 0, side = 'left' } = {}) {
+  const admin = isAdmin();
   const matches = [];
   for (let index = 0; index < teams.length; index += 2) {
+    const matchIdx = index / 2;
+    const matchNum = nums[matchIdx];
+    const t1 = teams[index];
+    const t2 = teams[index + 1];
+    const currentWinner = matchNum && state.knockoutManualWinners[matchNum];
+    const adminButtons = admin && matchNum && t1 && t2 ? `
+      <div class="bracket-admin-actions">
+        <button class="btn-pass${currentWinner === t1 ? ' active' : ''}" data-knockout-winner="${matchNum}" data-winner-team="${escapeHtml(t1)}" title="Pasa ${escapeHtml(t1)}">⬆</button>
+        <button class="btn-pass${currentWinner === t2 ? ' active' : ''}" data-knockout-winner="${matchNum}" data-winner-team="${escapeHtml(t2)}" title="Pasa ${escapeHtml(t2)}">⬇</button>
+        ${currentWinner ? `<button class="btn-clear-pass" data-knockout-clear="${matchNum}" title="Borrar">✕</button>` : ''}
+      </div>` : '';
     matches.push(html`
       <article class="bracket-match ${side === 'right' ? 'right-side' : ''}">
-        <span class="bracket-match-number">Cruce ${matchOffset + index / 2 + 1}</span>
-        ${renderRealityBracketTeam(teams[index], confirmedArr[index])}
-        ${renderRealityBracketTeam(teams[index + 1], confirmedArr[index + 1])}
+        <span class="bracket-match-number">Cruce ${matchOffset + matchIdx + 1}</span>
+        ${renderRealityBracketTeam(t1, confirmedArr[index])}
+        ${renderRealityBracketTeam(t2, confirmedArr[index + 1])}
+        ${adminButtons}
       </article>
     `);
   }
@@ -3110,8 +3161,19 @@ function renderRealityBracketRound(stage, teams, confirmedArr, stageScore, { mat
   `;
 }
 
-function renderRealityFinalRound(finalTeams, champion, confirmedArr, finalScore, championScore) {
+function renderRealityFinalRound(finalTeams, champion, confirmedArr, nums, finalScore, championScore) {
+  const admin = isAdmin();
+  const matchNum = nums[0];
+  const t1 = finalTeams[0];
+  const t2 = finalTeams[1];
+  const currentWinner = matchNum && state.knockoutManualWinners[matchNum];
   const champConfirmed = !!champion && championScore.complete;
+  const adminButtons = admin && matchNum && t1 && t2 ? `
+    <div class="bracket-admin-actions">
+      <button class="btn-pass${currentWinner === t1 ? ' active' : ''}" data-knockout-winner="${matchNum}" data-winner-team="${escapeHtml(t1)}" title="Pasa ${escapeHtml(t1)}">⬆</button>
+      <button class="btn-pass${currentWinner === t2 ? ' active' : ''}" data-knockout-winner="${matchNum}" data-winner-team="${escapeHtml(t2)}" title="Pasa ${escapeHtml(t2)}">⬇</button>
+      ${currentWinner ? `<button class="btn-clear-pass" data-knockout-clear="${matchNum}" title="Borrar">✕</button>` : ''}
+    </div>` : '';
   return html`
     <section class="bracket-round bracket-final-round">
       <div class="bracket-round-head">
@@ -3121,8 +3183,9 @@ function renderRealityFinalRound(finalTeams, champion, confirmedArr, finalScore,
       <div class="bracket-matches">
         <article class="bracket-match">
           <span class="bracket-match-number">Final</span>
-          ${renderRealityBracketTeam(finalTeams[0], confirmedArr[0])}
-          ${renderRealityBracketTeam(finalTeams[1], confirmedArr[1])}
+          ${renderRealityBracketTeam(t1, confirmedArr[0])}
+          ${renderRealityBracketTeam(t2, confirmedArr[1])}
+          ${adminButtons}
         </article>
         <article class="bracket-match champion-card">
           <span class="trophy" aria-hidden="true">★</span>
@@ -4255,6 +4318,31 @@ async function clearMiniResult(id) {
 }
 
 document.addEventListener('click', e => {
+  // Admin: set knockout match winner
+  const winnerBtn = e.target.closest('[data-knockout-winner]');
+  if (winnerBtn) {
+    const matchNum = winnerBtn.dataset.knockoutWinner;
+    const winnerTeam = winnerBtn.dataset.winnerTeam;
+    state.knockoutManualWinners[matchNum] = winnerTeam;
+    localStorage.setItem(LS_KEYS.knockoutManualWinners, JSON.stringify(state.knockoutManualWinners));
+    renderKnockout();
+    return;
+  }
+  const clearBtn = e.target.closest('[data-knockout-clear]');
+  if (clearBtn) {
+    const matchNum = clearBtn.dataset.knockoutClear;
+    delete state.knockoutManualWinners[matchNum];
+    localStorage.setItem(LS_KEYS.knockoutManualWinners, JSON.stringify(state.knockoutManualWinners));
+    renderKnockout();
+    return;
+  }
+  if (e.target.id === 'resetKnockoutManual') {
+    state.knockoutManualWinners = {};
+    localStorage.setItem(LS_KEYS.knockoutManualWinners, JSON.stringify(state.knockoutManualWinners));
+    renderKnockout();
+    return;
+  }
+
   const teamSelectButton = e.target.closest('[data-team-select]');
   if (teamSelectButton) {
     state.selectedTeam = teamSelectButton.dataset.teamSelect;
