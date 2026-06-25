@@ -3234,14 +3234,12 @@ function renderKnockout() {
         </div>
       </div>
     </div>
-    ${state.myPlayerId ? `
+    ${state.myPlayerId && canEditOwnKnockout ? `
       <div class="panel">
         <div class="panel-head">
           <div>
             <h2>Editar mis cruces</h2>
-            <span class="hint">${canEditOwnKnockout
-              ? `Edición abierta · cierre: ${state.porra.predictions_deadline ? esc(new Date(state.porra.predictions_deadline).toLocaleString('es-ES')) : 'sin límite'}`
-              : 'Edición cerrada (la porra no está abierta o pasó el deadline).'}</span>
+            <span class="hint">Edición abierta · cierre: ${state.porra.predictions_deadline ? esc(new Date(state.porra.predictions_deadline).toLocaleString('es-ES')) : 'sin límite'}</span>
           </div>
         </div>
         <div class="bracket-wrap">
@@ -3265,7 +3263,16 @@ function renderKnockout() {
           </div>
         </div>
       </div>
-    ` : ''}
+    ` : (state.myPlayerId ? `
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Editar mis cruces</h2>
+            <span class="hint">Edición cerrada (la porra no está abierta o pasó el deadline).</span>
+          </div>
+        </div>
+      </div>
+    ` : '')}
   `;
 }
 
