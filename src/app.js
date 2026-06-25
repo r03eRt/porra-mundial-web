@@ -20,6 +20,7 @@ const WORLDCUP_RESULTS_KIND = 'openfootball-2026';
 const AS_LIVE_MATCH_TABLE = 'as_live_match_cache';
 const AS_LIVE_MATCH_KIND = 'worldcup-2026';
 const PREDICTION_OVERRIDES_TABLE = 'prediction_overrides';
+const KNOCKOUT_MANUAL_WINNERS_TABLE = 'knockout_manual_winners';
 const PLAYER_EDIT_DEADLINE_KEY = 'player_edit_deadline';
 const AS_LIVE_MATCH_ACTIVE_REFRESH_MS = 90 * 1000;
 const AS_LIVE_MATCH_IDLE_REFRESH_MS = 15 * 60 * 1000;
@@ -3758,6 +3759,25 @@ async function loadPredictionOverridesFromSupabase() {
   renderAll();
 }
 
+async function loadKnockoutManualWinnersFromSupabase() {
+  const { data, error } = await supabase
+    .from(KNOCKOUT_MANUAL_WINNERS_TABLE)
+    .select('match_num,winner_team');
+
+  if (error) {
+    // Si falla (tabla aún sin migrar, sin red…), conservamos lo que haya en
+    // localStorage para no perder la corrección manual local del admin.
+    console.error('No se pudieron cargar los ganadores manuales de cruces desde Supabase:', error);
+    return;
+  }
+
+  state.knockoutManualWinners = Object.fromEntries(
+    data.map(row => [String(row.match_num), row.winner_team])
+  );
+  localStorage.setItem(LS_KEYS.knockoutManualWinners, JSON.stringify(state.knockoutManualWinners));
+  renderKnockout();
+}
+
 async function loadEditDeadlineFromSupabase() {
   const { data, error } = await supabase
     .from('app_config')
@@ -4317,29 +4337,79 @@ async function clearMiniResult(id) {
   showAppToast(`Resultado eliminado${question ? `: ${question.id}` : ''}.`);
 }
 
+// Ganadores manuales del cuadro real de cruces. Persisten en Supabase
+// (knockout_manual_winners) para compartirse entre dispositivos/usuarios; se
+// mantiene la copia en localStorage como caché local. El cuadro real sigue
+// siendo derivado: combina estos overrides con los resultados de la API.
+async function setKnockoutManualWinner(matchNum, winnerTeam) {
+  if (!isAdmin()) return;
+  state.knockoutManualWinners[matchNum] = winnerTeam;
+  localStorage.setItem(LS_KEYS.knockoutManualWinners, JSON.stringify(state.knockoutManualWinners));
+  renderKnockout();
+
+  const { error } = await supabase
+    .from(KNOCKOUT_MANUAL_WINNERS_TABLE)
+    .upsert({ match_num: String(matchNum), winner_team: winnerTeam, updated_at: new Date().toISOString() });
+  if (error) {
+    showAppToast('No se pudo guardar el ganador en la base de datos: ' + error.message);
+    return;
+  }
+  showAppToast('Ganador guardado y compartido.');
+}
+
+async function clearKnockoutManualWinner(matchNum) {
+  if (!isAdmin()) return;
+  delete state.knockoutManualWinners[matchNum];
+  localStorage.setItem(LS_KEYS.knockoutManualWinners, JSON.stringify(state.knockoutManualWinners));
+  renderKnockout();
+
+  const { error } = await supabase
+    .from(KNOCKOUT_MANUAL_WINNERS_TABLE)
+    .delete()
+    .eq('match_num', String(matchNum));
+  if (error) {
+    showAppToast('No se pudo borrar el ganador en la base de datos: ' + error.message);
+    return;
+  }
+  showAppToast('Ganador eliminado.');
+}
+
+async function resetKnockoutManualWinners() {
+  if (!isAdmin()) return;
+  const nums = Object.keys(state.knockoutManualWinners);
+  state.knockoutManualWinners = {};
+  localStorage.setItem(LS_KEYS.knockoutManualWinners, JSON.stringify(state.knockoutManualWinners));
+  renderKnockout();
+
+  if (!nums.length) return;
+  const { error } = await supabase
+    .from(KNOCKOUT_MANUAL_WINNERS_TABLE)
+    .delete()
+    .in('match_num', nums.map(String));
+  if (error) {
+    showAppToast('No se pudieron resetear los ganadores en la base de datos: ' + error.message);
+    return;
+  }
+  showAppToast('Ganadores manuales reseteados.');
+}
+
 document.addEventListener('click', e => {
   // Admin: set knockout match winner
   const winnerBtn = e.target.closest('[data-knockout-winner]');
   if (winnerBtn) {
     const matchNum = winnerBtn.dataset.knockoutWinner;
     const winnerTeam = winnerBtn.dataset.winnerTeam;
-    state.knockoutManualWinners[matchNum] = winnerTeam;
-    localStorage.setItem(LS_KEYS.knockoutManualWinners, JSON.stringify(state.knockoutManualWinners));
-    renderKnockout();
+    setKnockoutManualWinner(matchNum, winnerTeam);
     return;
   }
   const clearBtn = e.target.closest('[data-knockout-clear]');
   if (clearBtn) {
     const matchNum = clearBtn.dataset.knockoutClear;
-    delete state.knockoutManualWinners[matchNum];
-    localStorage.setItem(LS_KEYS.knockoutManualWinners, JSON.stringify(state.knockoutManualWinners));
-    renderKnockout();
+    clearKnockoutManualWinner(matchNum);
     return;
   }
   if (e.target.id === 'resetKnockoutManual') {
-    state.knockoutManualWinners = {};
-    localStorage.setItem(LS_KEYS.knockoutManualWinners, JSON.stringify(state.knockoutManualWinners));
-    renderKnockout();
+    resetKnockoutManualWinners();
     return;
   }
 
@@ -4688,6 +4758,7 @@ initializeResultsFlow();
 initializeAsLiveMatchFlow();
 loadMiniResultsFromSupabase();
 loadPredictionOverridesFromSupabase();
+loadKnockoutManualWinnersFromSupabase();
 loadEditDeadlineFromSupabase();
 loadStatsRankings();
 initializeAuth();

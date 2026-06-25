@@ -45,7 +45,7 @@ Dos apps en el mismo repo, compartiendo el mismo proyecto Supabase.
 ## Tablas (legacy)
 
 `mini_results`, `as_rankings_cache`, `worldcup_results_cache`, `as_live_match_cache`,
-`prediction_overrides`, `app_config`, `player_access`
+`prediction_overrides`, `app_config`, `player_access`, `knockout_manual_winners`
 
 ## App legacy — Cuadro real de cruces (2026-06-25)
 
@@ -56,7 +56,7 @@ La pestaña **Cruces** de la legacy (`src/app.js`) muestra dos cuadros:
    - **Orden de bracket FIFA 2026**: los cruces de R32 se reordenan siguiendo el árbol del torneo (Final→SF→QF→R16→R32 con `extractFeedNums`) para que los matches que se cruzan en la siguiente ronda estén adyacentes.
    - **Confirmación**: cada equipo muestra ✓ si está confirmado (`isSeedConfirmed`): grupo completo para seeds simples, todos los grupos completos para mejores terceros, o resultado del partido para tokens `W<num>`.
    - **Badge de grupo**: letra del grupo junto al nombre del equipo (`TEAM_GROUP_MAP`).
-   - **Admin: entrada manual de ganadores** (fallback antes de que la API actualice): botones ⬆/⬇ por cruce para marcar quién pasa + ✕ para borrar + «🗑 Resetear ganadores manuales». Guardado en `localStorage` (`state.knockoutManualWinners`, clave `porra.knockoutManualWinners.v1`). `winnerFromApiMatch()` comprueba el override manual antes del score de la API. Los ganadores manuales propagan a rondas siguientes vía tokens `W<num>`.
+   - **Admin: entrada manual de ganadores** (fallback antes de que la API actualice): botones ⬆/⬇ por cruce para marcar quién pasa + ✕ para borrar + «🗑 Resetear ganadores manuales». **Persistido en Supabase** (tabla `knockout_manual_winners`, migración `20260625120000_knockout_manual_winners.sql`) para compartirse entre todos los dispositivos/usuarios; `localStorage` (`state.knockoutManualWinners`, clave `porra.knockoutManualWinners.v1`) queda solo como caché local. `setKnockoutManualWinner`/`clearKnockoutManualWinner`/`resetKnockoutManualWinners` escriben en BD (`upsert`/`delete`); `loadKnockoutManualWinnersFromSupabase()` los carga al arrancar (lectura pública por RLS, escritura `authenticated`). `winnerFromApiMatch()` comprueba el override manual antes del score de la API. Los ganadores manuales propagan a rondas siguientes vía tokens `W<num>`. El cuadro real sigue siendo **derivado**: combina estos overrides con los resultados de la API (`worldcup_results_cache`), no se guarda resuelto.
 2. **Pronóstico del jugador**: selector debajo del cuadro real, puntos por ronda y bracket visual con los picks de cada participante (sin cambios respecto al original).
 
 ## Tablas (plataforma multi-porra, prefijo `porra_`)
