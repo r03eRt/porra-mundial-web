@@ -577,10 +577,10 @@ function knockoutSeedLabel(token) {
     }
     return `Ganador ${refId.toUpperCase()}`;
   }
-  const groupSeed = raw.match(/^([A-Z]+)([12])$/);
+  const groupSeed = parseGroupSeed(raw);
   if (groupSeed) {
-    const pos = groupSeed[2] === '1' ? '1º' : '2º';
-    return `${pos} Grupo ${groupSeed[1]}`;
+    const pos = groupSeed.position === 1 ? '1º' : '2º';
+    return `${pos} Grupo ${groupSeed.group}`;
   }
   return raw;
 }
@@ -590,6 +590,17 @@ function teamByToken(token) {
   return state.teams.find(team =>
     team.team_id === token || normalizeTeamName(team.name) === key
   ) || null;
+}
+
+// Semilla de grupo en cualquier orden: "E1"/"1E" (1º de E), "A2"/"2A" (2º de A).
+// Devuelve { group: 'E', position: 1 } o null si no es una semilla de grupo.
+function parseGroupSeed(token) {
+  const raw = String(token || '').trim().toUpperCase();
+  let m = raw.match(/^([A-L])([12])$/);          // letra+dígito (E1)
+  if (m) return { group: m[1], position: Number(m[2]) };
+  m = raw.match(/^([12])([A-L])$/);              // dígito+letra (1E)
+  if (m) return { group: m[2], position: Number(m[1]) };
+  return null;
 }
 
 // Un grupo se puede identificar por su letra (name, p.ej. "A") o por su UUID
@@ -727,10 +738,10 @@ function resolveKnockoutSeed(token, seen = new Set()) {
   const directTeam = teamByToken(raw);
   if (directTeam) return directTeam.team_id;
 
-  const groupSeed = raw.match(/^([A-Z]+)([12])$/);
+  const groupSeed = parseGroupSeed(raw);
   if (groupSeed) {
-    const standings = computeAdminGroupStandings(groupSeed[1]);
-    return standings[Number(groupSeed[2]) - 1]?.team || raw;
+    const standings = computeAdminGroupStandings(groupSeed.group);
+    return standings[groupSeed.position - 1]?.team || raw;
   }
 
   // Tercero clasificado: asignación oficial por la matriz FIFA (Anexo C).
