@@ -47,6 +47,18 @@ Dos apps en el mismo repo, compartiendo el mismo proyecto Supabase.
 `mini_results`, `as_rankings_cache`, `worldcup_results_cache`, `as_live_match_cache`,
 `prediction_overrides`, `app_config`, `player_access`
 
+## App legacy — Cuadro real de cruces (2026-06-25)
+
+La pestaña **Cruces** de la legacy (`src/app.js`) muestra dos cuadros:
+
+1. **🏆 Cuadro real** (plegable con `<details>`): bracket visual con los equipos reales de cada ronda según clasificaciones de grupo y resultados de la API. Funciones clave:
+   - `buildRealityBracket()` → construye el bracket desde `state.apiFixtures`, resolviendo seeds (`1A`, `2B`, `3A/B/C/D/F`, `W73`) a nombres locales de equipo con `resolveSeed()`.
+   - **Orden de bracket FIFA 2026**: los cruces de R32 se reordenan siguiendo el árbol del torneo (Final→SF→QF→R16→R32 con `extractFeedNums`) para que los matches que se cruzan en la siguiente ronda estén adyacentes.
+   - **Confirmación**: cada equipo muestra ✓ si está confirmado (`isSeedConfirmed`): grupo completo para seeds simples, todos los grupos completos para mejores terceros, o resultado del partido para tokens `W<num>`.
+   - **Badge de grupo**: letra del grupo junto al nombre del equipo (`TEAM_GROUP_MAP`).
+   - **Admin: entrada manual de ganadores** (fallback antes de que la API actualice): botones ⬆/⬇ por cruce para marcar quién pasa + ✕ para borrar + «🗑 Resetear ganadores manuales». Guardado en `localStorage` (`state.knockoutManualWinners`, clave `porra.knockoutManualWinners.v1`). `winnerFromApiMatch()` comprueba el override manual antes del score de la API. Los ganadores manuales propagan a rondas siguientes vía tokens `W<num>`.
+2. **Pronóstico del jugador**: selector debajo del cuadro real, puntos por ronda y bracket visual con los picks de cada participante (sin cambios respecto al original).
+
 ## Tablas (plataforma multi-porra, prefijo `porra_`)
 
 `porras`, `porra_teams`, `porra_groups`, `porra_matches`, `porra_players`,

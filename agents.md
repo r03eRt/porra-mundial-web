@@ -140,6 +140,10 @@ Abrir una porra: `http://localhost:5175/p/<slug>` (o `?slug=<slug>`). Sin login 
 | `data/porra-data.js` | `window.PORRA_DATA` — 22 jugadores, 72 partidos, predicciones |
 | `index.html` | Entrada legacy |
 
+#### Cuadro real de cruces (legacy, 2026-06-25)
+
+La pestaña Cruces (visible en admin con `data-keep-in-admin`) muestra un **🏆 Cuadro real** plegable encima del pronóstico de cada jugador. `buildRealityBracket()` resuelve seeds de la API (`1A`, `2B`, `3A/B/C/D/F`, `W73`) a equipos locales desde clasificación de grupos + mejores terceros + ganadores de partidos previos. Orden visual sigue el árbol FIFA 2026 (R32 reordenado según qué matches alimentan cada octavo). Admin puede marcar ganadores manualmente (⬆/⬇ por cruce, guardado en localStorage `knockoutManualWinners`); `winnerFromApiMatch()` comprueba el override antes del score de la API. Badge de grupo y ✓ de confirmación por equipo.
+
 ### Supabase
 
 | Archivo | Qué hace |

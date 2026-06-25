@@ -34,6 +34,12 @@ docs/              → Documentación técnica detallada
 - `src/styles.css`: estilos responsive.
 - `data/porra-data.js`: participantes, partidos y predicciones extraídas del Excel.
 
+### Cuadro real de cruces (legacy, 2026-06-25)
+
+La pestaña **Cruces** (visible también para el admin) muestra un cuadro real plegable (🏆 Cuadro real) encima del pronóstico de cada jugador. El cuadro se construye con `buildRealityBracket()` a partir de los fixtures de la API, resolviendo seeds (`1A`, `2B`, `3A/B/C/D/F` para mejores terceros, `W73` para ganadores) a nombres locales de equipo desde la clasificación de grupos + mejores terceros. El orden del bracket sigue el árbol oficial FIFA 2026 (R32→R16→QF→SF→Final). Cada equipo muestra un badge con la letra de su grupo y un ✓ verde cuando está confirmado (grupo completo para seeds, todos los grupos para terceros, resultado existente para ganadores).
+
+**Admin: entrada manual de ganadores**: botones ⬆/⬇ por cruce para marcar quién pasa a la siguiente ronda (fallback hasta que la API actualice el resultado). Guardado en `localStorage` (`knockoutManualWinners`). Botón «🗑 Resetear ganadores manuales» para limpiar todos. Los ganadores manuales propagan automáticamente a rondas siguientes.
+
 ## Desarrollo local
 
 Instala las dependencias la primera vez:
