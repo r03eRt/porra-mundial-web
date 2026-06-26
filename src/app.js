@@ -980,6 +980,33 @@ function getKnockoutRealityFromFixtures(fixtures = state.apiFixtures) {
     };
   }
 
+  // openfootball a veces tarda en resolver las semillas (2D, 2E, 3A/B/…) a nombre
+  // real aunque el grupo ya haya terminado, así que esos equipos no contaban en
+  // cruces. Enriquecemos la realidad con los equipos CONFIRMADOS del cuadro real
+  // (buildRealityBracket resuelve seeds con la clasificación local + matriz de
+  // terceros, y `confirmed` marca solo los decididos: grupo completo / partido con
+  // resultado). Solo añadimos para fixtures iguales a los de la API (mismo torneo),
+  // y solo cuando confirmado, para no puntuar clasificaciones provisionales.
+  if (fixtures === state.apiFixtures) {
+    try {
+      const { bracket, confirmed } = buildRealityBracket();
+      for (const stage of Object.keys(KNOCKOUT_SCORING)) {
+        const names = bracket[stage] || [];
+        const conf = confirmed[stage] || [];
+        names.forEach((name, i) => {
+          if (name && conf[i] && isTournamentTeam(name)) {
+            reality[stage].teams.add(teamKey(name));
+          }
+        });
+        reality[stage].resolved = reality[stage].teams.size;
+        reality[stage].complete = reality[stage].teams.size >= reality[stage].expected;
+      }
+    } catch (e) {
+      // Si el bracket no se puede construir, nos quedamos con la realidad de la API.
+      console.warn('No se pudo enriquecer la realidad de cruces con el cuadro real:', e);
+    }
+  }
+
   return reality;
 }
 
