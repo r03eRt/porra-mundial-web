@@ -4502,8 +4502,14 @@ function esc(s) {
 // Init
 // ---------------------------------------------------------------------------
 (async function init() {
-  await loadPorra();
-  render();
+  try {
+    await loadPorra();
+    render();
+  } catch (e) {
+    console.error('Error cargando porra:', e);
+  } finally {
+    document.getElementById('loading-overlay')?.remove();
+  }
   // Load stats rankings in background (no-await, re-renders when done)
   loadStatsRankings().then(() => { if (state.tab === 'statistics') renderStatistics(); });
 })();

@@ -4102,9 +4102,11 @@ async function bootstrapWorldcupResultsCache() {
       state.rankingLoading = false;
       renderAll();
     }
+    document.getElementById('loading-overlay')?.remove();
     return loaded;
   } catch (error) {
     console.warn('No se pudo cargar el cache de resultados desde Supabase:', error);
+    document.getElementById('loading-overlay')?.remove();
     return false;
   }
 }

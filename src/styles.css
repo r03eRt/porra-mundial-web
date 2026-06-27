@@ -1,6 +1,13 @@
 :root { color-scheme:dark;--bg:#0b1020; --panel:#121a2f; --panel2:#18213a; --text:#eef3ff; --muted:#99a6c2; --accent:#53e0b4; --accent2:#5da9ff; --danger:#ff6b6b; --border:#28344f; }
 :root[data-theme="light"]{color-scheme:light;--bg:#f4f7fb;--panel:#fff;--panel2:#e7eef8;--text:#172033;--muted:#5e6b80;--accent:#087f68;--accent2:#1769aa;--danger:#c73535;--border:#cbd5e3}
 *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(135deg,#071020,#10233f);color:var(--text)}
+
+/* --- Loading overlay --- */
+#loading-overlay{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:linear-gradient(135deg,#071020,#10233f)}
+.spinner{width:48px;height:48px;border:4px solid rgba(83,224,180,.18);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+.loader-text{color:var(--muted);font-size:15px;margin:0;letter-spacing:.04em}
+@keyframes spin{to{transform:rotate(360deg)}}
+
 [hidden]{display:none!important}
 :root[data-theme="light"] body{background:linear-gradient(135deg,#edf5ff,#f8fbff)}
 :root[data-theme="light"] button,:root[data-theme="light"] .import-btn,:root[data-theme="light"] select,:root[data-theme="light"] input,:root[data-theme="light"] textarea{background:#fff}
