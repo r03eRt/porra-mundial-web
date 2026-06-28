@@ -122,6 +122,7 @@ const state = {
   groupStandingsView: 'actual',
   bestThirdsShowAll: false,
   matchGoalsExpanded: {},
+  matchSectionsOpen: {},
   compareMatchId: '',
   comparePlayers: [],
   historyCheckpointId: '',
@@ -178,6 +179,7 @@ function keyForTeams(a, b) {
 }
 
 const TOURNAMENT_TEAM_KEYS = new Set(DATA.matches.flatMap(match => [match.team1, match.team2]).map(teamKey));
+const TOURNAMENT_GROUPS = [...new Set(DATA.matches.map(match => match.group))].sort();
 const LOCAL_TEAM_BY_KEY = new Map(DATA.matches
   .flatMap(match => [match.team1, match.team2])
   .map(team => [teamKey(team), team]));
@@ -196,6 +198,15 @@ const KNOCKOUT_SCORING = {
   FINAL: { label: 'Final', apiRound: 'Final', previousRound: 'Semi-final', points: 12, expected: 2 },
   '1º': { label: 'Campeón', apiRound: null, previousRound: 'Final', points: 15, expected: 1 }
 };
+const KNOCKOUT_MATCH_ROUNDS = [
+  { round: 'Round of 32', key: 'r32', label: 'Dieciseisavos' },
+  { round: 'Round of 16', key: 'r16', label: 'Octavos' },
+  { round: 'Quarter-final', key: 'qf', label: 'Cuartos' },
+  { round: 'Semi-final', key: 'sf', label: 'Semifinales' },
+  { round: 'Match for third place', key: 'third', label: '3º puesto' },
+  { round: 'Final', key: 'final', label: 'Final' }
+];
+const KNOCKOUT_MATCH_ROUND_BY_NAME = new Map(KNOCKOUT_MATCH_ROUNDS.map(item => [item.round, item]));
 
 function teamLabel(team) {
   return `${TEAM_FLAGS[team] || '🏳️'} ${team}`;
@@ -950,6 +961,143 @@ function winnerFromApiMatch(match) {
   return Number(decidingScore[0]) > Number(decidingScore[1]) ? match.team1 : match.team2;
 }
 
+function buildKnockoutResolutionContext(fixtures = state.apiFixtures) {
+  const groupStandingsCache = {};
+  for (const group of TOURNAMENT_GROUPS) groupStandingsCache[group] = calculateGroupStandings(group);
+  return {
+    fixtures,
+    groupStandingsCache,
+    bestThirds: calculateBestThirds()
+  };
+}
+
+function isGroupComplete(group) {
+  const groupMatches = DATA.matches.filter(match => match.group === group);
+  return groupMatches.every(match => getResult(match) !== null);
+}
+
+function isKnockoutSeedConfirmed(seed, context = buildKnockoutResolutionContext()) {
+  if (!seed) return false;
+  if (isTournamentTeam(seed)) return true;
+
+  const winnerMatch = String(seed).match(/^W(\d+)$/i);
+  if (winnerMatch) {
+    const num = parseInt(winnerMatch[1], 10);
+    const fixture = context.fixtures.find(match => match.num === num);
+    return !!winnerFromApiMatch(fixture);
+  }
+
+  const simpleMatch = String(seed).match(/^(\d+)([A-L])$/i);
+  if (simpleMatch) return isGroupComplete(simpleMatch[2].toUpperCase());
+
+  const thirdMatch = String(seed).match(/^3([A-L](?:\/[A-L])+)$/i);
+  if (thirdMatch) return TOURNAMENT_GROUPS.every(isGroupComplete);
+
+  return false;
+}
+
+function resolveKnockoutSeed(seed, context = buildKnockoutResolutionContext()) {
+  if (!seed) return '';
+  if (isTournamentTeam(seed)) return LOCAL_TEAM_BY_KEY.get(teamKey(seed)) || seed;
+
+  const winnerMatch = String(seed).match(/^W(\d+)$/i);
+  if (winnerMatch) {
+    const num = parseInt(winnerMatch[1], 10);
+    const fixture = context.fixtures.find(match => match.num === num);
+    const winner = fixture ? winnerFromApiMatch(fixture) : null;
+    return winner ? (LOCAL_TEAM_BY_KEY.get(teamKey(winner)) || winner) : '';
+  }
+
+  const simpleMatch = String(seed).match(/^(\d+)([A-L])$/i);
+  if (simpleMatch) {
+    const position = parseInt(simpleMatch[1], 10) - 1;
+    const group = simpleMatch[2].toUpperCase();
+    const standings = context.groupStandingsCache[group];
+    return standings?.[position]?.team || '';
+  }
+
+  const thirdMatch = String(seed).match(/^3([A-L](?:\/[A-L])+)$/i);
+  if (thirdMatch) {
+    const groupSet = thirdMatch[1].toUpperCase().split('/').sort().join('');
+    const slot = THIRD_SLOT_BY_GROUPSET[groupSet];
+    const assignments = assignThirdPlacedTeamsToRoundOf32(context.bestThirds);
+    if (slot && assignments) {
+      const hit = assignments.find(item => item.slot === slot);
+      if (hit?.thirdTeam) return hit.thirdTeam.team || '';
+    }
+
+    const groupList = thirdMatch[1].toUpperCase().split('/');
+    const qualifiedThirds = context.bestThirds.filter(item => groupList.includes(item.group));
+    return qualifiedThirds[0]?.team || '';
+  }
+
+  return '';
+}
+
+function describeKnockoutSeed(seed) {
+  if (!seed) return 'Por definir';
+  if (isTournamentTeam(seed)) return LOCAL_TEAM_BY_KEY.get(teamKey(seed)) || seed;
+
+  const winnerMatch = String(seed).match(/^W(\d+)$/i);
+  if (winnerMatch) return `Ganador #${winnerMatch[1]}`;
+
+  const loserMatch = String(seed).match(/^L(\d+)$/i);
+  if (loserMatch) return `Perdedor #${loserMatch[1]}`;
+
+  const simpleMatch = String(seed).match(/^(\d+)([A-L])$/i);
+  if (simpleMatch) return `${simpleMatch[1]}º Grupo ${simpleMatch[2].toUpperCase()}`;
+
+  const thirdMatch = String(seed).match(/^3([A-L](?:\/[A-L])+)$/i);
+  if (thirdMatch) return `Mejor 3º ${thirdMatch[1].toUpperCase()}`;
+
+  return String(seed);
+}
+
+function formatFixtureScheduleValue(fixture) {
+  if (!fixture) return 'Horario pendiente';
+  const date = parseApiFixtureDateTime(fixture);
+  if (!date) return 'Horario pendiente';
+
+  const hasTime = Boolean(fixture.utcDate || fixture.time);
+  return new Intl.DateTimeFormat('es-ES', hasTime
+    ? { dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23', timeZone: 'Europe/Madrid' }
+    : { dateStyle: 'medium', timeZone: 'Europe/Madrid' }
+  ).format(date);
+}
+
+function hasScorePair(value) {
+  return Array.isArray(value) && value.length >= 2 && Number.isFinite(Number(value[0])) && Number.isFinite(Number(value[1]));
+}
+
+function formatScorePair(value) {
+  return `${Number(value[0])} - ${Number(value[1])}`;
+}
+
+function getFixtureResultText(fixture) {
+  if (!fixture?.score) return '';
+  const score = fixture.score;
+  if (hasScorePair(score.p)) return `${formatScorePair(score.ft || score.et || score.p)} (pen. ${formatScorePair(score.p)})`;
+  if (hasScorePair(score.et) && (!hasScorePair(score.ft) || Number(score.et[0]) !== Number(score.ft[0]) || Number(score.et[1]) !== Number(score.ft[1]))) {
+    return `${formatScorePair(score.et)} pr.`;
+  }
+  return hasScorePair(score.ft) ? formatScorePair(score.ft) : '';
+}
+
+function fixtureHasResult(fixture) {
+  return Boolean(getFixtureResultText(fixture));
+}
+
+function resolveKnockoutFixtureTeams(fixture, context = buildKnockoutResolutionContext()) {
+  const team1 = resolveKnockoutSeed(fixture.team1, context);
+  const team2 = resolveKnockoutSeed(fixture.team2, context);
+  return {
+    team1: team1 || describeKnockoutSeed(fixture.team1),
+    team2: team2 || describeKnockoutSeed(fixture.team2),
+    team1Known: Boolean(team1),
+    team2Known: Boolean(team2)
+  };
+}
+
 function getKnockoutRealityFromFixtures(fixtures = state.apiFixtures) {
   const reality = {};
 
@@ -1028,94 +1176,20 @@ function buildRealityBracket() {
     SEMIS: 'Semi-final',
     FINAL: 'Final'
   };
-
-  // Pre-compute group standings for seed resolution
-  const groupStandingsCache = {};
-  const groups = [...new Set(DATA.matches.map(m => m.group))].sort();
-  for (const g of groups) groupStandingsCache[g] = calculateGroupStandings(g);
-  const bestThirds = calculateBestThirds();
-
-  // Check if all matches in a group have results
-  function isGroupComplete(group) {
-    const groupMatches = DATA.matches.filter(m => m.group === group);
-    return groupMatches.every(m => getResult(m) !== null);
-  }
-
-  // Check if a seed is confirmed (group complete or all relevant groups for 3rd-place)
-  function isSeedConfirmed(seed) {
-    if (!seed) return false;
-    if (isTournamentTeam(seed)) return true; // API already resolved it
-    // Winner token: confirmed if that match has a result
-    const winnerMatch = seed.match(/^W(\d+)$/);
-    if (winnerMatch) {
-      const num = parseInt(winnerMatch[1], 10);
-      const fixture = fixtures.find(m => m.num === num);
-      return !!winnerFromApiMatch(fixture);
-    }
-    const simpleMatch = seed.match(/^(\d+)([A-L])$/i);
-    if (simpleMatch) {
-      const group = simpleMatch[2].toUpperCase();
-      return isGroupComplete(group);
-    }
-    const thirdMatch = seed.match(/^3([A-L](?:\/[A-L])+)$/i);
-    if (thirdMatch) {
-      return groups.every(isGroupComplete);
-    }
-    return false;
-  }
-
-  // Resolve a seed like "1A", "2B", "3A/B/C/D/F", or "W73" (winner of match 73)
-  function resolveSeed(seed) {
-    if (!seed) return '';
-    if (isTournamentTeam(seed)) return LOCAL_TEAM_BY_KEY.get(teamKey(seed)) || seed;
-    // Winner token: "W73" = winner of match 73
-    const winnerMatch = seed.match(/^W(\d+)$/);
-    if (winnerMatch) {
-      const num = parseInt(winnerMatch[1], 10);
-      const fixture = fixtures.find(m => m.num === num);
-      const winner = fixture ? winnerFromApiMatch(fixture) : null;
-      if (winner) return LOCAL_TEAM_BY_KEY.get(teamKey(winner)) || winner;
-      return '';
-    }
-    const simpleMatch = seed.match(/^(\d+)([A-L])$/i);
-    if (simpleMatch) {
-      const position = parseInt(simpleMatch[1], 10) - 1;
-      const group = simpleMatch[2].toUpperCase();
-      const standings = groupStandingsCache[group];
-      return standings?.[position]?.team || '';
-    }
-    const thirdMatch = seed.match(/^3([A-L](?:\/[A-L])+)$/i);
-    if (thirdMatch) {
-      // Asignación oficial FIFA: identificar el slot de este token y devolver el
-      // tercero que la matriz pone ahí (sin repetir equipos entre cruces).
-      const groupSet = thirdMatch[1].toUpperCase().split('/').sort().join('');
-      const slot = THIRD_SLOT_BY_GROUPSET[groupSet];
-      const assignments = assignThirdPlacedTeamsToRoundOf32(bestThirds);
-      if (slot && assignments) {
-        const hit = assignments.find(a => a.slot === slot);
-        if (hit?.thirdTeam) return hit.thirdTeam.team || '';
-      }
-      // Fallback (combinación aún no decidida): el mejor tercero de la lista que
-      // pertenezca a esos grupos, como hacía antes.
-      const groupList = thirdMatch[1].toUpperCase().split('/');
-      const qualifiedThirds = bestThirds.filter(t => groupList.includes(t.group));
-      return qualifiedThirds[0]?.team || '';
-    }
-    return '';
-  }
+  const context = buildKnockoutResolutionContext(fixtures);
 
   function resolveFixture(m) {
     const t1 = isTournamentTeam(m.team1)
       ? (LOCAL_TEAM_BY_KEY.get(teamKey(m.team1)) || m.team1)
-      : resolveSeed(m.team1);
+      : resolveKnockoutSeed(m.team1, context);
     const t2 = isTournamentTeam(m.team2)
       ? (LOCAL_TEAM_BY_KEY.get(teamKey(m.team2)) || m.team2)
-      : resolveSeed(m.team2);
+      : resolveKnockoutSeed(m.team2, context);
     return [t1, t2];
   }
 
   function resolveFixtureConfirmed(m) {
-    return [isSeedConfirmed(m.team1), isSeedConfirmed(m.team2)];
+    return [isKnockoutSeedConfirmed(m.team1, context), isKnockoutSeedConfirmed(m.team2, context)];
   }
 
   // Build bracket respecting the tree structure:
@@ -1643,12 +1717,39 @@ function findLocalMatchForAsLiveMatch(match) {
   )) || null;
 }
 
+function findKnockoutFixtureForAsLiveMatch(match) {
+  if (!match?.homeTeam || !match?.awayTeam) return null;
+
+  const normalizedHome = normalizeTeam(match.homeTeam);
+  const normalizedAway = normalizeTeam(match.awayTeam);
+  const context = buildKnockoutResolutionContext();
+
+  for (const fixture of state.apiFixtures.filter(item => KNOCKOUT_MATCH_ROUND_BY_NAME.has(item.round))) {
+    const resolved = resolveKnockoutFixtureTeams(fixture, context);
+    if (!resolved.team1Known || !resolved.team2Known) continue;
+    if (normalizeTeam(resolved.team1) !== normalizedHome || normalizeTeam(resolved.team2) !== normalizedAway) continue;
+    return { fixture, resolved };
+  }
+
+  return null;
+}
+
+function findInternalMatchForAsLiveMatch(match) {
+  const localMatch = findLocalMatchForAsLiveMatch(match);
+  if (localMatch) return { kind: 'group', match: localMatch };
+
+  const knockout = findKnockoutFixtureForAsLiveMatch(match);
+  if (knockout) return { kind: 'knockout', ...knockout };
+
+  return null;
+}
+
 function getAsLiveMatchFallbackResult(match) {
   const payload = state.asLiveMatch;
   if (!payload?.match || payload.live) return null;
 
-  const localMatch = findLocalMatchForAsLiveMatch(payload.match);
-  if (!localMatch || localMatch.id !== match?.id) return null;
+  const internalMatch = findInternalMatchForAsLiveMatch(payload.match);
+  if (!internalMatch || internalMatch.kind !== 'group' || internalMatch.match.id !== match?.id) return null;
   if (!Number.isFinite(payload.match.homeScore) || !Number.isFinite(payload.match.awayScore)) return null;
 
   return {
@@ -1683,7 +1784,10 @@ function renderAsLiveMatchCard() {
   const payload = state.asLiveMatch;
   const match = payload?.match || null;
   const articleUrl = match?.articleUrl || '';
-  const localMatch = findLocalMatchForAsLiveMatch(match);
+  const internalMatch = findInternalMatchForAsLiveMatch(match);
+  const localMatch = internalMatch?.kind === 'group' ? internalMatch.match : null;
+  const knockoutFixture = internalMatch?.kind === 'knockout' ? internalMatch.fixture : null;
+  const knockoutResolved = internalMatch?.kind === 'knockout' ? internalMatch.resolved : null;
   const isVisible = isAsLiveMatchVisible(payload);
   const isLive = Boolean(payload?.live && match);
   const isFinal = Boolean(match && isVisible && !isLive);
@@ -1703,23 +1807,29 @@ function renderAsLiveMatchCard() {
     : [];
   const showSummaryLine = !liveEvents.length && !goalChips.length;
   const matchMinuteLabel = Number.isFinite(match.minute) ? `${match.minute}'` : (match.minuteLabel ? `${match.minuteLabel}'` : '');
+  const roundMeta = knockoutFixture ? (KNOCKOUT_MATCH_ROUND_BY_NAME.get(knockoutFixture.round) || { label: knockoutFixture.round || 'Eliminatoria' }) : null;
   const cardAttributes = localMatch
     ? `role="button" tabindex="0" data-match-id="${localMatch.id}" aria-label="Ver predicciones de ${escapeHtml(localMatch.team1)} contra ${escapeHtml(localMatch.team2)}"`
-    : (articleUrl ? `role="button" tabindex="0" data-external-url="${escapeHtml(articleUrl)}" aria-label="Abrir directo de AS de ${escapeHtml(match.homeTeam)} contra ${escapeHtml(match.awayTeam)}"` : '');
+    : (knockoutFixture
+      ? `role="button" tabindex="0" data-open-panel="matches" aria-label="Abrir partidos para ${escapeHtml(knockoutResolved?.team1 || match.homeTeam)} contra ${escapeHtml(knockoutResolved?.team2 || match.awayTeam)}"`
+      : (articleUrl ? `role="button" tabindex="0" data-external-url="${escapeHtml(articleUrl)}" aria-label="Abrir directo de AS de ${escapeHtml(match.homeTeam)} contra ${escapeHtml(match.awayTeam)}"` : ''));
+  const displayHome = knockoutResolved?.team1 || match.homeTeam;
+  const displayAway = knockoutResolved?.team2 || match.awayTeam;
+  const displayGroup = roundMeta ? `${roundMeta.label}${knockoutFixture?.num ? ` · #${knockoutFixture.num}` : ''}` : (match.group || 'Mundial');
 
   return html`
     <article
-      class="card live-match-card ${localMatch ? 'summary-match-card' : (articleUrl ? 'summary-external-card' : '')}"
+      class="card live-match-card ${internalMatch ? 'summary-match-card' : (articleUrl ? 'summary-external-card' : '')}"
       ${cardAttributes}
     >
       <div class="live-match-top">
         <span class="live-match-chip ${isLive ? 'is-live' : ''}">${isLive ? '<span class="live-match-dot" aria-hidden="true"></span>En directo' : 'Resultado final'}</span>
-        <span class="live-match-chip">AS · ${escapeHtml(match.group || 'Mundial')}</span>
+        <span class="live-match-chip">AS · ${escapeHtml(displayGroup)}</span>
       </div>
       <div class="live-match-scoreline">
-        <span>${escapeHtml(match.homeTeam)}</span>
+        <span>${escapeHtml(displayHome)}</span>
         <strong>${match.homeScore} - ${match.awayScore}</strong>
-        <span>${escapeHtml(match.awayTeam)}</span>
+        <span>${escapeHtml(displayAway)}</span>
       </div>
       <div class="live-match-meta">
         <span class="live-match-minute">${escapeHtml(matchMinuteLabel || liveBadge)}</span>
@@ -1729,7 +1839,7 @@ function renderAsLiveMatchCard() {
       ${showSummaryLine ? `<span>${escapeHtml(match.scorerSummary || 'Abrir directo en AS')}</span>` : ''}
       ${(liveEvents.length || goalChips.length) ? `<div class="live-event-list">${[...liveEvents.map(formatAsLiveEvent), ...goalChips].join('')}</div>` : ''}
       <span class="card-detail">
-        ${localMatch ? 'Toca para ver todas las predicciones' : 'Actualizacion automatica desde AS'}
+        ${localMatch ? 'Toca para ver todas las predicciones' : (knockoutFixture ? 'Toca para abrir la pestaña Partidos' : 'Actualizacion automatica desde AS')}
         ${isFinal ? ` · visible 15 min tras el final` : ''}
         ${articleUrl ? ` · <button type="button" class="match-link-button" data-external-url="${escapeHtml(articleUrl)}" aria-label="Abrir directo de AS">Abrir AS</button>` : ''}
       </span>
@@ -1737,11 +1847,52 @@ function renderAsLiveMatchCard() {
   `;
 }
 
+function getNextPendingSummaryItem() {
+  const groupMatch = pickNextPendingMatch(DATA.matches, getResultForNextMatchFallback, getMatchScheduleTimestamp);
+  const knockoutContext = buildKnockoutResolutionContext();
+  const knockoutFixture = state.apiFixtures
+    .filter(fixture => KNOCKOUT_MATCH_ROUND_BY_NAME.has(fixture.round))
+    .filter(fixture => !fixtureHasResult(fixture))
+    .sort((a, b) => {
+      const timeDiff = (parseApiFixtureDateTime(a)?.getTime() || Number.POSITIVE_INFINITY) - (parseApiFixtureDateTime(b)?.getTime() || Number.POSITIVE_INFINITY);
+      if (timeDiff) return timeDiff;
+      return (a.num || 0) - (b.num || 0);
+    })[0] || null;
+
+  const groupTs = groupMatch ? getMatchScheduleTimestamp(groupMatch) : Number.POSITIVE_INFINITY;
+  const knockoutTs = knockoutFixture ? (parseApiFixtureDateTime(knockoutFixture)?.getTime() || Number.POSITIVE_INFINITY) : Number.POSITIVE_INFINITY;
+
+  if (!groupMatch && !knockoutFixture) return null;
+  if (groupTs <= knockoutTs) {
+    return {
+      kind: 'group',
+      team1: groupMatch.team1,
+      team2: groupMatch.team2,
+      schedule: formatMatchSchedule(groupMatch),
+      attrs: `role="button" tabindex="0" data-match-id="${groupMatch.id}" aria-label="Ver predicciones de ${escapeHtml(groupMatch.team1)} contra ${escapeHtml(groupMatch.team2)}"`,
+      prediction: calculateMostChosenPrediction(groupMatch, DATA.players)
+    };
+  }
+
+  const roundMeta = KNOCKOUT_MATCH_ROUND_BY_NAME.get(knockoutFixture.round) || { label: knockoutFixture.round || 'Eliminatoria' };
+  const resolved = resolveKnockoutFixtureTeams(knockoutFixture, knockoutContext);
+  return {
+    kind: 'knockout',
+    team1: resolved.team1,
+    team2: resolved.team2,
+    team1Known: resolved.team1Known,
+    team2Known: resolved.team2Known,
+    schedule: formatFixtureScheduleValue(knockoutFixture),
+    subtitle: `${roundMeta.label}${knockoutFixture.num ? ` · #${knockoutFixture.num}` : ''}`,
+    attrs: ''
+  };
+}
+
 function renderSummary() {
   const played = DATA.matches.filter(getResult).length;
   const ranking = calculateRanking();
   const lastUpdate = localStorage.getItem(LS_KEYS.lastUpdate) || 'sin actualizar';
-  const nextMatch = pickNextPendingMatch(DATA.matches, getResultForNextMatchFallback, getMatchScheduleTimestamp);
+  const nextMatch = getNextPendingSummaryItem();
   const hasLiveMatch = isAsLiveMatchVisible(state.asLiveMatch);
   const bestStreak = calculateBestCurrentStreak(
     DATA.players,
@@ -1750,18 +1901,17 @@ function renderSummary() {
     match => getResult(match),
     DATA.meta.scoring
   );
-  const mostChosenPrediction = nextMatch ? calculateMostChosenPrediction(nextMatch, DATA.players) : null;
   const lastPlayedMatch = getLastPlayedMatchFromFixtures() || [...DATA.matches].filter(match => getResult(match)).sort(compareMatchesForDisplay).at(-1) || null;
   const leaderPoints = ranking[0]?.total || 0;
   document.getElementById('summaryCards').innerHTML = html`
     ${renderAsLiveMatchCard()}
     ${renderLastPlayedMatchCard(lastPlayedMatch)}
     ${hasLiveMatch ? '' : html`
-      <article class="card next-match-card ${nextMatch ? 'summary-match-card' : ''}" ${nextMatch ? `role="button" tabindex="0" data-match-id="${nextMatch.id}" aria-label="Ver predicciones de ${escapeHtml(nextMatch.team1)} contra ${escapeHtml(nextMatch.team2)}"` : ''}>
-        <b>${nextMatch ? `${TEAM_FLAGS[nextMatch.team1] || '🏳️'} ${nextMatch.team1}<span class="next-match-separator">-</span>${TEAM_FLAGS[nextMatch.team2] || '🏳️'} ${nextMatch.team2}` : '-'}</b>
+      <article class="card next-match-card ${nextMatch?.kind === 'group' ? 'summary-match-card' : ''}" ${nextMatch ? nextMatch.attrs : ''}>
+        <b>${nextMatch ? `${nextMatch.team1Known === false ? '' : (TEAM_FLAGS[nextMatch.team1] || '🏳️')} ${nextMatch.team1}<span class="next-match-separator">-</span>${nextMatch.team2Known === false ? '' : (TEAM_FLAGS[nextMatch.team2] || '🏳️')} ${nextMatch.team2}` : '-'}</b>
         <span>${nextMatch ? 'siguiente partido' : 'sin partidos pendientes'}</span>
-        <span class="card-detail">${nextMatch ? formatMatchSchedule(nextMatch) : ''}</span>
-        <span class="card-detail">${mostChosenPrediction ? `Pronóstico más elegido: ${mostChosenPrediction.score} · ${mostChosenPrediction.votes} voto${mostChosenPrediction.votes === 1 ? '' : 's'}` : ''}</span>
+        <span class="card-detail">${nextMatch ? nextMatch.schedule : ''}</span>
+        <span class="card-detail">${nextMatch?.kind === 'group' && nextMatch.prediction ? `Pronóstico más elegido: ${nextMatch.prediction.score} · ${nextMatch.prediction.votes} voto${nextMatch.prediction.votes === 1 ? '' : 's'}` : (nextMatch?.kind === 'knockout' ? nextMatch.subtitle : '')}</span>
       </article>
     `}
     <article class="card"><b>${played}/${DATA.matches.length}</b><span>partidos con resultado</span></article>
@@ -2343,11 +2493,17 @@ function renderGoalBreakdown(match) {
   const result = getResult(match);
   if (!result || !goals) return '';
 
+  return renderGoalBreakdownContent(match.team1, match.team2, goals);
+}
+
+function renderGoalBreakdownContent(team1, team2, goals) {
+  if (!goals) return '';
+
   const lines = [];
   if (goals.team1.length) {
     lines.push(html`
       <div class="goal-line">
-        <strong>${teamLabel(match.team1)}</strong>
+        <strong>${teamLabel(team1)}</strong>
         <div class="goal-events">${goals.team1.map(formatGoalEvent).join('')}</div>
       </div>
     `);
@@ -2355,7 +2511,7 @@ function renderGoalBreakdown(match) {
   if (goals.team2.length) {
     lines.push(html`
       <div class="goal-line">
-        <strong>${teamLabel(match.team2)}</strong>
+        <strong>${teamLabel(team2)}</strong>
         <div class="goal-events">${goals.team2.map(formatGoalEvent).join('')}</div>
       </div>
     `);
@@ -2365,18 +2521,32 @@ function renderGoalBreakdown(match) {
   return `<div class="match-goals">${lines.join('')}</div>`;
 }
 
+function getFixtureGoalBreakdown(fixture, context = buildKnockoutResolutionContext()) {
+  if (!fixture) return null;
+  const { team1Known, team2Known } = resolveKnockoutFixtureTeams(fixture, context);
+  const homeGoals = fixture.goals1 || [];
+  const awayGoals = fixture.goals2 || [];
+  if ((!homeGoals.length && !awayGoals.length) || !team1Known || !team2Known) return null;
+
+  return {
+    team1: homeGoals.map(goal => ({
+      name: goal.name || '',
+      minute: goal.minute || '',
+      penalty: Boolean(goal.penalty),
+      ownGoal: Boolean(goal.owngoal)
+    })),
+    team2: awayGoals.map(goal => ({
+      name: goal.name || '',
+      minute: goal.minute || '',
+      penalty: Boolean(goal.penalty),
+      ownGoal: Boolean(goal.owngoal)
+    }))
+  };
+}
+
 function formatMatchSchedule(match) {
   const fixture = findApiFixture(match);
-  if (!fixture) return 'Horario pendiente';
-
-  const date = parseApiFixtureDateTime(fixture);
-  if (!date) return 'Horario pendiente';
-
-  const hasTime = Boolean(fixture.utcDate || fixture.time);
-  return new Intl.DateTimeFormat('es-ES', hasTime
-    ? { dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23', timeZone: 'Europe/Madrid' }
-    : { dateStyle: 'medium', timeZone: 'Europe/Madrid' }
-  ).format(date);
+  return formatFixtureScheduleValue(fixture);
 }
 
 function formatLastPlayedMatch(match) {
@@ -2431,6 +2601,76 @@ function renderMatchCard(match) {
   </article>`;
 }
 
+function getMatchSectionOpen(sectionKey, defaultOpen = false) {
+  const stored = state.matchSectionsOpen[sectionKey];
+  if (stored && typeof stored === 'object') return Boolean(stored.open);
+  if (typeof stored === 'boolean') return stored;
+  return defaultOpen;
+}
+
+function setMatchSectionOpen(sectionKey, open, autoState = '') {
+  state.matchSectionsOpen[sectionKey] = { open: Boolean(open), autoState: String(autoState || '') };
+}
+
+function syncMatchSectionOpen(sectionKey, defaultOpen = false, autoState = '') {
+  const stored = state.matchSectionsOpen[sectionKey];
+  if (!stored || typeof stored !== 'object' || stored.autoState !== autoState) {
+    setMatchSectionOpen(sectionKey, defaultOpen, autoState);
+    return defaultOpen;
+  }
+  return Boolean(stored.open);
+}
+
+function renderMatchSection(section, defaultOpen = false, autoState = '') {
+  const open = syncMatchSectionOpen(section.key, defaultOpen, autoState);
+  return html`
+    <section class="matchday match-section${open ? ' open' : ''}">
+      <button type="button" class="matchday-head matchday-toggle" data-toggle-match-section="${section.key}" aria-expanded="${open}">
+        <span class="matchday-title-wrap">
+          <h3>${escapeHtml(section.title)}</h3>
+          ${section.subtitle ? `<span>${escapeHtml(section.subtitle)}</span>` : ''}
+        </span>
+        <span class="matchday-meta">
+          <span>${section.count} partidos</span>
+          <span class="matchday-toggle-icon" aria-hidden="true">${open ? '▲' : '▼'}</span>
+        </span>
+      </button>
+      ${open ? `<div class="matchday-body">${section.body}</div>` : ''}
+    </section>
+  `;
+}
+
+function renderKnockoutFixtureCard(fixture, context) {
+  const roundMeta = KNOCKOUT_MATCH_ROUND_BY_NAME.get(fixture.round) || { label: fixture.round || 'Eliminatoria' };
+  const { team1, team2, team1Known, team2Known } = resolveKnockoutFixtureTeams(fixture, context);
+  const resultText = getFixtureResultText(fixture);
+  const fixtureKey = `knockout-${fixture.num || `${fixture.round}-${fixture.team1}-${fixture.team2}`}`;
+  const goalsExpanded = Boolean(state.matchGoalsExpanded[fixtureKey]);
+  const goalBreakdown = getFixtureGoalBreakdown(fixture, context);
+  const hasGoalBreakdown = Boolean(goalBreakdown && (goalBreakdown.team1.length || goalBreakdown.team2.length));
+  return html`
+    <article class="match-card match-card-readonly">
+      <span class="pill">${escapeHtml(roundMeta.label)}${fixture.num ? ` · #${fixture.num}` : ''}</span>
+      <h3 class="teams">
+        <span class="${team1Known ? '' : 'pending-team'}">${escapeHtml(team1Known ? teamLabel(team1) : team1)}</span>
+        <span class="versus">-</span>
+        <span class="${team2Known ? '' : 'pending-team'}">${escapeHtml(team2Known ? teamLabel(team2) : team2)}</span>
+      </h3>
+      <div class="match-schedule">${escapeHtml(formatFixtureScheduleValue(fixture))}</div>
+      <div class="match-score ${resultText ? '' : 'pending'}">${escapeHtml(resultText || 'Pendiente')}</div>
+      ${resultText && hasGoalBreakdown ? html`
+        <div class="match-card-actions">
+          <button type="button" class="match-link-button" data-toggle-goals="${fixtureKey}" aria-expanded="${goalsExpanded}">
+            ${goalsExpanded ? 'Ocultar goleadores' : 'Ver goleadores'}
+          </button>
+        </div>
+        ${goalsExpanded ? renderGoalBreakdownContent(team1, team2, goalBreakdown) : ''}
+      ` : ''}
+      <div class="source">${escapeHtml(fixture.ground || 'Sede pendiente')} · ${resultText ? 'Resultado actualizado automáticamente' : 'Cruce del cuadro real'}</div>
+    </article>
+  `;
+}
+
 function openMatchPredictions(matchId) {
   const match = DATA.matches.find(item => item.id === matchId);
   if (!match) return;
@@ -2477,8 +2717,9 @@ function renderMatches() {
   matches = matches.filter(match => team === 'all' || match.team1 === team || match.team2 === team);
   matches = matches.filter(m => status === 'all' || (status === 'played' ? !!getResult(m) : !getResult(m)));
   matches = [...matches].sort(compareMatchesForDisplay);
+  const filtersActive = group !== 'all' || team !== 'all' || status !== 'all';
 
-  const matchdays = [1, 2, 3]
+  const groupSections = [1, 2, 3]
     .map(number => {
       const matchdayMatches = matches.filter(match => getMatchday(match) === number).sort(compareMatchesForDisplay);
       const groups = [...new Set(matchdayMatches.map(match => match.group))]
@@ -2487,31 +2728,78 @@ function renderMatches() {
           name: groupName,
           matches: matchdayMatches.filter(match => match.group === groupName).sort(compareMatchesForDisplay)
         }));
-      return { number, matches: matchdayMatches, groups };
+      return {
+        number,
+        key: `group-matchday-${number}`,
+        title: `Jornada ${number}`,
+        count: matchdayMatches.length,
+        matches: matchdayMatches,
+        defaultOpen: filtersActive,
+        autoState: `groups:${filtersActive ? 'open' : 'closed'}:${matchdayMatches.length}`,
+        body: html`
+          <div class="matchday-groups">
+            ${groups.map(groupBlock => html`
+              <section class="match-group">
+                <div class="match-group-head">
+                  <h4>Grupo ${groupBlock.name}</h4>
+                  <span>${groupBlock.matches.length} partidos</span>
+                </div>
+                <div class="match-grid">${groupBlock.matches.map(renderMatchCard).join('')}</div>
+              </section>
+            `).join('')}
+          </div>
+        `
+      };
     })
     .sort((a, b) => getMatchdaySortKey(a) - getMatchdaySortKey(b) || a.number - b.number)
     .filter(matchday => matchday.matches.length);
 
-  document.getElementById('matchesList').innerHTML = matchdays.length
-    ? matchdays.map(matchday => html`
-      <section class="matchday">
-        <div class="matchday-head">
-          <h3>Jornada ${matchday.number}</h3>
-          <span>${matchday.matches.length} partidos</span>
-        </div>
-        <div class="matchday-groups">
-          ${matchday.groups.map(groupBlock => html`
-            <section class="match-group">
-              <div class="match-group-head">
-                <h4>Grupo ${groupBlock.name}</h4>
-                <span>${groupBlock.matches.length} partidos</span>
-              </div>
-              <div class="match-grid">${groupBlock.matches.map(renderMatchCard).join('')}</div>
-            </section>
-          `).join('')}
-        </div>
-      </section>
-    `).join('')
+  const sections = [];
+
+  if (group === 'all') {
+    const knockoutContext = buildKnockoutResolutionContext();
+    for (const roundMeta of KNOCKOUT_MATCH_ROUNDS) {
+      let fixtures = state.apiFixtures
+        .filter(fixture => fixture.round === roundMeta.round);
+
+      fixtures = fixtures.filter(fixture => {
+        if (team !== 'all') {
+          const resolved = resolveKnockoutFixtureTeams(fixture, knockoutContext);
+          if (![resolved.team1, resolved.team2].includes(team)) return false;
+        }
+        if (status === 'played') return fixtureHasResult(fixture);
+        if (status === 'pending') return !fixtureHasResult(fixture);
+        return true;
+      });
+
+      if (!fixtures.length) continue;
+
+      const resolvedFixtures = fixtures.map(fixture => ({
+        fixture,
+        resolved: resolveKnockoutFixtureTeams(fixture, knockoutContext),
+        played: fixtureHasResult(fixture)
+      }));
+      const allTeamsConfirmed = resolvedFixtures.every(item => item.resolved.team1Known && item.resolved.team2Known);
+      const allPlayed = resolvedFixtures.every(item => item.played);
+      const defaultOpen = allTeamsConfirmed && !allPlayed;
+      const autoState = `${allTeamsConfirmed ? 'confirmed' : 'pending'}:${allPlayed ? 'played' : 'live'}:${fixtures.length}`;
+
+      sections.push({
+        key: `knockout-${roundMeta.key}`,
+        title: roundMeta.label,
+        count: fixtures.length,
+        matches: fixtures,
+        defaultOpen,
+        autoState,
+        body: `<div class="match-grid match-grid-knockout">${fixtures.map(fixture => renderKnockoutFixtureCard(fixture, knockoutContext)).join('')}</div>`
+      });
+    }
+  }
+
+  sections.push(...groupSections);
+
+  document.getElementById('matchesList').innerHTML = sections.length
+    ? sections.map(section => renderMatchSection(section, section.defaultOpen, section.autoState)).join('')
     : '<p class="empty-state">No hay partidos que coincidan con los filtros.</p>';
 }
 
@@ -4518,6 +4806,16 @@ async function resetKnockoutManualWinners() {
 }
 
 document.addEventListener('click', e => {
+  const matchSectionToggle = e.target.closest('[data-toggle-match-section]');
+  if (matchSectionToggle) {
+    const sectionKey = matchSectionToggle.dataset.toggleMatchSection;
+    const current = state.matchSectionsOpen[sectionKey];
+    const currentOpen = current && typeof current === 'object' ? Boolean(current.open) : getMatchSectionOpen(sectionKey);
+    const autoState = current && typeof current === 'object' ? current.autoState : '';
+    setMatchSectionOpen(sectionKey, !currentOpen, autoState);
+    renderMatches();
+    return;
+  }
   // Admin: set knockout match winner
   const winnerBtn = e.target.closest('[data-knockout-winner]');
   if (winnerBtn) {

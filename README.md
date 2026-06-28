@@ -40,6 +40,12 @@ La pestaña **Cruces** (visible también para el admin) muestra un cuadro real p
 
 **Admin: entrada manual de ganadores**: botones ⬆/⬇ por cruce para marcar quién pasa a la siguiente ronda (fallback hasta que la API actualice el resultado). **Se guardan en Supabase** (tabla `knockout_manual_winners`) para compartirse entre todos los dispositivos/usuarios; `localStorage` (`knockoutManualWinners`) queda solo como caché local. Botón «🗑 Resetear ganadores manuales» para limpiar todos. Los ganadores manuales propagan automáticamente a rondas siguientes.
 
+### Partidos (legacy, 2026-06-28)
+
+La pestaña **Partidos** ya no enseña solo la fase de grupos: ahora arranca con la fase final en este orden fijo: **Dieciseisavos → Octavos → Cuartos → Semifinales → 3º puesto → Final**, y después deja las **jornadas de grupos**. Todo va en bloques plegables para no disparar la altura de la página. Los bloques de grupos siguen abriendo el modal de predicciones por partido; los bloques de knockout son **solo lectura** y muestran horario + sede + marcador si existe.
+
+Los cruces usan la misma resolución que el cuadro real: `resolveKnockoutSeed()` y `buildKnockoutResolutionContext()` convierten seeds de la API (`1A`, `3E/H/I/J/K`, `W89`, etc.) en nombres locales de selección cuando ya están decididos, y si todavía no lo están muestran una etiqueta tipo `1º Grupo A` o `Ganador #89`. El plegado por defecto se calcula por ronda: una ronda **abierta** si todos sus equipos están confirmados y todavía queda algún partido por jugar; **cerrada** si ya terminó completa o si todavía no están confirmados todos los emparejamientos. Así, con el feed actual solo salen abiertos los **dieciseisavos**. Cuando la API trae `goals1/goals2`, los cruces con resultado muestran también el mismo botón **«Ver/Ocultar goleadores»** que la fase de grupos. La tarjeta de **siguiente partido** del menú (`#summary`) también entra ya en esta lógica ampliada: si el siguiente evento es un cruce, lo enseña con su ronda y horario aunque no tenga modal de predicciones. Lo mismo aplica a la tarjeta **en vivo**: si AS devuelve un cruce y ese fixture ya está resuelto en `state.apiFixtures`, el legacy lo trata como partido interno y al pulsarlo abre la pestaña **Partidos** en vez de quedarse solo como enlace externo.
+
 ## Desarrollo local
 
 Instala las dependencias la primera vez:

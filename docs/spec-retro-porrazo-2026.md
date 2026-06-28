@@ -106,8 +106,11 @@ La app debe:
 La app debe:
 
 - listar todos los partidos del dataset
+- listar también el calendario de eliminatorias con horario y sede, aunque los equipos futuros sigan viniendo como seed
+- resolver automáticamente esos seeds a selecciones reales cuando la clasificación o el ganador ya estén decididos
 - indicar si un partido está resuelto o pendiente
 - permitir filtrar por grupo, selección y estado
+- mostrar grupos y eliminatorias en bloques plegables para no ocupar demasiada altura
 - mostrar al abrir un partido las predicciones de todos los participantes
 
 ### 5.5 Cruces
@@ -521,4 +524,3 @@ Eso habría evitado la mayor parte de decisiones reactivas de arquitectura y hab
 - administración
 - analítica
 - tolerancia a fallos
-
