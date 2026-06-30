@@ -369,6 +369,65 @@ function applyResultsPayload(payload, { updatedAt } = {}) {
   persistApiCache();
 }
 
+function summarizePlayedFixtures(matches = []) {
+  let latestTimestamp = 0;
+  let latestMatchNum = 0;
+  let playedCount = 0;
+
+  for (const match of matches) {
+    if (!Array.isArray(match?.score?.ft) || match.score.ft.length < 2) continue;
+    playedCount += 1;
+    const timestamp = parseApiFixtureDateTime(match)?.getTime() || 0;
+    const matchNum = Number(match?.num) || 0;
+    if (timestamp > latestTimestamp || (timestamp === latestTimestamp && matchNum > latestMatchNum)) {
+      latestTimestamp = timestamp;
+      latestMatchNum = matchNum;
+    }
+  }
+
+  return {
+    latestTimestamp,
+    latestMatchNum,
+    playedCount,
+    totalCount: matches.length
+  };
+}
+
+function isResultsPayloadFresher(payload, baselineFixtures = state.apiFixtures) {
+  const candidateMatches = Array.isArray(payload?.matches) ? payload.matches : [];
+  const candidate = summarizePlayedFixtures(candidateMatches);
+  const baseline = summarizePlayedFixtures(Array.isArray(baselineFixtures) ? baselineFixtures : []);
+
+  if (candidate.latestTimestamp !== baseline.latestTimestamp) {
+    return candidate.latestTimestamp > baseline.latestTimestamp;
+  }
+  if (candidate.playedCount !== baseline.playedCount) {
+    return candidate.playedCount > baseline.playedCount;
+  }
+  if (candidate.latestMatchNum !== baseline.latestMatchNum) {
+    return candidate.latestMatchNum > baseline.latestMatchNum;
+  }
+  return candidate.totalCount > baseline.totalCount;
+}
+
+async function fetchDirectResultsPayload() {
+  const directUrl = new URL(state.apiUrl || DEFAULT_API_URL, window.location.href);
+  directUrl.searchParams.set('t', String(Date.now()));
+  const response = await fetchJsonWithTimeout(directUrl, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
+}
+
+async function refreshDirectResultsIfFresher() {
+  const payload = await fetchDirectResultsPayload();
+  if (!Array.isArray(payload?.matches) || !payload.matches.length) return false;
+  if (state.apiFixtures.length && !isResultsPayloadFresher(payload, state.apiFixtures)) return false;
+  applyResultsPayload(payload);
+  processSoftAlerts();
+  localStorage.setItem(LS_KEYS.lastUpdate, new Date().toLocaleString('es-ES'));
+  return true;
+}
+
 async function fetchJsonWithTimeout(url, options = {}, timeoutMs = API_FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -1177,6 +1236,26 @@ function buildRealityBracket() {
     FINAL: 'Final'
   };
   const context = buildKnockoutResolutionContext(fixtures);
+  const sortByMatchNum = (a, b) => (Number(a?.num) || 0) - (Number(b?.num) || 0);
+  const canonicalOrderByRound = {
+    'Round of 32': [74, 77, 73, 75, 83, 84, 81, 82, 76, 78, 79, 80, 86, 88, 85, 87],
+    'Round of 16': [89, 90, 93, 94, 91, 92, 95, 96],
+    'Quarter-final': [97, 98, 99, 100],
+    'Semi-final': [101, 102],
+    'Final': [104]
+  };
+
+  function orderFixturesForBracket(round, matches) {
+    const canonicalOrder = canonicalOrderByRound[round];
+    if (!canonicalOrder?.length) return [...matches].sort(sortByMatchNum);
+    const positionByNum = new Map(canonicalOrder.map((num, index) => [num, index]));
+    return [...matches].sort((a, b) => {
+      const aPos = positionByNum.has(a?.num) ? positionByNum.get(a.num) : Number.POSITIVE_INFINITY;
+      const bPos = positionByNum.has(b?.num) ? positionByNum.get(b.num) : Number.POSITIVE_INFINITY;
+      if (aPos !== bPos) return aPos - bPos;
+      return sortByMatchNum(a, b);
+    });
+  }
 
   function resolveFixture(m) {
     const t1 = isTournamentTeam(m.team1)
@@ -1195,13 +1274,17 @@ function buildRealityBracket() {
   // Build bracket respecting the tree structure:
   // R16 fixtures define which R32 matches feed into them (W73 vs W75, etc.)
   // We reorder R32 so that feeding pairs are adjacent for proper bracket display.
-  const r32Fixtures = fixtures.filter(m => m.round === 'Round of 32');
-  const r16Fixtures = fixtures.filter(m => m.round === 'Round of 16');
-  const qfFixtures = fixtures.filter(m => m.round === 'Quarter-final');
-  const sfFixtures = fixtures.filter(m => m.round === 'Semi-final');
-  const finalFixtures = fixtures.filter(m => m.round === 'Final');
+  const r32Fixtures = orderFixturesForBracket('Round of 32', fixtures.filter(m => m.round === 'Round of 32'));
+  const r16Fixtures = orderFixturesForBracket('Round of 16', fixtures.filter(m => m.round === 'Round of 16'));
+  const qfFixtures = orderFixturesForBracket('Quarter-final', fixtures.filter(m => m.round === 'Quarter-final'));
+  const sfFixtures = orderFixturesForBracket('Semi-final', fixtures.filter(m => m.round === 'Semi-final'));
+  const finalFixtures = orderFixturesForBracket('Final', fixtures.filter(m => m.round === 'Final'));
 
   const byNum = new Map(r32Fixtures.map(m => [m.num, m]));
+  const r32WinnersByTeam = buildWinnerMatchNumMap(r32Fixtures);
+  const r16WinnersByTeam = buildWinnerMatchNumMap(r16Fixtures);
+  const qfWinnersByTeam = buildWinnerMatchNumMap(qfFixtures);
+  const sfWinnersByTeam = buildWinnerMatchNumMap(sfFixtures);
 
   // Determine the correct visual order for all rounds by walking the bracket tree
   // from Final → SF → QF → R16 → R32
@@ -1212,7 +1295,7 @@ function buildRealityBracket() {
     const qfByNum = new Map(qfFixtures.map(m => [m.num, m]));
     const sfOrdered = [];
     for (const sf of sfFixtures) {
-      const feedNums = extractFeedNums(sf);
+      const feedNums = extractFeedNums(sf, qfWinnersByTeam);
       for (const n of feedNums) { if (qfByNum.has(n)) sfOrdered.push(qfByNum.get(n)); }
     }
     if (sfOrdered.length === qfFixtures.length) qfOrder = sfOrdered;
@@ -1222,7 +1305,7 @@ function buildRealityBracket() {
     const r16ByNum = new Map(r16Fixtures.map(m => [m.num, m]));
     const r16Ordered = [];
     for (const qf of qfOrder) {
-      const feedNums = extractFeedNums(qf);
+      const feedNums = extractFeedNums(qf, r16WinnersByTeam);
       for (const n of feedNums) { if (r16ByNum.has(n)) r16Ordered.push(r16ByNum.get(n)); }
     }
     if (r16Ordered.length === r16Fixtures.length) r16Order = r16Ordered;
@@ -1232,7 +1315,7 @@ function buildRealityBracket() {
   if (r16Order.length > 0 && r32Fixtures.length > 0) {
     const orderedR32 = [];
     for (const r16Match of r16Order) {
-      const feedNums = extractFeedNums(r16Match);
+      const feedNums = extractFeedNums(r16Match, r32WinnersByTeam);
       for (const num of feedNums) {
         if (byNum.has(num)) orderedR32.push(byNum.get(num));
       }
@@ -1300,13 +1383,31 @@ function buildRealityBracket() {
   return { bracket, confirmed, matchNums };
 }
 
+function buildWinnerMatchNumMap(fixtures) {
+  const winnerMatchNumByTeam = new Map();
+  for (const fixture of fixtures || []) {
+    if (!fixture?.num) continue;
+    const winner = winnerFromApiMatch(fixture);
+    if (!winner) continue;
+    const localWinner = LOCAL_TEAM_BY_KEY.get(teamKey(winner)) || winner;
+    winnerMatchNumByTeam.set(teamKey(localWinner), fixture.num);
+  }
+  return winnerMatchNumByTeam;
+}
+
 // Extract match numbers that feed into a knockout fixture (e.g. "W73" → 73)
-function extractFeedNums(match) {
+function extractFeedNums(match, winnerMatchNumByTeam = null) {
   const nums = [];
-  const m1 = String(match.team1 || '').match(/^W(\d+)$/);
-  const m2 = String(match.team2 || '').match(/^W(\d+)$/);
-  if (m1) nums.push(parseInt(m1[1], 10));
-  if (m2) nums.push(parseInt(m2[1], 10));
+  for (const team of [match?.team1, match?.team2]) {
+    const winnerToken = String(team || '').match(/^W(\d+)$/i);
+    if (winnerToken) {
+      nums.push(parseInt(winnerToken[1], 10));
+      continue;
+    }
+    if (!winnerMatchNumByTeam || !isTournamentTeam(team)) continue;
+    const winnerNum = winnerMatchNumByTeam.get(teamKey(team));
+    if (winnerNum) nums.push(winnerNum);
+  }
   return nums;
 }
 
@@ -1763,16 +1864,102 @@ function getResultForNextMatchFallback(match) {
   return getResult(match) || getAsLiveMatchFallbackResult(match);
 }
 
+function getLastPlayedSummaryItem() {
+  const groupMatches = DATA.matches
+    .map(match => {
+      const result = getResult(match) || getAsLiveMatchFallbackResult(match);
+      if (!result) return null;
+      return {
+        kind: 'group',
+        match,
+        result,
+        timestamp: getMatchScheduleTimestamp(match)
+      };
+    })
+    .filter(Boolean);
+
+  const knockoutFixtures = state.apiFixtures
+    .filter(fixture => KNOCKOUT_MATCH_ROUND_BY_NAME.has(fixture.round))
+    .filter(fixture => fixtureHasResult(fixture))
+    .map(fixture => ({
+      kind: 'knockout',
+      fixture,
+      result: getFixtureResultText(fixture),
+      resolved: resolveKnockoutFixtureTeams(fixture),
+      timestamp: parseApiFixtureDateTime(fixture)?.getTime() || Number.POSITIVE_INFINITY
+    }));
+
+  const livePayload = state.asLiveMatch?.match && isAsLiveMatchVisible(state.asLiveMatch) && !state.asLiveMatch.live
+    ? (() => {
+        const internalMatch = findInternalMatchForAsLiveMatch(state.asLiveMatch.match);
+        if (!internalMatch) return null;
+        const matchTimestamp = internalMatch.kind === 'group'
+          ? getMatchScheduleTimestamp(internalMatch.match)
+          : (parseApiFixtureDateTime(internalMatch.fixture)?.getTime() || Number.NaN);
+        const refreshTimestamp = new Date(state.asLiveMatch.updatedAt || state.asLiveMatch.match.date || state.asLiveMatch.match.utcDate || Date.now()).getTime();
+        const timestamp = Number.isFinite(matchTimestamp) ? matchTimestamp : refreshTimestamp;
+        return {
+          kind: internalMatch.kind,
+          match: internalMatch.match || null,
+          fixture: internalMatch.fixture || null,
+          resolved: internalMatch.resolved || null,
+          result: Number.isFinite(state.asLiveMatch.match.homeScore) && Number.isFinite(state.asLiveMatch.match.awayScore)
+            ? `${state.asLiveMatch.match.homeScore} - ${state.asLiveMatch.match.awayScore}`
+            : '',
+          timestamp: Number.isFinite(timestamp) ? timestamp : Number.POSITIVE_INFINITY
+        };
+      })()
+    : null;
+
+  const candidates = [...groupMatches, ...knockoutFixtures];
+  if (livePayload) candidates.push(livePayload);
+  if (!candidates.length) return null;
+
+  return candidates.sort((a, b) => {
+    const timeDiff = a.timestamp - b.timestamp;
+    if (timeDiff) return timeDiff;
+    if (a.kind !== b.kind) return a.kind === 'knockout' ? 1 : -1;
+    if (a.kind === 'group' && b.kind === 'group') {
+      return (MATCH_ORDER_INDEX.get(a.match.id) || 0) - (MATCH_ORDER_INDEX.get(b.match.id) || 0);
+    }
+    const aNum = a.fixture?.num || 0;
+    const bNum = b.fixture?.num || 0;
+    return aNum - bNum;
+  }).at(-1) || null;
+}
+
 function renderLastPlayedMatchCard(match) {
-  const result = match ? getResult(match) : null;
-  if (!match || !result) {
+  if (!match) {
     return html`<article class="card next-match-card"><b>-</b><span>último partido</span></article>`;
   }
 
-  const events = getLastPlayedMatchEvents(match);
+  if (match.kind === 'knockout') {
+    const fixture = match.fixture;
+    const { team1, team2 } = match.resolved || resolveKnockoutFixtureTeams(fixture);
+    const goalBreakdown = getFixtureGoalBreakdown(fixture);
+    const hasGoalBreakdown = Boolean(goalBreakdown && (goalBreakdown.team1.length || goalBreakdown.team2.length));
+    const resultText = match.result || getFixtureResultText(fixture);
+    return html`
+      <article class="card next-match-card last-match-card summary-match-card" role="button" tabindex="0" data-open-panel="matches" aria-label="Abrir partidos para ${escapeHtml(team1)} contra ${escapeHtml(team2)}">
+        <b>${escapeHtml(team1)}<span class="next-match-separator">-</span>${escapeHtml(team2)}</b>
+        <strong class="last-match-score">${escapeHtml(resultText || 'Pendiente')}</strong>
+        <span>último partido</span>
+        <span class="card-detail">${escapeHtml(KNOCKOUT_MATCH_ROUND_BY_NAME.get(fixture.round)?.label || fixture.round || 'Eliminatoria')}${fixture.num ? ` · #${fixture.num}` : ''}</span>
+        ${hasGoalBreakdown ? `<div class="match-card-actions"><button type="button" class="match-link-button" data-toggle-goals="last-knockout-${fixture.num || fixture.round}" aria-expanded="${Boolean(state.matchGoalsExpanded[`last-knockout-${fixture.num || fixture.round}`])}">${state.matchGoalsExpanded[`last-knockout-${fixture.num || fixture.round}`] ? 'Ocultar goleadores' : 'Ver goleadores'}</button></div>${state.matchGoalsExpanded[`last-knockout-${fixture.num || fixture.round}`] ? renderGoalBreakdownContent(team1, team2, goalBreakdown) : ''}` : ''}
+      </article>
+    `;
+  }
+
+  const groupMatch = match.match || match;
+  const result = match.result || getResult(groupMatch);
+  if (!result) {
+    return html`<article class="card next-match-card"><b>-</b><span>último partido</span></article>`;
+  }
+
+  const events = getLastPlayedMatchEvents(groupMatch);
   return html`
-    <article class="card next-match-card last-match-card summary-match-card" role="button" tabindex="0" data-match-id="${match.id}" aria-label="Ver predicciones de ${escapeHtml(match.team1)} contra ${escapeHtml(match.team2)}">
-      <b>${TEAM_FLAGS[match.team1] || '🏳️'} ${match.team1}<span class="next-match-separator">-</span>${TEAM_FLAGS[match.team2] || '🏳️'} ${match.team2}</b>
+    <article class="card next-match-card last-match-card summary-match-card" role="button" tabindex="0" data-match-id="${groupMatch.id}" aria-label="Ver predicciones de ${escapeHtml(groupMatch.team1)} contra ${escapeHtml(groupMatch.team2)}">
+      <b>${TEAM_FLAGS[groupMatch.team1] || '🏳️'} ${groupMatch.team1}<span class="next-match-separator">-</span>${TEAM_FLAGS[groupMatch.team2] || '🏳️'} ${groupMatch.team2}</b>
       <strong class="last-match-score">${result.home} - ${result.away}</strong>
       <span>último partido</span>
       ${events.length ? `<div class="live-event-list last-match-events">${events.join('')}</div>` : ''}
@@ -1901,7 +2088,7 @@ function renderSummary() {
     match => getResult(match),
     DATA.meta.scoring
   );
-  const lastPlayedMatch = getLastPlayedMatchFromFixtures() || [...DATA.matches].filter(match => getResult(match)).sort(compareMatchesForDisplay).at(-1) || null;
+  const lastPlayedMatch = getLastPlayedSummaryItem();
   const leaderPoints = ranking[0]?.total || 0;
   document.getElementById('summaryCards').innerHTML = html`
     ${renderAsLiveMatchCard()}
@@ -4386,6 +4573,15 @@ async function clearPredictionOverrideFromRow(row) {
 async function bootstrapWorldcupResultsCache() {
   try {
     const loaded = await loadWorldcupResultsCache();
+    try {
+      const replacedWithDirect = await refreshDirectResultsIfFresher();
+      if (replacedWithDirect) {
+        state.rankingLoading = false;
+        renderAll();
+      }
+    } catch (directError) {
+      console.warn('No se pudo contrastar el cache con el feed directo de OpenFootball:', directError);
+    }
     if (loaded) {
       state.rankingLoading = false;
       renderAll();
@@ -4646,6 +4842,12 @@ async function refreshFromApi(options = {}) {
       throw new Error('Supabase no devolvió resultados cacheados tras la sincronización.');
     }
 
+    try {
+      await refreshDirectResultsIfFresher();
+    } catch (directError) {
+      console.warn('No se pudo contrastar Supabase con el feed directo de OpenFootball:', directError);
+    }
+
     state.rankingLoading = false;
     localStorage.setItem(LS_KEYS.lastUpdate, new Date().toLocaleString('es-ES'));
     renderAll();
@@ -4653,10 +4855,11 @@ async function refreshFromApi(options = {}) {
   } catch (err) {
     console.warn('Fallo leyendo resultados desde Supabase cacheado. Intentando fallback directo...', err);
     try {
-      const res = await fetchJsonWithTimeout(state.apiUrl, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      applyResultsPayload(json);
+      const applied = await refreshDirectResultsIfFresher();
+      if (!applied && !state.apiFixtures.length) {
+        const json = await fetchDirectResultsPayload();
+        applyResultsPayload(json);
+      }
       processSoftAlerts();
       state.rankingLoading = false;
       localStorage.setItem(LS_KEYS.lastUpdate, new Date().toLocaleString('es-ES'));
@@ -4881,7 +5084,8 @@ document.addEventListener('click', e => {
     e.stopPropagation();
     const matchId = toggleGoalsButton.dataset.toggleGoals;
     state.matchGoalsExpanded[matchId] = !state.matchGoalsExpanded[matchId];
-    renderMatches();
+    if (String(matchId).startsWith('last-knockout-')) renderSummary();
+    else renderMatches();
     return;
   }
   const compareRemoveButton = e.target.closest('[data-compare-remove]');
@@ -4964,6 +5168,12 @@ document.addEventListener('keydown', e => {
   if (externalCard && (e.key === 'Enter' || e.key === ' ')) {
     e.preventDefault();
     window.open(externalCard.dataset.externalUrl, '_blank', 'noopener');
+    return;
+  }
+  const openPanelButton = e.target.closest?.('[data-open-panel]');
+  if (openPanelButton && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    activatePanel(openPanelButton.dataset.openPanel);
     return;
   }
   const matchCard = e.target.closest?.('[data-match-id]');

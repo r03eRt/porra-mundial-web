@@ -119,6 +119,7 @@ La app debe:
 
 - mostrar el cuadro previsto por cada participante
 - mostrar desde dieciseisavos hasta campeón
+- mantener el lado visual correcto del árbol aunque una ronda superior ya venga resuelta a nombre real en vez de `Wxx`
 - calcular puntuación de cruces cuando haya datos suficientes
 - permitir cambiar rápidamente de participante
 
@@ -195,6 +196,7 @@ La portada/resumen debe poder mostrar:
 
 - partido destacado en directo o finalizado
 - marcador, minuto/estado y enlace al seguimiento externo
+- si muestra el último partido, decidirlo por la hora real del encuentro y no por la hora del último refresco del feed
 - refresco más frecuente cuando haya un directo activo
 
 ### 5.15 Ajustes y herramientas admin
